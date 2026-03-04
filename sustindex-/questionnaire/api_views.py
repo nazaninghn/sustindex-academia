@@ -24,7 +24,7 @@ class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
     def questions(self, request, pk=None):
         survey = self.get_object()
         questions = survey.questions.filter(is_active=True).order_by('category', 'order')
-        serializer = QuestionSerializer(questions, many=True)
+        serializer = QuestionSerializer(questions, many=True, context={'request': request})
         return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
@@ -106,6 +106,7 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         
         attempt.is_completed = True
         attempt.completed_at = timezone.now()
+        attempt.save()  # Save the attempt first
         scores = attempt.calculate_scores()
         
         serializer = self.get_serializer(attempt)

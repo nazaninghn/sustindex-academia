@@ -19,7 +19,22 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.conf.urls.i18n import i18n_patterns
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, RedirectView
+from django.http import JsonResponse
+
+def api_root(request):
+    """API root endpoint"""
+    return JsonResponse({
+        'message': 'Sustindex API Server',
+        'version': '1.0',
+        'status': 'running',
+        'endpoints': {
+            'admin': '/en/admin/',
+            'api': '/api/v1/',
+            'api_docs': '/api/v1/docs/',
+        },
+        'frontend': 'http://localhost:3000'
+    })
 
 try:
     from questionnaire.autocomplete import CategoryAutocomplete
@@ -41,6 +56,8 @@ admin.site.index_title = "Welcome to Sustindex Admin"
 
 # URLs without language prefix
 urlpatterns = [
+    path('', api_root, name='api-root'),  # Root endpoint
+    path('admin/', RedirectView.as_view(url='/en/admin/', permanent=False)),  # Redirect to admin with language
     path('i18n/', include('django.conf.urls.i18n')),
 ]
 

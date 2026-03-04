@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { useLanguage } from '@/lib/language';
 import api, { attemptAPI } from '@/lib/api';
-import Navbar from '@/components/Navbar';
+import DashboardNavbar from '@/components/DashboardNavbar';
 
 interface Question {
   id: number;
@@ -31,7 +32,8 @@ export default function QuestionnairePage() {
   const router = useRouter();
   const params = useParams();
   const surveyId = parseInt(params.id as string);
-  const { user, loading: authLoading } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const { t } = useLanguage();
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -40,6 +42,11 @@ export default function QuestionnairePage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Map<number, File[]>>(new Map());
+
+  // Debug log
+  useEffect(() => {
+    console.log('Submitting state changed:', submitting);
+  }, [submitting]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -56,15 +63,44 @@ export default function QuestionnairePage() {
   const initQuestionnaire = async () => {
     try {
       // Create attempt
-      const attempt = await attemptAPI.createAttempt(surveyId);
+      const attempt = await attemptAPI.startAttempt(surveyId);
+      console.log('Attempt created:', attempt);
       setAttemptId(attempt.id);
 
       // Load questions
-      const response = await api.get(`/surveys/${surveyId}/questions/`);
+      const response = await api.get(`/api/v1/surveys/${surveyId}/questions/`);
+      console.log('Questions loaded:', response.data.length);
       setQuestions(response.data);
-    } catch (error) {
+      
+      // Load existing answers for this attempt
+      try {
+        const answersResponse = await api.get(`/api/v1/answers/?attempt=${attempt.id}`);
+        const existingAnswers = new Map<number, Answer>();
+        
+        if (answersResponse.data && Array.isArray(answersResponse.data)) {
+          answersResponse.data.forEach((answer: any) => {
+            if (answer.choice) {
+              existingAnswers.set(answer.question, {
+                question: answer.question,
+                choice: answer.choice
+              });
+            } else if (answer.choices_ids && answer.choices_ids.length > 0) {
+              existingAnswers.set(answer.question, {
+                question: answer.question,
+                choices_ids: answer.choices_ids
+              });
+            }
+          });
+        }
+        
+        console.log('Existing answers loaded:', existingAnswers.size);
+        setAnswers(existingAnswers);
+      } catch (error) {
+        console.log('No existing answers found');
+      }
+    } catch (error: any) {
       console.error('Failed to initialize:', error);
-      alert('Failed to start questionnaire');
+      alert(`${t('error.questionnaire.init')}: ${error.response?.data?.detail || error.message}`);
       router.push('/surveys');
     } finally {
       setLoading(false);
@@ -131,7 +167,7 @@ export default function QuestionnairePage() {
 
     try {
       // Save answer
-      const response = await api.post('/answers/', {
+      const response = await api.post('/api/v1/answers/', {
         attempt: attemptId,
         ...answer
       });
@@ -145,7 +181,7 @@ export default function QuestionnairePage() {
           formData.append('title', file.name);
           formData.append('file', file);
 
-          await api.post('/documents/', formData, {
+          await api.post('/api/v1/documents/', formData, {
             headers: {
               'Content-Type': 'multipart/form-data',
             },
@@ -168,7 +204,7 @@ export default function QuestionnairePage() {
         setCurrentIndex(currentIndex + 1);
       }
     } catch (error) {
-      alert('Failed to save answer. Please try again.');
+      alert(t('error.questionnaire.save'));
     }
   };
 
@@ -179,29 +215,43 @@ export default function QuestionnairePage() {
   };
 
   const handleSubmit = async () => {
-    if (!attemptId) return;
+    console.log('Submit clicked!', { attemptId, currentIndex, questionsLength: questions.length });
+    
+    if (!attemptId) {
+      console.error('No attemptId!');
+      alert(t('error.questionnaire.noid'));
+      return;
+    }
     
     // Check if current question is answered
     const currentQuestion = questions[currentIndex];
     const currentAnswer = answers.get(currentQuestion.id);
     
+    console.log('Current answer:', currentAnswer);
+    
     if (!currentAnswer) {
-      alert('Please answer the current question before submitting.');
+      alert(t('error.questionnaire.answer'));
       return;
     }
     
     setSubmitting(true);
     try {
       // Save last answer
+      console.log('Saving last answer...');
       await saveAnswer(currentQuestion.id);
 
       // Complete attempt
-      await attemptAPI.completeAttempt(attemptId);
+      console.log('Completing attempt with ID:', attemptId);
+      const result = await attemptAPI.completeAttempt(attemptId);
+      console.log('Complete result:', result);
       
+      console.log('Redirecting to results...');
+      alert(t('error.questionnaire.success'));
       router.push(`/results/${attemptId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to submit:', error);
-      alert('Failed to submit questionnaire. Please try again.');
+      console.error('Error details:', error.response?.data);
+      alert(`${t('error.questionnaire.submit')}: ${error.response?.data?.error || error.message || t('error.register.failed')}`);
       setSubmitting(false);
     }
   };
@@ -209,7 +259,7 @@ export default function QuestionnairePage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl text-primary">Loading questionnaire...</div>
+        <div className="text-2xl text-primary">{t('questionnaire.loading')}</div>
       </div>
     );
   }
@@ -222,22 +272,38 @@ export default function QuestionnairePage() {
   const progress = ((currentIndex + 1) / questions.length) * 100;
   const currentAnswer = answers.get(currentQuestion.id);
   const currentFiles = uploadedFiles.get(currentQuestion.id) || [];
+  
+  console.log('Render state:', { 
+    currentIndex, 
+    questionsLength: questions.length, 
+    currentQuestionId: currentQuestion.id,
+    currentAnswer,
+    answersSize: answers.size,
+    allAnswers: Array.from(answers.entries()),
+    attemptId: attemptId
+  });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-emerald-50">
+      <DashboardNavbar />
       
-      <main className="pt-24 pb-12">
+      {/* Background Effects */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-green-200/20 rounded-full blur-[150px] animate-pulse"></div>
+        <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+      </div>
+      
+      <main className="relative pt-24 pb-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Progress Bar */}
           <div className="mb-8">
             <div className="flex justify-between text-sm text-gray-600 mb-2">
-              <span>Question {currentIndex + 1} of {questions.length}</span>
-              <span>{Math.round(progress)}% Complete</span>
+              <span>{t('questionnaire.question')} {currentIndex + 1} {t('questionnaire.of')} {questions.length}</span>
+              <span>{Math.round(progress)}% {t('questionnaire.complete')}</span>
             </div>
             <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary transition-all duration-300"
+                className="h-full bg-green-600 transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -246,7 +312,7 @@ export default function QuestionnairePage() {
           {/* Question Card */}
           <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
             <div className="mb-6">
-              <span className="px-4 py-2 bg-primary/10 text-primary text-sm font-semibold rounded-full">
+              <span className="px-4 py-2 bg-green-50 text-green-700 text-sm font-semibold rounded-full border-2 border-green-200">
                 {currentQuestion.category_name}
               </span>
             </div>
@@ -284,21 +350,21 @@ export default function QuestionnairePage() {
                     onClick={() => handleAnswer(currentQuestion.id, choice.id, currentQuestion.allow_multiple)}
                     className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
                       isSelected
-                        ? 'border-primary bg-primary/5'
-                        : 'border-gray-200 hover:border-primary/50'
+                        ? 'border-green-600 bg-green-50'
+                        : 'border-gray-200 hover:border-green-300'
                     }`}
                   >
                     <div className="flex items-center">
                       <div className={`w-5 h-5 rounded ${
                         currentQuestion.allow_multiple ? 'rounded-md' : 'rounded-full'
                       } border-2 mr-3 flex items-center justify-center ${
-                        isSelected ? 'border-primary bg-primary' : 'border-gray-300'
+                        isSelected ? 'border-green-600 bg-green-600' : 'border-gray-300'
                       }`}>
                         {isSelected && (
                           <i className="fas fa-check text-white text-xs"></i>
                         )}
                       </div>
-                      <span className="text-neutral">{choice.text}</span>
+                      <span className="text-gray-800">{choice.text}</span>
                     </div>
                   </button>
                 );
@@ -308,7 +374,7 @@ export default function QuestionnairePage() {
             {currentQuestion.allow_multiple && (
               <p className="text-sm text-gray-500 mb-4">
                 <i className="fas fa-info-circle mr-1"></i>
-                You can select multiple answers
+                {t('questionnaire.multiple')}
               </p>
             )}
 
@@ -316,15 +382,32 @@ export default function QuestionnairePage() {
             <div className="mt-6 pt-6 border-t border-gray-200">
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 <i className="fas fa-upload mr-2"></i>
-                Upload Supporting Documents (Optional)
+                {t('questionnaire.upload')}
               </label>
               
-              <input
-                type="file"
-                multiple
-                onChange={(e) => handleFileUpload(currentQuestion.id, e.target.files)}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer"
-              />
+              {/* Custom File Upload Button */}
+              <div className="relative">
+                <input
+                  type="file"
+                  multiple
+                  id={`file-upload-${currentQuestion.id}`}
+                  onChange={(e) => handleFileUpload(currentQuestion.id, e.target.files)}
+                  className="hidden"
+                />
+                <label
+                  htmlFor={`file-upload-${currentQuestion.id}`}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 cursor-pointer transition-all"
+                >
+                  <i className="fas fa-folder-open"></i>
+                  {t('questionnaire.choose')}
+                </label>
+                <span className="ml-4 text-sm text-gray-500">
+                  {currentFiles.length > 0 
+                    ? `${currentFiles.length} ${currentFiles.length === 1 ? t('questionnaire.file') : t('questionnaire.files')} ${t('questionnaire.selected')}`
+                    : t('questionnaire.nofile')
+                  }
+                </span>
+              </div>
 
               {/* Uploaded Files List */}
               {currentFiles.length > 0 && (
@@ -332,7 +415,7 @@ export default function QuestionnairePage() {
                   {currentFiles.map((file, index) => (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center">
-                        <i className="fas fa-file text-primary mr-3"></i>
+                        <i className="fas fa-file text-green-600 mr-3"></i>
                         <span className="text-sm text-gray-700">{file.name}</span>
                         <span className="text-xs text-gray-500 ml-2">
                           ({(file.size / 1024).toFixed(1)} KB)
@@ -356,36 +439,48 @@ export default function QuestionnairePage() {
             <button
               onClick={handlePrevious}
               disabled={currentIndex === 0}
-              className="px-6 py-3 bg-gray-200 text-neutral rounded-lg font-semibold hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              ← Previous
+              ← {t('questionnaire.previous')}
             </button>
 
             {currentIndex === questions.length - 1 ? (
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || !currentAnswer}
-                className="px-8 py-3 bg-success text-white rounded-lg font-semibold hover:bg-success/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? (
-                  <>
-                    <i className="fas fa-spinner fa-spin mr-2"></i>
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <i className="fas fa-check mr-2"></i>
-                    Submit Assessment
-                  </>
-                )}
-              </button>
+              <div>
+                <p className="text-xs text-gray-600 mb-2">Debug: submitting={submitting.toString()}, disabled={submitting.toString()}</p>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    console.log('Button clicked! submitting:', submitting);
+                    if (submitting) {
+                      console.log('Button is disabled because submitting is true');
+                      return;
+                    }
+                    handleSubmit();
+                  }}
+                  disabled={submitting}
+                  type="button"
+                  className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                      {t('questionnaire.submitting')}
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-check mr-2"></i>
+                      {t('questionnaire.submit')}
+                    </>
+                  )}
+                </button>
+              </div>
             ) : (
               <button
                 onClick={handleNext}
                 disabled={!currentAnswer}
-                className="px-6 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Next →
+                {t('questionnaire.next')} →
               </button>
             )}
           </div>

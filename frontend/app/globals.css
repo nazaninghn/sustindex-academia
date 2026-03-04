@@ -2,16 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --primary-color: #1F7A63;
-  --neutral-color: #2E2E2E;
-  --accent-color: #4C6EF5;
-  --light-gray: #F8F9FA;
-  --success-green: #28A745;
-  --warning-orange: #FF6B35;
-  --gold: #FFD700;
-}
-
 * {
   margin: 0;
   padding: 0;
@@ -19,10 +9,13 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.6;
-  color: var(--neutral-color);
+  color: #111827;
   overflow-x: hidden;
+  background: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @layer utilities {
@@ -31,48 +24,85 @@ body {
   }
 }
 
-/* Animations */
-@keyframes slideDown {
-  from {
-    transform: translateY(-100%);
-    opacity: 0;
+/* Premium Animations */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
   }
-  to {
-    transform: translateY(0);
-    opacity: 1;
+  100% {
+    transform: translateX(100%);
   }
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+@keyframes gradient {
+  0%, 100% {
+    background-position: 0% 50%;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  50% {
+    background-position: 100% 50%;
   }
 }
 
-@keyframes fadeInDelay {
-  from {
-    opacity: 0;
-    transform: translateX(50px);
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
   }
-  to {
-    opacity: 1;
-    transform: translateX(0);
+  50% {
+    transform: translateY(-20px);
   }
 }
 
-.animate-slide-down {
-  animation: slideDown 0.5s ease-out;
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(22, 163, 74, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(22, 163, 74, 0.6);
+  }
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.8s ease-out;
+.animate-shimmer {
+  animation: shimmer 2s infinite;
 }
 
-.animate-fade-in-delay {
-  animation: fadeInDelay 0.8s ease-out 0.2s both;
+.animate-gradient {
+  animation: gradient 3s ease infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Premium Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f9fafb;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #16a34a, #10b981);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #15803d, #059669);
+}
+
+/* Glass Effect */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }

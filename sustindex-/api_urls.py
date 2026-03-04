@@ -7,6 +7,7 @@ from questionnaire.api_views import (
     SurveyViewSet, SurveySessionViewSet, CategoryViewSet,
     QuestionViewSet, QuestionnaireAttemptViewSet, AnswerViewSet, UserDocumentViewSet
 )
+from elearning.api_views import CourseViewSet, LessonViewSet, LessonProgressViewSet
 
 router = DefaultRouter()
 
@@ -21,6 +22,10 @@ router.register(r'questions', QuestionViewSet, basename='question')
 router.register(r'attempts', QuestionnaireAttemptViewSet, basename='attempt')
 router.register(r'answers', AnswerViewSet, basename='answer')
 router.register(r'documents', UserDocumentViewSet, basename='document')
+
+router.register(r'courses', CourseViewSet, basename='course')
+router.register(r'lessons', LessonViewSet, basename='lesson')
+router.register(r'lesson-progress', LessonProgressViewSet, basename='lessonprogress')
 
 urlpatterns = [
     path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

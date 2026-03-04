@@ -15,12 +15,9 @@ except ImportError:
 from import_export.admin import ImportExportModelAdmin
 from simple_history.admin import SimpleHistoryAdmin
 
-try:
-    from django_admin_listfilter_dropdown.filters import RelatedDropdownFilter
-    DROPDOWN_FILTER_AVAILABLE = True
-except ImportError:
-    DROPDOWN_FILTER_AVAILABLE = False
-    RelatedDropdownFilter = None
+# Dropdown filter disabled due to template issues
+DROPDOWN_FILTER_AVAILABLE = False
+RelatedDropdownFilter = None
 
 from .models import Survey, SurveySession, Category, Question, Choice, QuestionnaireAttempt, Answer, UserDocument
 from .services import recalc_attempt_score, attempt_stats, get_category_performance

@@ -11,7 +11,11 @@ class Survey(models.Model):
     Each survey can have multiple sessions
     """
     name = models.CharField(max_length=200, verbose_name=_('Survey Name'))
+    name_tr = models.CharField(max_length=200, blank=True, verbose_name=_('Survey Name (Turkish)'))
+    name_en = models.CharField(max_length=200, blank=True, verbose_name=_('Survey Name (English)'))
     description = models.TextField(blank=True, verbose_name=_('Description'))
+    description_tr = models.TextField(blank=True, verbose_name=_('Description (Turkish)'))
+    description_en = models.TextField(blank=True, verbose_name=_('Description (English)'))
     is_active = models.BooleanField(default=True, verbose_name=_('Active'))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created At'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated At'))
@@ -87,7 +91,11 @@ class SurveySession(models.Model):
 class Category(models.Model):
     """Question categories for organizing questionnaire"""
     name = models.CharField(max_length=200, verbose_name=_('Name'))
+    name_tr = models.CharField(max_length=200, blank=True, verbose_name=_('Name (Turkish)'))
+    name_en = models.CharField(max_length=200, blank=True, verbose_name=_('Name (English)'))
     description = models.TextField(blank=True, verbose_name=_('Description'))
+    description_tr = models.TextField(blank=True, verbose_name=_('Description (Turkish)'))
+    description_en = models.TextField(blank=True, verbose_name=_('Description (English)'))
     order = models.IntegerField(default=0, verbose_name=_('Display Order'))
     environmental_weight = models.FloatField(default=0.0, verbose_name=_('Environmental Weight'))
     social_weight = models.FloatField(default=0.0, verbose_name=_('Social Weight'))
@@ -130,6 +138,8 @@ class Question(models.Model):
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name='questions', verbose_name=_('Survey'), null=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='questions', verbose_name=_('Category'))
     text = RichTextField(verbose_name=_('Question Text'))
+    text_tr = RichTextField(blank=True, verbose_name=_('Question Text (Turkish)'))
+    text_en = RichTextField(blank=True, verbose_name=_('Question Text (English)'))
     order = models.IntegerField(default=0, verbose_name=_('Display Order'))
     is_active = models.BooleanField(default=True, verbose_name=_('Active'))
     allow_multiple = models.BooleanField(default=False, verbose_name=_('Allow Multiple Choices'), help_text=_('Allow users to select multiple answers'))
@@ -150,6 +160,8 @@ class Choice(models.Model):
     """Answer choices for each question"""
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='choices', verbose_name=_('Question'))
     text = models.CharField(max_length=500, verbose_name=_('Choice Text'))
+    text_tr = models.CharField(max_length=500, blank=True, verbose_name=_('Choice Text (Turkish)'))
+    text_en = models.CharField(max_length=500, blank=True, verbose_name=_('Choice Text (English)'))
     score = models.IntegerField(default=0, verbose_name=_('Score'))
     order = models.IntegerField(default=0, verbose_name=_('Display Order'))
     

@@ -8,7 +8,25 @@ from .models import (
 class ChoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Choice
-        fields = ['id', 'text', 'score', 'order']
+        fields = ['id', 'text', 'text_tr', 'text_en', 'score', 'order']
+    
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Get language from request header or query param
+        language = None
+        if request:
+            language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
+        
+        # Return appropriate language text
+        if language == 'tr' and instance.text_tr:
+            representation['text'] = instance.text_tr
+        elif language == 'en' and instance.text_en:
+            representation['text'] = instance.text_en
+        # else keep default text
+        
+        return representation
 
 
 class QuestionSerializer(serializers.ModelSerializer):
@@ -17,8 +35,38 @@ class QuestionSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Question
-        fields = ['id', 'survey', 'category', 'category_name', 'text', 
+        fields = ['id', 'survey', 'category', 'category_name', 'text', 'text_tr', 'text_en',
                   'order', 'is_active', 'allow_multiple', 'attachment', 'choices']
+    
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Get language from request header or query param
+        language = None
+        if request:
+            language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
+        
+        # Return appropriate language text
+        if language == 'tr' and instance.text_tr:
+            representation['text'] = instance.text_tr
+        elif language == 'en' and instance.text_en:
+            representation['text'] = instance.text_en
+        
+        # Return appropriate category name
+        if language == 'tr' and instance.category.name_tr:
+            representation['category_name'] = instance.category.name_tr
+        elif language == 'en' and instance.category.name_en:
+            representation['category_name'] = instance.category.name_en
+        
+        # Pass context to nested serializers
+        representation['choices'] = ChoiceSerializer(
+            instance.choices.all(), 
+            many=True, 
+            context=self.context
+        ).data
+        
+        return representation
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -26,9 +74,32 @@ class CategorySerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Category
-        fields = ['id', 'name', 'description', 'order', 
+        fields = ['id', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'order', 
                   'environmental_weight', 'social_weight', 'governance_weight', 
                   'max_score', 'questions']
+    
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Get language from request header or query param
+        language = None
+        if request:
+            language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
+        
+        # Return appropriate language text
+        if language == 'tr':
+            if instance.name_tr:
+                representation['name'] = instance.name_tr
+            if instance.description_tr:
+                representation['description'] = instance.description_tr
+        elif language == 'en':
+            if instance.name_en:
+                representation['name'] = instance.name_en
+            if instance.description_en:
+                representation['description'] = instance.description_en
+        
+        return representation
 
 
 class SurveySessionSerializer(serializers.ModelSerializer):
@@ -48,9 +119,39 @@ class SurveySerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Survey
-        fields = ['id', 'name', 'description', 'is_active', 'created_at', 
-                  'updated_at', 'allow_multiple_attempts', 'show_results_immediately',
-                  'total_questions', 'questions', 'sessions']
+        fields = ['id', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 
+                  'is_active', 'created_at', 'updated_at', 'allow_multiple_attempts', 
+                  'show_results_immediately', 'total_questions', 'questions', 'sessions']
+    
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Get language from request header or query param
+        language = None
+        if request:
+            language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
+        
+        # Return appropriate language text
+        if language == 'tr':
+            if instance.name_tr:
+                representation['name'] = instance.name_tr
+            if instance.description_tr:
+                representation['description'] = instance.description_tr
+        elif language == 'en':
+            if instance.name_en:
+                representation['name'] = instance.name_en
+            if instance.description_en:
+                representation['description'] = instance.description_en
+        
+        # Pass context to nested serializers
+        representation['questions'] = QuestionSerializer(
+            instance.questions.filter(is_active=True), 
+            many=True, 
+            context=self.context
+        ).data
+        
+        return representation
 
 
 class UserDocumentSerializer(serializers.ModelSerializer):
@@ -119,4 +220,5 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
 class QuestionnaireAttemptCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuestionnaireAttempt
-        fields = ['survey', 'session']
+        fields = ['id', 'survey', 'session']
+        read_only_fields = ['id']
