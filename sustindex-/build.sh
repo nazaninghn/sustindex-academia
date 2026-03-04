@@ -5,10 +5,6 @@ echo "Python version:"
 python --version
 
 echo ""
-echo "Installing system dependencies for Pillow..."
-apt-get update && apt-get install -y libjpeg-dev zlib1g-dev || echo "System packages already installed"
-
-echo ""
 echo "Upgrading pip..."
 pip install --upgrade pip
 
@@ -31,10 +27,10 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
     User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
-    print('✓ Admin user created')
+    print('Admin user created')
 else:
-    print('✓ Admin user already exists')
+    print('Admin user already exists')
 EOF
 
 echo ""
-echo "✓ Build completed successfully!"
+echo "Build completed successfully!"
