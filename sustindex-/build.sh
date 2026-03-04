@@ -13,6 +13,10 @@ echo "Installing dependencies..."
 pip install -r requirements.txt
 
 echo ""
+echo "Testing database connection..."
+python test_db.py
+
+echo ""
 echo "Collecting static files..."
 python manage.py collectstatic --no-input --clear
 
