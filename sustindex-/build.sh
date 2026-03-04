@@ -5,6 +5,10 @@ echo "Python version:"
 python --version
 
 echo ""
+echo "Installing system dependencies for Pillow..."
+apt-get update && apt-get install -y libjpeg-dev zlib1g-dev || echo "System packages already installed"
+
+echo ""
 echo "Upgrading pip..."
 pip install --upgrade pip
 
