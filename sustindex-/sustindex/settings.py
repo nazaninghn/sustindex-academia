@@ -256,10 +256,8 @@ if REST_FRAMEWORK_INSTALLED:
     CORS_ALLOWED_ORIGINS = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://sustindex-academia.vercel.app",
     ]
-
-    if not DEBUG:
-        CORS_ALLOWED_ORIGINS.append("https://your-nextjs-domain.com")
 
     CORS_ALLOW_CREDENTIALS = True
 
