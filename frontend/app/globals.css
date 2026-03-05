@@ -16,6 +16,24 @@ body {
   background: white;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-size: 14px; /* کوچک‌تر از پیش‌فرض 16px */
+}
+
+/* کوچک‌تر کردن تمام عناصر */
+h1 { font-size: 2rem; } /* به جای 2.5rem */
+h2 { font-size: 1.5rem; } /* به جای 2rem */
+h3 { font-size: 1.25rem; } /* به جای 1.5rem */
+h4 { font-size: 1.1rem; }
+h5 { font-size: 1rem; }
+h6 { font-size: 0.9rem; }
+
+button, .btn {
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+}
+
+input, textarea, select {
+  font-size: 0.9rem;
 }
 
 @layer utilities {
