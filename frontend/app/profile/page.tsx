@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import { useLanguage } from '@/lib/language';
 import { userAPI } from '@/lib/api';
 import DashboardNavbar from '@/components/DashboardNavbar';
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, isLoading: authLoading, logout } = useAuth();
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'profile' | 'security'>('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
