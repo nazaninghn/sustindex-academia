@@ -111,33 +111,33 @@ export default function ProfilePage() {
         <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
       
-      <main className="relative pt-24 pb-16">
+      <main className="relative pt-20 pb-10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="mb-8">
+          <div className="mb-5">
             <Link 
               href="/dashboard" 
-              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-6 group"
+              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-4 group text-sm"
             >
-              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform"></i>
+              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform text-xs"></i>
               <span>Back to Dashboard</span>
             </Link>
             
             <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-[2rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl border-2 border-blue-100 p-10">
-                <div className="flex items-center gap-4">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur-xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
+              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-blue-100 p-5">
+                <div className="flex items-center gap-3">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl blur-lg opacity-40"></div>
-                    <div className="relative w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-xl">
-                      <i className="fas fa-user-circle text-3xl text-white"></i>
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg blur-md opacity-40"></div>
+                    <div className="relative w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center shadow-lg">
+                      <i className="fas fa-user-circle text-xl text-white"></i>
                     </div>
                   </div>
                   <div>
-                    <h1 className="text-4xl font-bold text-gray-800">
+                    <h1 className="text-2xl font-bold text-gray-800">
                       Profile Settings
                     </h1>
-                    <p className="text-gray-600 text-lg font-medium">
+                    <p className="text-gray-600 text-sm font-medium">
                       Manage your account settings and preferences
                     </p>
                   </div>
@@ -148,29 +148,29 @@ export default function ProfilePage() {
 
           {/* Tabs */}
           <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-t-[2rem] blur-xl opacity-10"></div>
-            <div className="relative bg-white/95 backdrop-blur-2xl rounded-t-[2rem] shadow-xl border-2 border-green-100 border-b-0">
+            <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-t-xl blur-lg opacity-10"></div>
+            <div className="relative bg-white/95 backdrop-blur-2xl rounded-t-xl shadow-md border border-green-100 border-b-0">
               <div className="flex">
                 <button
                   onClick={() => setActiveTab('profile')}
-                  className={`flex-1 px-6 py-5 font-bold transition-all rounded-tl-[2rem] ${
+                  className={`flex-1 px-4 py-3 font-bold text-sm transition-all rounded-tl-xl ${
                     activeTab === 'profile'
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg'
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
                       : 'text-gray-600 hover:bg-green-50'
                   }`}
                 >
-                  <i className="fas fa-user mr-2"></i>
+                  <i className="fas fa-user mr-2 text-xs"></i>
                   Profile Information
                 </button>
                 <button
                   onClick={() => setActiveTab('security')}
-                  className={`flex-1 px-6 py-5 font-bold transition-all rounded-tr-[2rem] ${
+                  className={`flex-1 px-4 py-3 font-bold text-sm transition-all rounded-tr-xl ${
                     activeTab === 'security'
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg'
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
                       : 'text-gray-600 hover:bg-green-50'
                   }`}
                 >
-                  <i className="fas fa-lock mr-2"></i>
+                  <i className="fas fa-lock mr-2 text-xs"></i>
                   Security
                 </button>
               </div>
@@ -178,8 +178,8 @@ export default function ProfilePage() {
           </div>
 
           <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-b-[2rem] blur-xl opacity-10"></div>
-            <div className="relative bg-white/95 backdrop-blur-2xl rounded-b-[2rem] shadow-2xl border-2 border-green-100 border-t-0 p-8">
+            <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-b-xl blur-lg opacity-10"></div>
+            <div className="relative bg-white/95 backdrop-blur-2xl rounded-b-xl shadow-lg border border-green-100 border-t-0 p-5">
               {activeTab === 'profile' ? (
                 <div className="space-y-6">
                   {/* Profile Info */}
@@ -303,23 +303,23 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="pt-6 border-t-2 border-green-100 flex gap-4">
+                  <div className="pt-4 border-t border-green-100 flex gap-3">
                     {isEditing ? (
                       <>
                         <button
                           onClick={handleSave}
                           disabled={saving}
-                          className="group/btn relative px-8 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:scale-105 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+                          className="group/btn relative px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
                         >
-                          <span className="relative z-10 flex items-center gap-2">
+                          <span className="relative z-10 flex items-center gap-1.5">
                             {saving ? (
                               <>
-                                <i className="fas fa-spinner fa-spin"></i>
+                                <i className="fas fa-spinner fa-spin text-xs"></i>
                                 Saving...
                               </>
                             ) : (
                               <>
-                                <i className="fas fa-save"></i>
+                                <i className="fas fa-save text-xs"></i>
                                 Save Changes
                               </>
                             )}
@@ -329,7 +329,7 @@ export default function ProfilePage() {
                         <button
                           onClick={handleCancel}
                           disabled={saving}
-                          className="px-8 py-4 bg-gray-200 text-gray-800 rounded-xl font-bold hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-5 py-2.5 bg-gray-200 text-gray-800 rounded-lg font-bold text-sm hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Cancel
                         </button>
@@ -337,10 +337,10 @@ export default function ProfilePage() {
                     ) : (
                       <button
                         onClick={handleEdit}
-                        className="group/btn relative px-8 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:scale-105 transition-all shadow-xl overflow-hidden"
+                        className="group/btn relative px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-md overflow-hidden"
                       >
-                        <span className="relative z-10 flex items-center gap-2">
-                          <i className="fas fa-edit"></i>
+                        <span className="relative z-10 flex items-center gap-1.5">
+                          <i className="fas fa-edit text-xs"></i>
                           Edit Profile
                         </span>
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 opacity-0 group-hover/btn:opacity-100 transition-opacity"></div>
@@ -352,17 +352,17 @@ export default function ProfilePage() {
                 <div className="space-y-6">
                   {/* Security Settings */}
                   <div className="relative group/alert">
-                    <div className="absolute inset-0 bg-amber-400 rounded-2xl blur-lg opacity-20"></div>
-                    <div className="relative bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-2xl p-6">
-                      <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <i className="fas fa-exclamation-triangle text-amber-600 text-xl"></i>
+                    <div className="absolute inset-0 bg-amber-400 rounded-xl blur-md opacity-20"></div>
+                    <div className="relative bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <i className="fas fa-exclamation-triangle text-amber-600 text-base"></i>
                         </div>
                         <div>
-                          <h3 className="font-bold text-amber-800 mb-2 text-lg">
+                          <h3 className="font-bold text-amber-800 mb-1 text-base">
                             Password Change
                           </h3>
-                          <p className="text-amber-700 leading-relaxed">
+                          <p className="text-amber-700 leading-relaxed text-sm">
                             For security reasons, password changes must be done through the Django admin panel or contact support.
                           </p>
                         </div>
@@ -370,18 +370,18 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                      <i className="fas fa-shield-alt text-green-600"></i>
+                  <div className="space-y-3">
+                    <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                      <i className="fas fa-shield-alt text-green-600 text-sm"></i>
                       Account Actions
                     </h3>
                     
                     <button
                       onClick={handleLogout}
-                      className="group/btn relative w-full px-6 py-4 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-xl font-bold hover:scale-105 transition-all shadow-xl overflow-hidden"
+                      className="group/btn relative w-full px-4 py-2.5 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-md overflow-hidden"
                     >
-                      <span className="relative z-10 flex items-center justify-center gap-2">
-                        <i className="fas fa-sign-out-alt"></i>
+                      <span className="relative z-10 flex items-center justify-center gap-1.5">
+                        <i className="fas fa-sign-out-alt text-xs"></i>
                         Logout from All Devices
                       </span>
                       <div className="absolute inset-0 bg-gradient-to-r from-pink-600 to-red-600 opacity-0 group-hover/btn:opacity-100 transition-opacity"></div>

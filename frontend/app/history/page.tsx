@@ -110,33 +110,33 @@ export default function HistoryPage() {
         <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
       
-      <main className="relative pt-24 pb-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <main className="relative pt-20 pb-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="mb-8">
+          <div className="mb-5">
             <Link 
               href="/dashboard" 
-              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-6 group"
+              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-4 group text-sm"
             >
-              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform"></i>
+              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform text-xs"></i>
               <span>Back to Dashboard</span>
             </Link>
             
             <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-[2rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl border-2 border-purple-100 p-10">
-                <div className="flex items-center gap-4 mb-4">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl blur-xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
+              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-purple-100 p-5">
+                <div className="flex items-center gap-3 mb-2">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl blur-lg opacity-40"></div>
-                    <div className="relative w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-xl">
-                      <i className="fas fa-history text-3xl text-white"></i>
+                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg blur-md opacity-40"></div>
+                    <div className="relative w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center shadow-lg">
+                      <i className="fas fa-history text-xl text-white"></i>
                     </div>
                   </div>
                   <div>
-                    <h1 className="text-4xl font-bold text-gray-800">
+                    <h1 className="text-2xl font-bold text-gray-800">
                       Assessment History
                     </h1>
-                    <p className="text-gray-600 text-lg font-medium">
+                    <p className="text-gray-600 text-sm font-medium">
                       View all your sustainability assessments
                     </p>
                   </div>
@@ -146,7 +146,7 @@ export default function HistoryPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid md:grid-cols-4 gap-6 mb-8">
+          <div className="grid md:grid-cols-4 gap-3 mb-5">
             <StatCard icon="fa-clipboard-list" label="Total" value={attempts.length.toString()} color="purple" />
             <StatCard icon="fa-check-circle" label="Completed" value={completedAttempts.length.toString()} color="green" />
             <StatCard icon="fa-clock" label="In Progress" value={attempts.filter(a => !a.is_completed).length.toString()} color="amber" />
@@ -154,36 +154,36 @@ export default function HistoryPage() {
           </div>
 
           {/* Filters */}
-          <div className="relative group mb-8">
-            <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl blur-xl opacity-10"></div>
-            <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border-2 border-green-100 p-4">
-              <div className="flex gap-3 flex-wrap">
+          <div className="relative group mb-5">
+            <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg blur-lg opacity-10"></div>
+            <div className="relative bg-white/95 backdrop-blur-xl rounded-lg shadow-md border border-green-100 p-3">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={() => setFilter('all')}
-                  className={`px-6 py-3 rounded-xl font-bold transition-all ${
+                  className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
                     filter === 'all'
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-xl scale-105'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-2 border-gray-200'
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md scale-105'
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
                   }`}
                 >
                   All ({attempts.length})
                 </button>
                 <button
                   onClick={() => setFilter('completed')}
-                  className={`px-6 py-3 rounded-xl font-bold transition-all ${
+                  className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
                     filter === 'completed'
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-xl scale-105'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-2 border-gray-200'
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md scale-105'
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
                   }`}
                 >
                   Completed ({completedAttempts.length})
                 </button>
                 <button
                   onClick={() => setFilter('in-progress')}
-                  className={`px-6 py-3 rounded-xl font-bold transition-all ${
+                  className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
                     filter === 'in-progress'
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-xl scale-105'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-2 border-gray-200'
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md scale-105'
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
                   }`}
                 >
                   In Progress ({attempts.filter(a => !a.is_completed).length})
@@ -195,31 +195,31 @@ export default function HistoryPage() {
           {/* Attempts List */}
           {filteredAttempts.length === 0 ? (
             <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 rounded-[2rem] blur-2xl opacity-10"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl border-2 border-gray-200 p-16 text-center">
-                <div className="relative inline-block mb-6">
-                  <div className="absolute inset-0 bg-gray-300 rounded-3xl blur-xl opacity-30"></div>
-                  <div className="relative w-24 h-24 bg-gray-100 rounded-3xl flex items-center justify-center">
-                    <i className="fas fa-inbox text-5xl text-gray-400"></i>
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 rounded-xl blur-xl opacity-10"></div>
+              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-gray-200 p-10 text-center">
+                <div className="relative inline-block mb-4">
+                  <div className="absolute inset-0 bg-gray-300 rounded-xl blur-lg opacity-30"></div>
+                  <div className="relative w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center">
+                    <i className="fas fa-inbox text-3xl text-gray-400"></i>
                   </div>
                 </div>
-                <h3 className="text-3xl font-bold text-gray-800 mb-3">No Assessments Found</h3>
-                <p className="text-gray-600 text-lg mb-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-2">No Assessments Found</h3>
+                <p className="text-gray-600 text-sm mb-4">
                   {filter === 'all'
                     ? 'Start your first assessment to see it here'
                     : `No ${filter} assessments found`}
                 </p>
                 <Link
                   href="/surveys"
-                  className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:scale-105 transition-all shadow-xl"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-md"
                 >
                   Start New Assessment
-                  <i className="fas fa-arrow-right"></i>
+                  <i className="fas fa-arrow-right text-xs"></i>
                 </Link>
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {filteredAttempts.map((attempt) => (
                 <div key={attempt.id} className="group relative">
                   <div className={`absolute inset-0 bg-gradient-to-br ${attempt.is_completed ? getGradeBg(attempt.overall_grade) : 'from-amber-500 to-orange-500'} rounded-2xl blur-xl opacity-0 group-hover:opacity-20 transition-opacity`}></div>
@@ -327,16 +327,16 @@ function StatCard({ icon, label, value, color }: {
 
   return (
     <div className="group relative">
-      <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg} rounded-2xl blur-xl opacity-0 group-hover:opacity-20 transition-opacity`}></div>
-      <div className={`relative bg-white/95 backdrop-blur-xl rounded-2xl border-2 ${colors.border} p-6 group-hover:scale-105 transition-all shadow-xl`}>
-        <div className="relative inline-block mb-4">
-          <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg} rounded-xl blur-lg opacity-30 group-hover:opacity-40 transition-opacity`}></div>
-          <div className={`relative w-12 h-12 bg-gradient-to-br ${colors.light} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg`}>
-            <i className={`fas ${icon} text-xl ${colors.text}`}></i>
+      <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg} rounded-lg blur-lg opacity-0 group-hover:opacity-20 transition-opacity`}></div>
+      <div className={`relative bg-white/95 backdrop-blur-xl rounded-lg border ${colors.border} p-3 group-hover:scale-105 transition-all shadow-md`}>
+        <div className="relative inline-block mb-2">
+          <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg} rounded-lg blur-md opacity-30 group-hover:opacity-40 transition-opacity`}></div>
+          <div className={`relative w-8 h-8 bg-gradient-to-br ${colors.light} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-md`}>
+            <i className={`fas ${icon} text-sm ${colors.text}`}></i>
           </div>
         </div>
-        <div className="text-4xl font-bold text-gray-800 mb-2">{value}</div>
-        <div className="text-sm text-gray-600 font-semibold">{label}</div>
+        <div className="text-2xl font-bold text-gray-800 mb-1">{value}</div>
+        <div className="text-xs text-gray-600 font-semibold">{label}</div>
       </div>
     </div>
   );

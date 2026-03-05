@@ -79,33 +79,33 @@ export default function SurveysPage() {
         <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
       
-      <main className="relative pt-24 pb-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <main className="relative pt-20 pb-12">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="mb-8">
+          <div className="mb-6">
             <Link 
               href="/dashboard" 
-              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-6 group"
+              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-4 group text-sm"
             >
-              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform"></i>
+              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform text-xs"></i>
               <span>Back to Dashboard</span>
             </Link>
             
             <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-[2rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl border-2 border-green-100 p-10">
-                <div className="flex items-center gap-4 mb-4">
+              <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl blur-xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
+              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-green-100 p-5">
+                <div className="flex items-center gap-3 mb-2">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl blur-lg opacity-40"></div>
-                    <div className="relative w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl flex items-center justify-center shadow-xl">
-                      <i className="fas fa-clipboard-list text-3xl text-white"></i>
+                    <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg blur-md opacity-40"></div>
+                    <div className="relative w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
+                      <i className="fas fa-clipboard-list text-xl text-white"></i>
                     </div>
                   </div>
                   <div>
-                    <h1 className="text-4xl font-bold text-gray-800">
+                    <h1 className="text-2xl font-bold text-gray-800">
                       Available Surveys
                     </h1>
-                    <p className="text-gray-600 text-lg font-medium">
+                    <p className="text-gray-600 text-sm font-medium">
                       Choose a sustainability assessment to begin
                     </p>
                   </div>
@@ -117,56 +117,56 @@ export default function SurveysPage() {
           {/* Surveys Grid */}
           {surveys.length === 0 ? (
             <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 rounded-[2rem] blur-2xl opacity-10"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl border-2 border-gray-200 p-16 text-center">
-                <div className="relative inline-block mb-6">
-                  <div className="absolute inset-0 bg-gray-300 rounded-3xl blur-xl opacity-30"></div>
-                  <div className="relative w-24 h-24 bg-gray-100 rounded-3xl flex items-center justify-center">
-                    <i className="fas fa-clipboard-list text-5xl text-gray-400"></i>
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 rounded-xl blur-xl opacity-10"></div>
+              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-gray-200 p-10 text-center">
+                <div className="relative inline-block mb-4">
+                  <div className="absolute inset-0 bg-gray-300 rounded-xl blur-lg opacity-30"></div>
+                  <div className="relative w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center">
+                    <i className="fas fa-clipboard-list text-3xl text-gray-400"></i>
                   </div>
                 </div>
-                <h3 className="text-3xl font-bold text-gray-800 mb-3">No Surveys Available</h3>
-                <p className="text-gray-600 text-lg">Please contact administrator to add surveys.</p>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">No Surveys Available</h3>
+                <p className="text-gray-600 text-sm">Please contact administrator to add surveys.</p>
               </div>
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {surveys.map((survey) => (
                 <div key={survey.id} className="group relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl blur-xl opacity-0 group-hover:opacity-20 transition-opacity"></div>
-                  <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border-2 border-green-100 group-hover:border-green-300 p-6 group-hover:scale-105 transition-all">
-                    <div className="flex items-start justify-between mb-4">
+                  <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl blur-lg opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                  <div className="relative bg-white/95 backdrop-blur-xl rounded-xl shadow-md border border-green-100 group-hover:border-green-300 p-4 group-hover:scale-105 transition-all">
+                    <div className="flex items-start justify-between mb-3">
                       <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl blur-lg opacity-30 group-hover:opacity-40 transition-opacity"></div>
-                        <div className="relative w-12 h-12 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
-                          <i className="fas fa-clipboard-check text-green-600 text-xl"></i>
+                        <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg blur-md opacity-30 group-hover:opacity-40 transition-opacity"></div>
+                        <div className="relative w-10 h-10 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
+                          <i className="fas fa-clipboard-check text-green-600 text-base"></i>
                         </div>
                       </div>
-                      <span className="px-3 py-1 bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 text-sm font-bold rounded-full border-2 border-green-200">
+                      <span className="px-2 py-1 bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 text-xs font-bold rounded-full border border-green-200">
                         Active
                       </span>
                     </div>
 
-                    <h3 className="text-xl font-bold text-gray-800 mb-3">
+                    <h3 className="text-base font-bold text-gray-800 mb-2">
                       {survey.name}
                     </h3>
                     
-                    <p className="text-gray-600 mb-4 line-clamp-3 leading-relaxed">
+                    <p className="text-gray-600 text-sm mb-3 line-clamp-3 leading-relaxed">
                       {survey.description}
                     </p>
 
-                    <div className="flex items-center gap-2 text-sm text-gray-600 font-semibold mb-6 px-3 py-2 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2 text-xs text-gray-600 font-semibold mb-4 px-2 py-1.5 bg-gray-50 rounded-lg">
                       <i className="fas fa-question-circle text-green-600"></i>
                       <span>{survey.total_questions} questions</span>
                     </div>
 
                     <Link
                       href={`/questionnaire/${survey.id}`}
-                      className="group/btn relative block w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white text-center rounded-xl font-bold hover:scale-105 transition-all shadow-xl shadow-green-600/30 overflow-hidden"
+                      className="group/btn relative block w-full py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white text-center rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-md overflow-hidden"
                     >
                       <span className="relative z-10 flex items-center justify-center gap-2">
                         Start Assessment
-                        <i className="fas fa-arrow-right group-hover/btn:translate-x-1 transition-transform"></i>
+                        <i className="fas fa-arrow-right group-hover/btn:translate-x-1 transition-transform text-xs"></i>
                       </span>
                       <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 opacity-0 group-hover/btn:opacity-100 transition-opacity"></div>
                     </Link>
