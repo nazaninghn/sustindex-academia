@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (data: any) => {
     try {
       // Register user
-      const registerResponse = await axios.post(`${API_URL}/api/v1/auth/register/`, data);
+      const registerResponse = await axios.post(`${API_URL}/api/v1/users/register/`, data);
       
       // Auto login after registration
       const { access, refresh } = registerResponse.data;
