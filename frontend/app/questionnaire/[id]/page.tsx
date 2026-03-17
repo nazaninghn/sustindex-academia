@@ -11,6 +11,7 @@ interface Question {
   id: number;
   text: string;
   category_name: string;
+  question_type: 'choice' | 'text' | 'mixed';
   allow_multiple: boolean;
   attachment?: string;
   choices: Choice[];
@@ -26,6 +27,7 @@ interface Answer {
   question: number;
   choice?: number;
   choices_ids?: number[];
+  text_answer?: string;
 }
 
 export default function QuestionnairePage() {
@@ -79,17 +81,19 @@ export default function QuestionnairePage() {
         
         if (answersResponse.data && Array.isArray(answersResponse.data)) {
           answersResponse.data.forEach((answer: any) => {
+            const answerObj: Answer = { question: answer.question };
+            
             if (answer.choice) {
-              existingAnswers.set(answer.question, {
-                question: answer.question,
-                choice: answer.choice
-              });
-            } else if (answer.choices_ids && answer.choices_ids.length > 0) {
-              existingAnswers.set(answer.question, {
-                question: answer.question,
-                choices_ids: answer.choices_ids
-              });
+              answerObj.choice = answer.choice;
             }
+            if (answer.choices_ids && answer.choices_ids.length > 0) {
+              answerObj.choices_ids = answer.choices_ids;
+            }
+            if (answer.text_answer) {
+              answerObj.text_answer = answer.text_answer;
+            }
+            
+            existingAnswers.set(answer.question, answerObj);
           });
         }
         
@@ -133,6 +137,13 @@ export default function QuestionnairePage() {
       newAnswers.set(questionId, { question: questionId, choice: choiceId });
     }
     
+    setAnswers(newAnswers);
+  };
+
+  const handleTextAnswer = (questionId: number, text: string) => {
+    const newAnswers = new Map(answers);
+    const current = newAnswers.get(questionId);
+    newAnswers.set(questionId, { ...current, question: questionId, text_answer: text });
     setAnswers(newAnswers);
   };
 
@@ -230,6 +241,12 @@ export default function QuestionnairePage() {
     console.log('Current answer:', currentAnswer);
     
     if (!currentAnswer) {
+      alert(t('error.questionnaire.answer'));
+      return;
+    }
+
+    // For text questions, ensure text is provided
+    if (currentQuestion.question_type === 'text' && !currentAnswer.text_answer?.trim()) {
       alert(t('error.questionnaire.answer'));
       return;
     }
@@ -337,7 +354,8 @@ export default function QuestionnairePage() {
               </div>
             )}
 
-            {/* Choices */}
+            {/* Choices - show for choice and mixed types */}
+            {(currentQuestion.question_type === 'choice' || currentQuestion.question_type === 'mixed') && currentQuestion.choices.length > 0 && (
             <div className="space-y-3 mb-6">
               {currentQuestion.choices.map((choice) => {
                 const isSelected = currentQuestion.allow_multiple
@@ -370,6 +388,24 @@ export default function QuestionnairePage() {
                 );
               })}
             </div>
+            )}
+
+            {/* Text Answer - show for text and mixed types */}
+            {(currentQuestion.question_type === 'text' || currentQuestion.question_type === 'mixed') && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <i className="fas fa-pen mr-2"></i>
+                  {t('questionnaire.textAnswer') || 'Your Answer'}
+                </label>
+                <textarea
+                  value={currentAnswer?.text_answer || ''}
+                  onChange={(e) => handleTextAnswer(currentQuestion.id, e.target.value)}
+                  placeholder={t('questionnaire.textPlaceholder') || 'Type your answer here...'}
+                  rows={5}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all resize-y text-gray-800 placeholder-gray-400"
+                />
+              </div>
+            )}
 
             {currentQuestion.allow_multiple && (
               <p className="text-sm text-gray-500 mb-4">
@@ -477,7 +513,7 @@ export default function QuestionnairePage() {
             ) : (
               <button
                 onClick={handleNext}
-                disabled={!currentAnswer}
+                disabled={!currentAnswer || (currentQuestion.question_type === 'text' && !currentAnswer?.text_answer?.trim())}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {t('questionnaire.next')} →

@@ -326,6 +326,8 @@ const translations = {
     'questionnaire.files': 'dosya',
     'questionnaire.selected': 'seçildi',
     'questionnaire.answer': 'Lütfen göndermeden önce bu soruyu cevaplayın',
+    'questionnaire.textAnswer': 'Cevabınız',
+    'questionnaire.textPlaceholder': 'Cevabınızı buraya yazın...',
     
     // Not Found Page
     'notfound.title': 'Sayfa Bulunamadı',
@@ -578,6 +580,8 @@ const translations = {
     'questionnaire.files': 'files',
     'questionnaire.selected': 'selected',
     'questionnaire.answer': 'Please answer this question before submitting',
+    'questionnaire.textAnswer': 'Your Answer',
+    'questionnaire.textPlaceholder': 'Type your answer here...',
     
     // Not Found Page
     'notfound.title': 'Page Not Found',

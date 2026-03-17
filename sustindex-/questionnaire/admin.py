@@ -260,9 +260,9 @@ class CategoryAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
 
 @admin.register(Question)
 class QuestionAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
-    list_display = ['id', 'survey', 'category', 'order', 'text_preview', 'allow_multiple', 'choice_count', 'is_active', 'created_at']
-    list_filter = ['survey' if not DROPDOWN_FILTER_AVAILABLE else ('survey', RelatedDropdownFilter), 'category' if not DROPDOWN_FILTER_AVAILABLE else ('category', RelatedDropdownFilter), 'is_active', 'allow_multiple', 'created_at']
-    list_editable = ['order', 'is_active', 'allow_multiple']
+    list_display = ['id', 'survey', 'category', 'order', 'question_type', 'text_preview', 'allow_multiple', 'choice_count', 'is_active', 'created_at']
+    list_filter = ['survey' if not DROPDOWN_FILTER_AVAILABLE else ('survey', RelatedDropdownFilter), 'category' if not DROPDOWN_FILTER_AVAILABLE else ('category', RelatedDropdownFilter), 'is_active', 'allow_multiple', 'question_type', 'created_at']
+    list_editable = ['order', 'is_active', 'allow_multiple', 'question_type']
     search_fields = ['text']
     ordering = ['survey', 'category', 'order']
     inlines = [ChoiceInline]
@@ -273,8 +273,8 @@ class QuestionAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
             'fields': ('survey', 'category', 'order', 'is_active')
         }),
         (_('Question Type'), {
-            'fields': ('allow_multiple',),
-            'description': _('Enable "Allow Multiple Choices" for questions where users can select more than one answer')
+            'fields': ('question_type', 'allow_multiple',),
+            'description': _('Choose question type: Choice for options, Text for open-ended, Mixed for both')
         }),
         (_('Content'), {
             'fields': ('text',)

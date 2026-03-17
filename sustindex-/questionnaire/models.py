@@ -135,11 +135,18 @@ class Category(models.Model):
 
 class Question(models.Model):
     """Questionnaire questions"""
+    QUESTION_TYPE_CHOICES = [
+        ('choice', _('Choice (select from options)')),
+        ('text', _('Text (open-ended answer)')),
+        ('mixed', _('Mixed (choices + text)')),
+    ]
+    
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name='questions', verbose_name=_('Survey'), null=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='questions', verbose_name=_('Category'))
     text = RichTextField(verbose_name=_('Question Text'))
     text_tr = RichTextField(blank=True, verbose_name=_('Question Text (Turkish)'))
     text_en = RichTextField(blank=True, verbose_name=_('Question Text (English)'))
+    question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES, default='choice', verbose_name=_('Question Type'))
     order = models.IntegerField(default=0, verbose_name=_('Display Order'))
     is_active = models.BooleanField(default=True, verbose_name=_('Active'))
     allow_multiple = models.BooleanField(default=False, verbose_name=_('Allow Multiple Choices'), help_text=_('Allow users to select multiple answers'))
@@ -289,6 +296,7 @@ class Answer(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE, verbose_name=_('Question'))
     choice = models.ForeignKey(Choice, on_delete=models.CASCADE, null=True, blank=True, verbose_name=_('Selected Choice (Single)'))
     choices = models.ManyToManyField(Choice, related_name='answers_multiple', blank=True, verbose_name=_('Selected Choices (Multiple)'))
+    text_answer = models.TextField(blank=True, null=True, verbose_name=_('Text Answer'), help_text=_('Open-ended text answer for text-type questions'))
     notes = models.TextField(blank=True, null=True, verbose_name=_('Notes/Comments'), help_text=_('Additional notes or comments for this answer'))
     answered_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Answered At'))
     

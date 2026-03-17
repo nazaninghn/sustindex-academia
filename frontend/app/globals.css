@@ -9,14 +9,14 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'IBM Plex Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.5;
-  color: #111827;
+  color: #000000;
   overflow-x: hidden;
-  background: white;
+  background: #F9FEF5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 13px; /* کوچک‌تر */
+  font-size: 13px;
 }
 
 /* کوچک‌تر کردن تمام عناصر */
@@ -133,16 +133,16 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f9fafb;
+  background: #F9FEF5;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #16a34a, #10b981);
+  background: linear-gradient(180deg, #7F8790, #8F92A1);
   border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #15803d, #059669);
+  background: linear-gradient(180deg, #6F7780, #7F8291);
 }
 
 /* Glass Effect */

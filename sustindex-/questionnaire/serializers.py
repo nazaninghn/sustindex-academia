@@ -36,7 +36,7 @@ class QuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
         fields = ['id', 'survey', 'category', 'category_name', 'text', 'text_tr', 'text_en',
-                  'order', 'is_active', 'allow_multiple', 'attachment', 'choices']
+                  'question_type', 'order', 'is_active', 'allow_multiple', 'attachment', 'choices']
     
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -172,7 +172,7 @@ class AnswerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Answer
         fields = ['id', 'question', 'question_text', 'choice', 'choice_text', 
-                  'choices', 'choices_display', 'notes', 'answered_at', 'total_score', 'documents']
+                  'choices', 'choices_display', 'text_answer', 'notes', 'answered_at', 'total_score', 'documents']
 
 
 class AnswerCreateSerializer(serializers.ModelSerializer):
@@ -184,7 +184,7 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Answer
-        fields = ['question', 'choice', 'choices_ids', 'notes']
+        fields = ['question', 'choice', 'choices_ids', 'text_answer', 'notes']
     
     def create(self, validated_data):
         choices_ids = validated_data.pop('choices_ids', [])
