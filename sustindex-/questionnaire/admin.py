@@ -220,19 +220,16 @@ class AnswerInline(admin.TabularInline):
 
 @admin.register(Category)
 class CategoryAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
-    list_display = ['id', 'name', 'order', 'score_weights', 'max_score', 'question_count']
+    list_display = ['id', 'name', 'survey', 'order', 'max_score', 'question_count']
     list_editable = ['order']
+    list_filter = ['survey']
     search_fields = ['name', 'description']
-    ordering = ['order', 'name']
+    ordering = ['survey', 'order', 'name']
     list_per_page = 50
     
     fieldsets = (
         (_('Basic Information'), {
-            'fields': ('name', 'description', 'order')
-        }),
-        (_('Weights'), {
-            'fields': ('environmental_weight', 'social_weight', 'governance_weight'),
-            'description': _('Total weights should equal 1.0 for proper calculation')
+            'fields': ('survey', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'order')
         }),
         (_('Scoring'), {
             'fields': ('max_score',)

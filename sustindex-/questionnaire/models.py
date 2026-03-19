@@ -89,7 +89,8 @@ class SurveySession(models.Model):
 
 
 class Category(models.Model):
-    """Question categories for organizing questionnaire"""
+    """Question categories for organizing questionnaire - each survey has its own categories"""
+    survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name='categories', verbose_name=_('Survey'), null=True, blank=True)
     name = models.CharField(max_length=200, verbose_name=_('Name'))
     name_tr = models.CharField(max_length=200, blank=True, verbose_name=_('Name (Turkish)'))
     name_en = models.CharField(max_length=200, blank=True, verbose_name=_('Name (English)'))
@@ -108,11 +109,15 @@ class Category(models.Model):
         ordering = ['order', 'name']
     
     def __str__(self):
-        return self.name
+        survey_name = self.survey.name if self.survey else 'Global'
+        return f"{survey_name} - {self.name}"
     
     def get_category_score(self, attempt):
         """Calculate category score for an attempt"""
-        questions = self.questions.filter(is_active=True)
+        if attempt.survey:
+            questions = self.questions.filter(is_active=True, survey=attempt.survey)
+        else:
+            questions = self.questions.filter(is_active=True)
         if not questions.exists():
             return 0
         
@@ -123,14 +128,14 @@ class Category(models.Model):
             answer = attempt.answers.filter(question=question).first()
             if answer:
                 total_score += answer.get_total_score()
-                max_choice_score = question.choices.aggregate(models.Max('score'))['score__max'] or 0
-                total_possible += max_choice_score
+            max_choice_score = question.choices.aggregate(models.Max('score'))['score__max'] or 0
+            total_possible += max_choice_score
         
         if total_possible == 0:
             return 0
         
         percentage = (total_score / total_possible) * 100
-        return min(percentage, self.max_score)
+        return min(percentage, 100)
 
 
 class Question(models.Model):
@@ -214,12 +219,16 @@ class QuestionnaireAttempt(models.Model):
     
     def calculate_scores(self):
         """Calculate scores per category dynamically"""
-        # Get categories that have questions in this survey
+        # Get categories belonging to this survey
         if self.survey:
             categories = Category.objects.filter(
-                questions__survey=self.survey, 
-                questions__is_active=True
-            ).distinct().order_by('order')
+                survey=self.survey
+            ).order_by('order')
+            if not categories.exists():
+                categories = Category.objects.filter(
+                    questions__survey=self.survey, 
+                    questions__is_active=True
+                ).distinct().order_by('order')
         else:
             categories = Category.objects.filter(
                 questions__is_active=True
@@ -248,7 +257,7 @@ class QuestionnaireAttempt(models.Model):
             category_scores[category.name] = {
                 'score': cat_score,
                 'max_score': cat_possible,
-                'percentage': round((cat_score / cat_possible * 100), 2) if cat_possible > 0 else 0,
+                'percentage': min(round((cat_score / cat_possible * 100), 2), 100) if cat_possible > 0 else 0,
                 'category_id': category.id,
             }
             
@@ -256,7 +265,7 @@ class QuestionnaireAttempt(models.Model):
             total_possible_sum += cat_possible
         
         # Calculate overall percentage
-        overall_percentage = round((total_score_sum / total_possible_sum * 100), 2) if total_possible_sum > 0 else 0
+        overall_percentage = min(round((total_score_sum / total_possible_sum * 100), 2), 100) if total_possible_sum > 0 else 0
         
         # Store in legacy fields for backward compatibility
         cat_list = list(category_scores.values())
@@ -299,9 +308,13 @@ class QuestionnaireAttempt(models.Model):
         
         if self.survey:
             categories = Category.objects.filter(
-                questions__survey=self.survey,
-                questions__is_active=True
-            ).distinct().order_by('order')
+                survey=self.survey
+            ).order_by('order')
+            if not categories.exists():
+                categories = Category.objects.filter(
+                    questions__survey=self.survey,
+                    questions__is_active=True
+                ).distinct().order_by('order')
         else:
             categories = Category.objects.filter(
                 questions__is_active=True

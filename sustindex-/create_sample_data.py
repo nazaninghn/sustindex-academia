@@ -54,6 +54,7 @@ categories_data = [
 categories = {}
 for cat_data in categories_data:
     cat, created = Category.objects.get_or_create(
+        survey=survey,
         name=cat_data['name'],
         defaults=cat_data
     )

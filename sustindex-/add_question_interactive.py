@@ -26,9 +26,12 @@ def list_surveys():
     return surveys
 
 
-def list_categories():
+def list_categories(survey=None):
     """List all available categories"""
-    categories = Category.objects.all().order_by('order')
+    if survey:
+        categories = Category.objects.filter(survey=survey).order_by('order')
+    else:
+        categories = Category.objects.all().order_by('order')
     print("\n" + "="*60)
     print("Available Categories:")
     print("="*60)

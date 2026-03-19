@@ -74,7 +74,7 @@ class CategorySerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Category
-        fields = ['id', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'order', 
+        fields = ['id', 'survey', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'order', 
                   'environmental_weight', 'social_weight', 'governance_weight', 
                   'max_score', 'questions']
     
@@ -266,9 +266,13 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
         
         if obj.survey:
             categories = Category.objects.filter(
-                questions__survey=obj.survey,
-                questions__is_active=True
-            ).distinct().order_by('order')
+                survey=obj.survey
+            ).order_by('order')
+            if not categories.exists():
+                categories = Category.objects.filter(
+                    questions__survey=obj.survey,
+                    questions__is_active=True
+                ).distinct().order_by('order')
         else:
             categories = Category.objects.filter(
                 questions__is_active=True
@@ -307,7 +311,7 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
                 'name': name,
                 'score': cat_score,
                 'max_score': cat_possible,
-                'percentage': round((cat_score / cat_possible * 100), 2) if cat_possible > 0 else 0,
+                'percentage': min(round((cat_score / cat_possible * 100), 2), 100) if cat_possible > 0 else 0,
             }
         
         setattr(self, cache_attr, result)
@@ -368,9 +372,13 @@ class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
         
         if obj.survey:
             categories = Category.objects.filter(
-                questions__survey=obj.survey,
-                questions__is_active=True
-            ).distinct().order_by('order')
+                survey=obj.survey
+            ).order_by('order')
+            if not categories.exists():
+                categories = Category.objects.filter(
+                    questions__survey=obj.survey,
+                    questions__is_active=True
+                ).distinct().order_by('order')
         else:
             categories = Category.objects.filter(
                 questions__is_active=True
@@ -408,7 +416,7 @@ class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
                 'name': name,
                 'score': cat_score,
                 'max_score': cat_possible,
-                'percentage': round((cat_score / cat_possible * 100), 2) if cat_possible > 0 else 0,
+                'percentage': min(round((cat_score / cat_possible * 100), 2), 100) if cat_possible > 0 else 0,
             }
         
         setattr(self, cache_attr, result)

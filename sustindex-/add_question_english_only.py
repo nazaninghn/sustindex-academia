@@ -37,7 +37,9 @@ def add_english_question():
         return
     
     # Select Category
-    categories = Category.objects.all()
+    categories = Category.objects.filter(survey=survey)
+    if not categories.exists():
+        categories = Category.objects.all()
     print("\nAvailable Categories:")
     for cat in categories:
         print(f"  [{cat.id}] {cat.name}")

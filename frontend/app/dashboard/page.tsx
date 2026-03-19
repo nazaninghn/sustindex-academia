@@ -485,7 +485,7 @@ function ScoreBar({ title, score, earned, maxScore, icon, color }: {
       <div className="relative h-2.5 bg-gray-100 rounded-full overflow-hidden shadow-inner">
         <div
           className={`h-full bg-gradient-to-r ${colors.bg} rounded-full transition-all duration-1000 shadow-md relative overflow-hidden`}
-          style={{ width: `${score}%` }}
+          style={{ width: `${Math.min(score, 100)}%` }}
         >
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
         </div>
