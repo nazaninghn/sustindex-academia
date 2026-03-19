@@ -19,7 +19,7 @@ interface Attempt {
   social_score: number;
   governance_score: number;
   overall_grade: string;
-  category_scores?: Record<string, { name: string; score: number; max_score: number; percentage: number }>;
+  category_scores?: { id: number; key: string; name: string; score: number; max_score: number; percentage: number }[];
 }
 
 export default function DashboardPage() {
@@ -211,13 +211,13 @@ export default function DashboardPage() {
                     </div>
                     
                     <div className="space-y-3">
-                      {latestAttempt.category_scores && Object.keys(latestAttempt.category_scores).length > 0 ? (
-                        Object.entries(latestAttempt.category_scores).map(([key, cat], index) => {
+                      {latestAttempt.category_scores && latestAttempt.category_scores.length > 0 ? (
+                        latestAttempt.category_scores.map((cat, index) => {
                           const colors = ['green', 'blue', 'purple', 'amber', 'cyan', 'pink'];
                           const icons = ['fa-leaf', 'fa-users', 'fa-balance-scale', 'fa-laptop', 'fa-globe', 'fa-chart-bar'];
                           return (
                             <ScoreBar
-                              key={key}
+                              key={cat.id}
                               title={cat.name}
                               score={cat.percentage}
                               earned={cat.score}

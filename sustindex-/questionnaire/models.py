@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from ckeditor.fields import RichTextField
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -173,7 +174,23 @@ class Question(models.Model):
     def __str__(self):
         survey_name = self.survey.name if self.survey else 'No Survey'
         return f"{survey_name} - {self.category.name} - Q{self.order}"
-    
+
+    def clean(self):
+        super().clean()
+        if self.category_id and self.survey_id:
+            # Ensure category belongs to the same survey
+            if self.category.survey_id and self.category.survey_id != self.survey_id:
+                raise ValidationError({
+                    'category': _('Selected category belongs to a different survey.')
+                })
+        # Auto-set survey from category if not set
+        if self.category_id and self.category.survey_id and not self.survey_id:
+            self.survey = self.category.survey
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
     def get_max_possible_score(self):
         """Calculate max possible score based on question type"""
         choices = self.choices.all()
@@ -231,11 +248,12 @@ class QuestionnaireAttempt(models.Model):
         return f"{self.user.username} - {survey_name} - {self.started_at.strftime('%Y-%m-%d')}"
     
     def calculate_score(self):
-        """Calculate total score from all answers"""
-        total = sum(answer.get_total_score() for answer in self.answers.all())
-        self.total_score = total
-        self.save()
-        return total
+        """
+        Backward-compatible wrapper.
+        Uses canonical dynamic scoring logic everywhere.
+        """
+        results = self.calculate_scores()
+        return results['total_percentage']
 
     def get_survey_categories(self):
         """Return categories for the current survey in display order."""
@@ -260,7 +278,7 @@ class QuestionnaireAttempt(models.Model):
         ).prefetch_related('choices')
         answers_by_qid = {a.question_id: a for a in all_answers}
 
-        category_scores = {}
+        category_scores = []
         total_score_sum = 0
         total_possible_sum = 0
 
@@ -287,12 +305,14 @@ class QuestionnaireAttempt(models.Model):
                 round((cat_score / cat_possible) * 100, 2), 100
             ) if cat_possible > 0 else 0
 
-            category_scores[category.name] = {
+            category_scores.append({
+                'id': category.id,
+                'key': category.name,
+                'name': category.name,
                 'score': cat_score,
                 'max_score': cat_possible,
                 'percentage': percentage,
-                'category_id': category.id,
-            }
+            })
 
             total_score_sum += cat_score
             total_possible_sum += cat_possible
@@ -313,7 +333,7 @@ class QuestionnaireAttempt(models.Model):
         results = self.get_category_breakdown()
 
         # Legacy fields for backward compatibility
-        cat_list = list(results['categories'].values())
+        cat_list = results['categories']
         self.environmental_score = cat_list[0]['percentage'] if len(cat_list) > 0 else 0
         self.social_score = cat_list[1]['percentage'] if len(cat_list) > 1 else 0
         self.governance_score = cat_list[2]['percentage'] if len(cat_list) > 2 else 0

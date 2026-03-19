@@ -30,6 +30,8 @@ interface Answer {
 }
 
 interface CategoryScore {
+  id: number;
+  key: string;
   name: string;
   score: number;
   max_score: number;
@@ -47,7 +49,7 @@ interface Attempt {
   overall_grade: string;
   recommendations: Recommendation[];
   answers: Answer[];
-  category_scores: Record<string, CategoryScore>;
+  category_scores: CategoryScore[];
 }
 
 interface Recommendation {
@@ -190,23 +192,23 @@ export default function ResultsPage() {
             <div className="text-6xl font-bold text-green-600 mb-2">
               {Math.round(attempt.total_score)}%
             </div>
-            {attempt.category_scores && Object.keys(attempt.category_scores).length > 0 && (
+            {attempt.category_scores && attempt.category_scores.length > 0 && (
               <p className="text-gray-500 text-lg mb-1">
-                {Object.values(attempt.category_scores).reduce((sum, c) => sum + c.score, 0)} / {Object.values(attempt.category_scores).reduce((sum, c) => sum + c.max_score, 0)} pts
+                {attempt.category_scores.reduce((sum, c) => sum + c.score, 0)} / {attempt.category_scores.reduce((sum, c) => sum + c.max_score, 0)} pts
               </p>
             )}
             <p className="text-gray-600">{t('results.outof')}</p>
           </div>
 
           {/* Dynamic Category Scores */}
-          {attempt.category_scores && Object.keys(attempt.category_scores).length > 0 && (
-          <div className={`grid gap-6 mb-8 ${Object.keys(attempt.category_scores).length === 1 ? 'md:grid-cols-1' : Object.keys(attempt.category_scores).length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
-            {Object.entries(attempt.category_scores).map(([key, cat], index) => {
+          {attempt.category_scores && attempt.category_scores.length > 0 && (
+          <div className={`grid gap-6 mb-8 ${attempt.category_scores.length === 1 ? 'md:grid-cols-1' : attempt.category_scores.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
+            {attempt.category_scores.map((cat, index) => {
               const colors = ['green', 'emerald', 'yellow', 'blue', 'purple', 'orange'];
               const icons = ['fa-leaf', 'fa-users', 'fa-balance-scale', 'fa-laptop', 'fa-globe', 'fa-chart-bar'];
               return (
                 <ScoreCard
-                  key={key}
+                  key={cat.id}
                   title={cat.name}
                   score={cat.percentage}
                   earned={cat.score}

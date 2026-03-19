@@ -18,7 +18,7 @@ interface Attempt {
   social_score: number;
   governance_score: number;
   overall_grade: string;
-  category_scores?: Record<string, { name: string; score: number; max_score: number; percentage: number }>;
+  category_scores?: { id: number; key: string; name: string; score: number; max_score: number; percentage: number }[];
 }
 
 export default function HistoryPage() {
@@ -294,11 +294,11 @@ export default function HistoryPage() {
                     {attempt.is_completed && (
                       <div className="mt-6 pt-6 border-t-2 border-green-100">
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                          {attempt.category_scores && Object.keys(attempt.category_scores).length > 0 ? (
-                            Object.entries(attempt.category_scores).map(([key, cat], index) => {
+                          {attempt.category_scores && attempt.category_scores.length > 0 ? (
+                            attempt.category_scores.map((cat, index) => {
                               const colors = ['green', 'blue', 'purple', 'amber', 'cyan', 'pink'];
                               return (
-                                <ScoreItem key={key} label={cat.name} score={cat.percentage} color={colors[index % colors.length]} />
+                                <ScoreItem key={cat.id} label={cat.name} score={cat.percentage} color={colors[index % colors.length]} />
                               );
                             })
                           ) : (

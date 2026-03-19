@@ -485,19 +485,19 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     @admin.display(description=_('Category Breakdown'))
     def dynamic_category_breakdown(self, obj):
         results = obj.get_category_breakdown()
-        categories = results.get('categories', {})
+        categories = results.get('categories', [])
 
         if not categories:
             return format_html('<div style="padding:10px;">No category data</div>')
 
         rows = []
-        for name, data in categories.items():
+        for data in categories:
             rows.append(
                 '<div style="margin-bottom:10px; padding:10px; background:#f8f9fa; border-radius:8px;">'
                 '<div style="font-weight:600;">{}</div>'
                 '<div>Raw score: <strong>{}</strong> / {}</div>'
                 '<div>Percentage: <strong>{}%</strong></div>'
-                '</div>'.format(name, data['score'], data['max_score'], data['percentage'])
+                '</div>'.format(data['name'], data['score'], data['max_score'], data['percentage'])
             )
 
         rows_html = ''.join(rows)

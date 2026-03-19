@@ -210,29 +210,51 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
     category_scores = serializers.SerializerMethodField()
     total_score = serializers.SerializerMethodField()
     overall_grade = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = QuestionnaireAttempt
-        fields = ['id', 'user', 'user_name', 'survey', 'survey_name', 
-                  'session', 'session_name', 'started_at', 'completed_at', 
-                  'is_completed', 'total_score', 'environmental_score', 
-                  'social_score', 'governance_score', 'overall_grade', 
-                  'answers', 'recommendations', 'category_scores']
-    
-    def get_total_score(self, obj):
-        """Compute total score dynamically from category scores"""
+        fields = [
+            'id', 'user', 'user_name', 'survey', 'survey_name',
+            'session', 'session_name', 'started_at', 'completed_at',
+            'is_completed', 'total_score', 'overall_grade',
+            'answers', 'recommendations', 'category_scores',
+        ]
+
+    # ---- helpers ----
+
+    def _breakdown(self, obj):
+        cache_attr = f'_cached_breakdown_{obj.id}'
+        if hasattr(self, cache_attr):
+            return getattr(self, cache_attr)
+
         if not obj.is_completed:
-            return 0
-        cat_scores = self._get_category_data(obj)
-        total_earned = sum(c['score'] for c in cat_scores.values())
-        total_possible = sum(c['max_score'] for c in cat_scores.values())
-        if total_possible == 0:
-            return 0
-        return min(round(total_earned / total_possible * 100, 2), 100)
-    
+            empty = {'categories': [], 'total_score': 0, 'total_possible': 0, 'total_percentage': 0}
+            setattr(self, cache_attr, empty)
+            return empty
+
+        result = obj.get_category_breakdown()
+        setattr(self, cache_attr, result)
+        return result
+
+    def _get_language(self):
+        request = self.context.get('request')
+        if request:
+            return (
+                request.query_params.get('lang')
+                or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
+            )
+        return None
+
+    # ---- fields ----
+
+    def get_total_score(self, obj):
+        return self._breakdown(obj)['total_percentage']
+
     def get_overall_grade(self, obj):
-        """Compute grade dynamically"""
-        score = self.get_total_score(obj)
+        if not obj.is_completed:
+            return None
+        # Use the score we just computed, not the DB field
+        score = self._breakdown(obj)['total_percentage']
         if score >= 80: return 'A+'
         elif score >= 70: return 'A'
         elif score >= 60: return 'B+'
@@ -240,113 +262,81 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
         elif score >= 40: return 'C+'
         elif score >= 30: return 'C'
         else: return 'D'
-    
+
     def get_recommendations(self, obj):
-        if obj.is_completed:
-            return obj.get_recommendations()
-        return []
-    
+        return obj.get_recommendations() if obj.is_completed else []
+
     def get_category_scores(self, obj):
-        """Return dynamic category scores"""
-        return self._get_category_data(obj)
-    
-    def _get_category_data(self, obj):
-        """Shared helper to compute category scores"""
-        # Cache to avoid recomputation
-        cache_attr = f'_cached_cat_scores_{obj.id}'
-        if hasattr(self, cache_attr):
-            return getattr(self, cache_attr)
-        
-        if not obj.is_completed:
-            setattr(self, cache_attr, {})
-            return {}
-        
-        from .models import Category
-        
-        if obj.survey:
-            categories = Category.objects.filter(
-                survey=obj.survey
-            ).order_by('order')
-            if not categories.exists():
-                categories = Category.objects.filter(
-                    questions__survey=obj.survey,
-                    questions__is_active=True
-                ).distinct().order_by('order')
-        else:
-            categories = Category.objects.filter(
-                questions__is_active=True
-            ).distinct().order_by('order')
-        
-        result = {}
-        for category in categories:
-            if obj.survey:
-                questions = category.questions.filter(is_active=True, survey=obj.survey)
-            else:
-                questions = category.questions.filter(is_active=True)
-            
-            cat_score = 0
-            cat_possible = 0
-            
-            for question in questions:
-                answer = obj.answers.filter(question=question).first()
-                if answer:
-                    cat_score += answer.get_total_score()
-                cat_possible += question.get_max_possible_score()
-            
-            # Get translated name
-            request = self.context.get('request')
-            language = None
-            if request:
-                language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-            
-            name = category.name
-            if language == 'tr' and category.name_tr:
-                name = category.name_tr
-            elif language == 'en' and category.name_en:
-                name = category.name_en
-            
-            result[category.name] = {
+        breakdown = self._breakdown(obj)
+        categories = breakdown.get('categories', [])
+        language = self._get_language()
+
+        localized = []
+        for item in categories:
+            name = item['name']
+            # Localize if possible
+            if language in ('tr', 'en'):
+                from .models import Category as CatModel
+                try:
+                    cat_obj = CatModel.objects.get(pk=item['id'])
+                    if language == 'tr' and cat_obj.name_tr:
+                        name = cat_obj.name_tr
+                    elif language == 'en' and cat_obj.name_en:
+                        name = cat_obj.name_en
+                except CatModel.DoesNotExist:
+                    pass
+
+            localized.append({
+                'id': item['id'],
+                'key': item['key'],
                 'name': name,
-                'score': cat_score,
-                'max_score': cat_possible,
-                'percentage': min(round((cat_score / cat_possible * 100), 2), 100) if cat_possible > 0 else 0,
-            }
-        
-        setattr(self, cache_attr, result)
-        return result
+                'score': item['score'],
+                'max_score': item['max_score'],
+                'percentage': item['percentage'],
+            })
+
+        return localized
 
 
 class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for listing attempts with dynamic scores"""
+    """Lightweight serializer for listing attempts — delegates to model."""
     user_name = serializers.CharField(source='user.username', read_only=True)
     survey_name = serializers.CharField(source='survey.name', read_only=True)
     session_name = serializers.CharField(source='session.name', read_only=True)
     category_scores = serializers.SerializerMethodField()
     total_score = serializers.SerializerMethodField()
     overall_grade = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = QuestionnaireAttempt
-        fields = ['id', 'user', 'user_name', 'survey', 'survey_name', 
-                  'session', 'session_name', 'started_at', 'completed_at', 
-                  'is_completed', 'total_score', 'environmental_score', 
-                  'social_score', 'governance_score', 'overall_grade',
-                  'category_scores']
-    
-    def get_total_score(self, obj):
-        """Compute total score dynamically"""
+        fields = [
+            'id', 'user', 'user_name', 'survey', 'survey_name',
+            'session', 'session_name', 'started_at', 'completed_at',
+            'is_completed', 'total_score', 'overall_grade',
+            'category_scores',
+        ]
+
+    def _breakdown(self, obj):
+        cache_attr = f'_cached_breakdown_{obj.id}'
+        if hasattr(self, cache_attr):
+            return getattr(self, cache_attr)
+
         if not obj.is_completed:
-            return 0
-        cat_scores = self.get_category_scores(obj)
-        total_earned = sum(c['score'] for c in cat_scores.values())
-        total_possible = sum(c['max_score'] for c in cat_scores.values())
-        if total_possible == 0:
-            return 0
-        return min(round(total_earned / total_possible * 100, 2), 100)
-    
+            empty = {'categories': [], 'total_score': 0, 'total_possible': 0, 'total_percentage': 0}
+            setattr(self, cache_attr, empty)
+            return empty
+
+        result = obj.get_category_breakdown()
+        setattr(self, cache_attr, result)
+        return result
+
+    def get_total_score(self, obj):
+        return self._breakdown(obj)['total_percentage']
+
     def get_overall_grade(self, obj):
-        """Compute grade dynamically"""
-        score = self.get_total_score(obj)
+        if not obj.is_completed:
+            return None
+        score = self._breakdown(obj)['total_percentage']
         if score >= 80: return 'A+'
         elif score >= 70: return 'A'
         elif score >= 60: return 'B+'
@@ -354,69 +344,9 @@ class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
         elif score >= 40: return 'C+'
         elif score >= 30: return 'C'
         else: return 'D'
-    
+
     def get_category_scores(self, obj):
-        """Return dynamic category scores for list view too"""
-        cache_attr = f'_cached_cat_scores_{obj.id}'
-        if hasattr(self, cache_attr):
-            return getattr(self, cache_attr)
-        
-        if not obj.is_completed:
-            setattr(self, cache_attr, {})
-            return {}
-        
-        from .models import Category
-        
-        if obj.survey:
-            categories = Category.objects.filter(
-                survey=obj.survey
-            ).order_by('order')
-            if not categories.exists():
-                categories = Category.objects.filter(
-                    questions__survey=obj.survey,
-                    questions__is_active=True
-                ).distinct().order_by('order')
-        else:
-            categories = Category.objects.filter(
-                questions__is_active=True
-            ).distinct().order_by('order')
-        
-        result = {}
-        for category in categories:
-            if obj.survey:
-                questions = category.questions.filter(is_active=True, survey=obj.survey)
-            else:
-                questions = category.questions.filter(is_active=True)
-            
-            cat_score = 0
-            cat_possible = 0
-            
-            for question in questions:
-                answer = obj.answers.filter(question=question).first()
-                if answer:
-                    cat_score += answer.get_total_score()
-                cat_possible += question.get_max_possible_score()
-            
-            request = self.context.get('request')
-            language = None
-            if request:
-                language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-            
-            name = category.name
-            if language == 'tr' and category.name_tr:
-                name = category.name_tr
-            elif language == 'en' and category.name_en:
-                name = category.name_en
-            
-            result[category.name] = {
-                'name': name,
-                'score': cat_score,
-                'max_score': cat_possible,
-                'percentage': min(round((cat_score / cat_possible * 100), 2), 100) if cat_possible > 0 else 0,
-            }
-        
-        setattr(self, cache_attr, result)
-        return result
+        return self._breakdown(obj)['categories']
 
 
 class QuestionnaireAttemptCreateSerializer(serializers.ModelSerializer):

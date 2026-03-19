@@ -52,13 +52,13 @@ def get_category_performance(attempt):
     results = attempt.get_category_breakdown()
 
     performance = []
-    for category_name, data in results['categories'].items():
+    for data in results['categories']:
         performance.append({
-            'category': category_name,
+            'category': data['name'],
             'score': data['score'],
             'max_score': data['max_score'],
             'percentage': data['percentage'],
-            'category_id': data['category_id'],
+            'category_id': data['id'],
         })
 
     return performance
