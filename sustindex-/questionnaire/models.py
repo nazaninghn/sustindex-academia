@@ -128,8 +128,7 @@ class Category(models.Model):
             answer = attempt.answers.filter(question=question).first()
             if answer:
                 total_score += answer.get_total_score()
-            max_choice_score = question.choices.aggregate(models.Max('score'))['score__max'] or 0
-            total_possible += max_choice_score
+            total_possible += question.get_max_possible_score()
         
         if total_possible == 0:
             return 0
@@ -166,6 +165,19 @@ class Question(models.Model):
     def __str__(self):
         survey_name = self.survey.name if self.survey else 'No Survey'
         return f"{survey_name} - {self.category.name} - Q{self.order}"
+    
+    def get_max_possible_score(self):
+        """Calculate max possible score based on question type"""
+        choices = self.choices.all()
+        if not choices.exists():
+            return 0
+        
+        if self.allow_multiple:
+            # Multi-select: sum of all positive scores
+            return sum(choice.score for choice in choices if choice.score > 0)
+        
+        # Single choice: highest score
+        return choices.aggregate(models.Max('score'))['score__max'] or 0
 
 
 class Choice(models.Model):
@@ -196,9 +208,9 @@ class QuestionnaireAttempt(models.Model):
     is_completed = models.BooleanField(default=False, verbose_name=_('Completed'))
     total_score = models.IntegerField(default=0, verbose_name=_('Total Score'))
     
-    environmental_score = models.FloatField(default=0.0, verbose_name=_('Environmental Score'))
-    social_score = models.FloatField(default=0.0, verbose_name=_('Social Score'))
-    governance_score = models.FloatField(default=0.0, verbose_name=_('Governance Score'))
+    environmental_score = models.FloatField(default=0.0, null=True, blank=True, verbose_name=_('Environmental Score'))
+    social_score = models.FloatField(default=0.0, null=True, blank=True, verbose_name=_('Social Score'))
+    governance_score = models.FloatField(default=0.0, null=True, blank=True, verbose_name=_('Governance Score'))
     overall_grade = models.CharField(max_length=2, blank=True, verbose_name=_('Overall Grade'))
     
     class Meta:
@@ -251,8 +263,7 @@ class QuestionnaireAttempt(models.Model):
                 answer = self.answers.filter(question=question).first()
                 if answer:
                     cat_score += answer.get_total_score()
-                max_choice_score = question.choices.aggregate(models.Max('score'))['score__max'] or 0
-                cat_possible += max_choice_score
+                cat_possible += question.get_max_possible_score()
             
             category_scores[category.name] = {
                 'score': cat_score,
@@ -267,11 +278,16 @@ class QuestionnaireAttempt(models.Model):
         # Calculate overall percentage
         overall_percentage = min(round((total_score_sum / total_possible_sum * 100), 2), 100) if total_possible_sum > 0 else 0
         
-        # Store in legacy fields for backward compatibility
+        # Store in legacy fields for backward compatibility (only if ESG-style survey)
         cat_list = list(category_scores.values())
-        self.environmental_score = cat_list[0]['percentage'] if len(cat_list) > 0 else 0
-        self.social_score = cat_list[1]['percentage'] if len(cat_list) > 1 else 0
-        self.governance_score = cat_list[2]['percentage'] if len(cat_list) > 2 else 0
+        if len(cat_list) >= 3:
+            self.environmental_score = cat_list[0]['percentage']
+            self.social_score = cat_list[1]['percentage']
+            self.governance_score = cat_list[2]['percentage']
+        else:
+            self.environmental_score = 0
+            self.social_score = 0
+            self.governance_score = 0
         
         self.total_score = overall_percentage
         self.overall_grade = self.get_overall_grade()

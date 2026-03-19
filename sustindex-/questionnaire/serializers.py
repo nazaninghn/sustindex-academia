@@ -262,7 +262,6 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
             return {}
         
         from .models import Category
-        from django.db import models as db_models
         
         if obj.survey:
             categories = Category.objects.filter(
@@ -292,8 +291,7 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
                 answer = obj.answers.filter(question=question).first()
                 if answer:
                     cat_score += answer.get_total_score()
-                max_choice_score = question.choices.aggregate(db_models.Max('score'))['score__max'] or 0
-                cat_possible += max_choice_score
+                cat_possible += question.get_max_possible_score()
             
             # Get translated name
             request = self.context.get('request')
@@ -368,7 +366,6 @@ class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
             return {}
         
         from .models import Category
-        from django.db import models as db_models
         
         if obj.survey:
             categories = Category.objects.filter(
@@ -398,8 +395,7 @@ class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
                 answer = obj.answers.filter(question=question).first()
                 if answer:
                     cat_score += answer.get_total_score()
-                max_choice_score = question.choices.aggregate(db_models.Max('score'))['score__max'] or 0
-                cat_possible += max_choice_score
+                cat_possible += question.get_max_possible_score()
             
             request = self.context.get('request')
             language = None
