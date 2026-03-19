@@ -207,41 +207,72 @@ class QuestionnaireAttempt(models.Model):
     
     def calculate_score(self):
         """Calculate total score from all answers"""
-        total = sum(answer.choice.score for answer in self.answers.all())
+        total = sum(answer.get_total_score() for answer in self.answers.all())
         self.total_score = total
         self.save()
         return total
     
     def calculate_scores(self):
-        """Calculate separate scores"""
-        categories = Category.objects.all()
+        """Calculate scores per category dynamically"""
+        # Get categories that have questions in this survey
+        if self.survey:
+            categories = Category.objects.filter(
+                questions__survey=self.survey, 
+                questions__is_active=True
+            ).distinct().order_by('order')
+        else:
+            categories = Category.objects.filter(
+                questions__is_active=True
+            ).distinct().order_by('order')
         
-        env_score = 0
-        social_score = 0
-        gov_score = 0
+        category_scores = {}
+        total_score_sum = 0
+        total_possible_sum = 0
         
         for category in categories:
-            category_score = category.get_category_score(self)
+            if self.survey:
+                questions = category.questions.filter(is_active=True, survey=self.survey)
+            else:
+                questions = category.questions.filter(is_active=True)
             
-            env_score += category_score * category.environmental_weight
-            social_score += category_score * category.social_weight  
-            gov_score += category_score * category.governance_weight
+            cat_score = 0
+            cat_possible = 0
+            
+            for question in questions:
+                answer = self.answers.filter(question=question).first()
+                if answer:
+                    cat_score += answer.get_total_score()
+                max_choice_score = question.choices.aggregate(models.Max('score'))['score__max'] or 0
+                cat_possible += max_choice_score
+            
+            category_scores[category.name] = {
+                'score': cat_score,
+                'max_score': cat_possible,
+                'percentage': round((cat_score / cat_possible * 100), 2) if cat_possible > 0 else 0,
+                'category_id': category.id,
+            }
+            
+            total_score_sum += cat_score
+            total_possible_sum += cat_possible
         
-        self.environmental_score = round(env_score, 2)
-        self.social_score = round(social_score, 2)
-        self.governance_score = round(gov_score, 2)
+        # Calculate overall percentage
+        overall_percentage = round((total_score_sum / total_possible_sum * 100), 2) if total_possible_sum > 0 else 0
         
-        total = (self.environmental_score + self.social_score + self.governance_score) / 3
-        self.total_score = round(total, 2)
+        # Store in legacy fields for backward compatibility
+        cat_list = list(category_scores.values())
+        self.environmental_score = cat_list[0]['percentage'] if len(cat_list) > 0 else 0
+        self.social_score = cat_list[1]['percentage'] if len(cat_list) > 1 else 0
+        self.governance_score = cat_list[2]['percentage'] if len(cat_list) > 2 else 0
         
+        self.total_score = overall_percentage
         self.overall_grade = self.get_overall_grade()
-        
         self.save()
+        
         return {
-            'environmental': self.environmental_score,
-            'social': self.social_score,
-            'governance': self.governance_score,
-            'total': self.total_score,
+            'categories': category_scores,
+            'total_score': total_score_sum,
+            'total_possible': total_possible_sum,
+            'total_percentage': overall_percentage,
             'grade': self.overall_grade
         }
     
@@ -263,29 +294,33 @@ class QuestionnaireAttempt(models.Model):
             return 'D'
     
     def get_recommendations(self):
-        """Provide recommendations based on scores"""
+        """Provide dynamic recommendations based on category scores"""
         recommendations = []
         
-        if self.environmental_score < 50:
-            recommendations.append({
-                'category': 'Environmental',
-                'priority': 'High',
-                'suggestion': 'Focus on waste management and renewable energy adoption'
-            })
+        if self.survey:
+            categories = Category.objects.filter(
+                questions__survey=self.survey,
+                questions__is_active=True
+            ).distinct().order_by('order')
+        else:
+            categories = Category.objects.filter(
+                questions__is_active=True
+            ).distinct().order_by('order')
         
-        if self.social_score < 50:
-            recommendations.append({
-                'category': 'Social',
-                'priority': 'High', 
-                'suggestion': 'Improve employee training and diversity programs'
-            })
-        
-        if self.governance_score < 50:
-            recommendations.append({
-                'category': 'Governance',
-                'priority': 'High',
-                'suggestion': 'Strengthen board independence and transparency reporting'
-            })
+        for category in categories:
+            cat_score = category.get_category_score(self)
+            if cat_score < 50:
+                recommendations.append({
+                    'category': category.name,
+                    'priority': 'High',
+                    'suggestion': f'Improve your performance in {category.name}. Current score is below 50%.'
+                })
+            elif cat_score < 70:
+                recommendations.append({
+                    'category': category.name,
+                    'priority': 'Medium',
+                    'suggestion': f'Good progress in {category.name}, but there is room for improvement.'
+                })
         
         return recommendations
 
@@ -320,12 +355,23 @@ class Answer(models.Model):
     
     def is_cannot_answer(self):
         """Check if user selected 'cannot answer'"""
-        return not self.choice and not self.choices.exists()
+        return not self.choice and not self.choices.exists() and not self.text_answer
     
     def get_selected_choices_display(self):
-        """Display selected choices"""
+        """Display selected choices or text answer"""
+        if self.text_answer and self.text_answer.strip():
+            if self.choice or self.choices.exists():
+                # Mixed: show both
+                choice_text = ""
+                if self.question.allow_multiple:
+                    choice_text = ", ".join([choice.text for choice in self.choices.all()])
+                else:
+                    choice_text = self.choice.text if self.choice else ""
+                return f"{choice_text} | {self.text_answer}" if choice_text else self.text_answer
+            return self.text_answer
+        
         if self.is_cannot_answer():
-            return "Cannot answer"
+            return "No answer provided"
         
         if self.question.allow_multiple:
             return ", ".join([choice.text for choice in self.choices.all()])

@@ -18,6 +18,7 @@ interface Attempt {
   social_score: number;
   governance_score: number;
   overall_grade: string;
+  category_scores?: Record<string, { name: string; score: number; max_score: number; percentage: number }>;
 }
 
 export default function HistoryPage() {
@@ -292,10 +293,21 @@ export default function HistoryPage() {
 
                     {attempt.is_completed && (
                       <div className="mt-6 pt-6 border-t-2 border-green-100">
-                        <div className="grid grid-cols-3 gap-6">
-                          <ScoreItem label="Environmental" score={attempt.environmental_score} color="green" />
-                          <ScoreItem label="Social" score={attempt.social_score} color="blue" />
-                          <ScoreItem label="Governance" score={attempt.governance_score} color="purple" />
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                          {attempt.category_scores && Object.keys(attempt.category_scores).length > 0 ? (
+                            Object.entries(attempt.category_scores).map(([key, cat], index) => {
+                              const colors = ['green', 'blue', 'purple', 'amber', 'cyan', 'pink'];
+                              return (
+                                <ScoreItem key={key} label={cat.name} score={cat.percentage} color={colors[index % colors.length]} />
+                              );
+                            })
+                          ) : (
+                            <>
+                              <ScoreItem label="Environmental" score={attempt.environmental_score} color="green" />
+                              <ScoreItem label="Social" score={attempt.social_score} color="blue" />
+                              <ScoreItem label="Governance" score={attempt.governance_score} color="purple" />
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
@@ -347,26 +359,29 @@ function ScoreItem({ label, score, color }: {
   score: number;
   color: string;
 }) {
-  const colorClasses = {
+  const colorClasses: Record<string, { bg: string; text: string }> = {
     green: { bg: 'from-green-500 to-emerald-500', text: 'text-green-600' },
     blue: { bg: 'from-blue-500 to-cyan-500', text: 'text-blue-600' },
     purple: { bg: 'from-purple-500 to-pink-500', text: 'text-purple-600' },
+    amber: { bg: 'from-amber-500 to-orange-500', text: 'text-amber-600' },
+    cyan: { bg: 'from-cyan-500 to-teal-500', text: 'text-cyan-600' },
+    pink: { bg: 'from-pink-500 to-rose-500', text: 'text-pink-600' },
   };
 
-  const colors = colorClasses[color as keyof typeof colorClasses];
+  const colors = colorClasses[color] || colorClasses.green;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-gray-600 font-bold uppercase tracking-wide">{label}</p>
         <span className={`text-sm font-bold ${colors.text}`}>
-          {Math.round(score)}
+          {Math.round(score)}%
         </span>
       </div>
       <div className="h-2 bg-gray-100 rounded-full overflow-hidden shadow-inner">
         <div
           className={`h-full bg-gradient-to-r ${colors.bg} rounded-full transition-all duration-500`}
-          style={{ width: `${score}%` }}
+          style={{ width: `${Math.min(score, 100)}%` }}
         />
       </div>
     </div>

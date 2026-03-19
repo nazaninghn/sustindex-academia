@@ -23,9 +23,17 @@ interface Answer {
   question_text: string;
   choice_text?: string;
   choices_display?: string;
+  text_answer?: string;
   notes?: string;
   total_score: number;
   documents: Document[];
+}
+
+interface CategoryScore {
+  name: string;
+  score: number;
+  max_score: number;
+  percentage: number;
 }
 
 interface Attempt {
@@ -39,6 +47,7 @@ interface Attempt {
   overall_grade: string;
   recommendations: Recommendation[];
   answers: Answer[];
+  category_scores: Record<string, CategoryScore>;
 }
 
 interface Recommendation {
@@ -179,32 +188,36 @@ export default function ResultsPage() {
           <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border-2 border-green-100 p-8 mb-8 text-center">
             <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('results.overall')}</h2>
             <div className="text-6xl font-bold text-green-600 mb-2">
-              {Math.round(attempt.total_score)}
+              {Math.round(attempt.total_score)}%
             </div>
+            {attempt.category_scores && Object.keys(attempt.category_scores).length > 0 && (
+              <p className="text-gray-500 text-lg mb-1">
+                {Object.values(attempt.category_scores).reduce((sum, c) => sum + c.score, 0)} / {Object.values(attempt.category_scores).reduce((sum, c) => sum + c.max_score, 0)} pts
+              </p>
+            )}
             <p className="text-gray-600">{t('results.outof')}</p>
           </div>
 
-          {/* ESG Scores */}
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
-            <ScoreCard
-              title={t('results.environmental')}
-              score={attempt.environmental_score}
-              icon="fa-leaf"
-              color="green"
-            />
-            <ScoreCard
-              title={t('results.social')}
-              score={attempt.social_score}
-              icon="fa-users"
-              color="emerald"
-            />
-            <ScoreCard
-              title={t('results.governance')}
-              score={attempt.governance_score}
-              icon="fa-balance-scale"
-              color="yellow"
-            />
+          {/* Dynamic Category Scores */}
+          {attempt.category_scores && Object.keys(attempt.category_scores).length > 0 && (
+          <div className={`grid gap-6 mb-8 ${Object.keys(attempt.category_scores).length === 1 ? 'md:grid-cols-1' : Object.keys(attempt.category_scores).length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
+            {Object.entries(attempt.category_scores).map(([key, cat], index) => {
+              const colors = ['green', 'emerald', 'yellow', 'blue', 'purple', 'orange'];
+              const icons = ['fa-leaf', 'fa-users', 'fa-balance-scale', 'fa-laptop', 'fa-globe', 'fa-chart-bar'];
+              return (
+                <ScoreCard
+                  key={key}
+                  title={cat.name}
+                  score={cat.percentage}
+                  earned={cat.score}
+                  maxScore={cat.max_score}
+                  icon={icons[index % icons.length]}
+                  color={colors[index % colors.length]}
+                />
+              );
+            })}
           </div>
+          )}
 
           {/* Recommendations */}
           {attempt.recommendations && attempt.recommendations.length > 0 && (
@@ -260,10 +273,46 @@ export default function ResultsPage() {
                     </div>
                     
                     <div className="ml-4 pl-4 border-l-2 border-green-300">
+                      {/* Choice-based answer */}
+                      {answer.choice_text && (
                       <p className="text-gray-700">
                         <i className="fas fa-check-circle text-green-600 mr-2"></i>
-                        {answer.choices_display || answer.choice_text}
+                        {answer.choice_text}
                       </p>
+                      )}
+                      
+                      {/* Multiple choices display (only show if there are actual choices, not text answer) */}
+                      {!answer.choice_text && answer.choices_display && 
+                       answer.choices_display !== 'No answer provided' && 
+                       answer.choices_display !== '-' &&
+                       answer.choices_display !== answer.text_answer && 
+                       !answer.choices_display.endsWith(`| ${answer.text_answer}`) && (
+                      <p className="text-gray-700">
+                        <i className="fas fa-check-circle text-green-600 mr-2"></i>
+                        {answer.choices_display}
+                      </p>
+                      )}
+                      
+                      {/* Text Answer - show separately */}
+                      {answer.text_answer && answer.text_answer.trim() && (
+                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-sm text-gray-600 font-semibold mb-1">
+                            <i className="fas fa-pen text-blue-600 mr-1"></i>
+                            {t('results.textAnswer') || 'Written Answer'}:
+                          </p>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                            {answer.text_answer}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* No answer provided */}
+                      {!answer.choice_text && !answer.text_answer && (!answer.choices_display || answer.choices_display === 'No answer provided' || answer.choices_display === '-') && (
+                        <p className="text-gray-400 italic">
+                          <i className="fas fa-minus-circle text-gray-400 mr-2"></i>
+                          {t('results.noAnswer') || 'No answer provided'}
+                        </p>
+                      )}
                       
                       {/* Uploaded Documents */}
                       {answer.documents && answer.documents.length > 0 && (
@@ -352,28 +401,38 @@ export default function ResultsPage() {
   );
 }
 
-function ScoreCard({ title, score, icon, color }: { title: string; score: number; icon: string; color: string }) {
-  const colorClasses = {
+function ScoreCard({ title, score, earned, maxScore, icon, color }: { title: string; score: number; earned?: number; maxScore?: number; icon: string; color: string }) {
+  const colorClasses: Record<string, string> = {
     green: 'bg-green-600',
     emerald: 'bg-emerald-600',
     yellow: 'bg-yellow-500',
+    blue: 'bg-blue-600',
+    purple: 'bg-purple-600',
+    orange: 'bg-orange-500',
   };
+
+  const bgColor = colorClasses[color] || 'bg-green-600';
 
   return (
     <div className="bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border-2 border-green-100 p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-        <div className={`w-10 h-10 ${colorClasses[color as keyof typeof colorClasses]}/10 rounded-full flex items-center justify-center`}>
-          <i className={`fas ${icon} ${colorClasses[color as keyof typeof colorClasses].replace('bg-', 'text-')} text-lg`}></i>
+        <div className={`w-10 h-10 ${bgColor}/10 rounded-full flex items-center justify-center`}>
+          <i className={`fas ${icon} ${bgColor.replace('bg-', 'text-')} text-lg`}></i>
         </div>
       </div>
-      <div className="text-4xl font-bold text-green-600 mb-3">
-        {Math.round(score)}
+      <div className="text-4xl font-bold text-green-600 mb-1">
+        {Math.round(score)}%
       </div>
+      {earned !== undefined && maxScore !== undefined && (
+        <p className="text-sm text-gray-500 mb-3">
+          {earned} / {maxScore} pts
+        </p>
+      )}
       <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
         <div
-          className={`h-full ${colorClasses[color as keyof typeof colorClasses]} transition-all duration-1000`}
-          style={{ width: `${score}%` }}
+          className={`h-full ${bgColor} transition-all duration-1000`}
+          style={{ width: `${Math.min(score, 100)}%` }}
         />
       </div>
     </div>

@@ -45,11 +45,6 @@ export default function QuestionnairePage() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Map<number, File[]>>(new Map());
 
-  // Debug log
-  useEffect(() => {
-    console.log('Submitting state changed:', submitting);
-  }, [submitting]);
-
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
@@ -290,16 +285,6 @@ export default function QuestionnairePage() {
   const currentAnswer = answers.get(currentQuestion.id);
   const currentFiles = uploadedFiles.get(currentQuestion.id) || [];
   
-  console.log('Render state:', { 
-    currentIndex, 
-    questionsLength: questions.length, 
-    currentQuestionId: currentQuestion.id,
-    currentAnswer,
-    answersSize: answers.size,
-    allAnswers: Array.from(answers.entries()),
-    attemptId: attemptId
-  });
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-emerald-50">
       <DashboardNavbar />
@@ -482,17 +467,8 @@ export default function QuestionnairePage() {
 
             {currentIndex === questions.length - 1 ? (
               <div>
-                <p className="text-xs text-gray-600 mb-2">Debug: submitting={submitting.toString()}, disabled={submitting.toString()}</p>
                 <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    console.log('Button clicked! submitting:', submitting);
-                    if (submitting) {
-                      console.log('Button is disabled because submitting is true');
-                      return;
-                    }
-                    handleSubmit();
-                  }}
+                  onClick={handleSubmit}
                   disabled={submitting}
                   type="button"
                   className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"

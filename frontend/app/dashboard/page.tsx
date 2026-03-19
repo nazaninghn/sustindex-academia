@@ -19,6 +19,7 @@ interface Attempt {
   social_score: number;
   governance_score: number;
   overall_grade: string;
+  category_scores?: Record<string, { name: string; score: number; max_score: number; percentage: number }>;
 }
 
 export default function DashboardPage() {
@@ -210,24 +211,29 @@ export default function DashboardPage() {
                     </div>
                     
                     <div className="space-y-3">
-                      <ScoreBar
-                        title={t('dashboard.esg.environmental')}
-                        score={latestAttempt.environmental_score}
-                        icon="fa-leaf"
-                        color="green"
-                      />
-                      <ScoreBar
-                        title={t('dashboard.esg.social')}
-                        score={latestAttempt.social_score}
-                        icon="fa-users"
-                        color="blue"
-                      />
-                      <ScoreBar
-                        title={t('dashboard.esg.governance')}
-                        score={latestAttempt.governance_score}
-                        icon="fa-balance-scale"
-                        color="purple"
-                      />
+                      {latestAttempt.category_scores && Object.keys(latestAttempt.category_scores).length > 0 ? (
+                        Object.entries(latestAttempt.category_scores).map(([key, cat], index) => {
+                          const colors = ['green', 'blue', 'purple', 'amber', 'cyan', 'pink'];
+                          const icons = ['fa-leaf', 'fa-users', 'fa-balance-scale', 'fa-laptop', 'fa-globe', 'fa-chart-bar'];
+                          return (
+                            <ScoreBar
+                              key={key}
+                              title={cat.name}
+                              score={cat.percentage}
+                              earned={cat.score}
+                              maxScore={cat.max_score}
+                              icon={icons[index % icons.length]}
+                              color={colors[index % colors.length]}
+                            />
+                          );
+                        })
+                      ) : (
+                        <>
+                          <ScoreBar title={t('dashboard.esg.environmental')} score={latestAttempt.environmental_score} icon="fa-leaf" color="green" />
+                          <ScoreBar title={t('dashboard.esg.social')} score={latestAttempt.social_score} icon="fa-users" color="blue" />
+                          <ScoreBar title={t('dashboard.esg.governance')} score={latestAttempt.governance_score} icon="fa-balance-scale" color="purple" />
+                        </>
+                      )}
                     </div>
 
                     {/* Overall Score */}
@@ -436,19 +442,24 @@ function StatCard({ icon, label, value, color, trend }: {
   );
 }
 
-function ScoreBar({ title, score, icon, color }: { 
+function ScoreBar({ title, score, earned, maxScore, icon, color }: { 
   title: string; 
   score: number; 
+  earned?: number;
+  maxScore?: number;
   icon: string;
   color: string;
 }) {
-  const colorClasses = {
+  const colorClasses: Record<string, { bg: string; text: string; light: string }> = {
     green: { bg: 'from-green-500 to-emerald-500', text: 'text-green-600', light: 'from-green-100 to-emerald-100' },
     blue: { bg: 'from-blue-500 to-cyan-500', text: 'text-blue-600', light: 'from-blue-100 to-cyan-100' },
     purple: { bg: 'from-purple-500 to-pink-500', text: 'text-purple-600', light: 'from-purple-100 to-pink-100' },
+    amber: { bg: 'from-amber-500 to-orange-500', text: 'text-amber-600', light: 'from-amber-100 to-orange-100' },
+    cyan: { bg: 'from-cyan-500 to-teal-500', text: 'text-cyan-600', light: 'from-cyan-100 to-teal-100' },
+    pink: { bg: 'from-pink-500 to-rose-500', text: 'text-pink-600', light: 'from-pink-100 to-rose-100' },
   };
 
-  const colors = colorClasses[color as keyof typeof colorClasses];
+  const colors = colorClasses[color] || colorClasses.green;
 
   return (
     <div className="group">
@@ -462,9 +473,14 @@ function ScoreBar({ title, score, icon, color }: {
           </div>
           <span className="font-bold text-gray-800 text-sm">{title}</span>
         </div>
-        <span className={`text-xl font-bold ${colors.text}`}>
-          {Math.round(score)}
-        </span>
+        <div className="text-right">
+          <span className={`text-xl font-bold ${colors.text}`}>
+            {Math.round(score)}%
+          </span>
+          {earned !== undefined && maxScore !== undefined && (
+            <span className="text-xs text-gray-500 block">{earned}/{maxScore}</span>
+          )}
+        </div>
       </div>
       <div className="relative h-2.5 bg-gray-100 rounded-full overflow-hidden shadow-inner">
         <div

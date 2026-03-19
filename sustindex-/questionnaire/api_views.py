@@ -10,8 +10,8 @@ from .models import (
 from .serializers import (
     SurveySerializer, SurveySessionSerializer, CategorySerializer,
     QuestionSerializer, ChoiceSerializer, QuestionnaireAttemptSerializer,
-    QuestionnaireAttemptCreateSerializer, AnswerSerializer,
-    AnswerCreateSerializer, UserDocumentSerializer
+    QuestionnaireAttemptCreateSerializer, QuestionnaireAttemptListSerializer,
+    AnswerSerializer, AnswerCreateSerializer, UserDocumentSerializer
 )
 
 
@@ -89,6 +89,8 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'create':
             return QuestionnaireAttemptCreateSerializer
+        if self.action in ['list', 'my_attempts']:
+            return QuestionnaireAttemptListSerializer
         return QuestionnaireAttemptSerializer
     
     def perform_create(self, serializer):
@@ -159,6 +161,28 @@ class AnswerViewSet(viewsets.ModelViewSet):
         
         if attempt.is_completed:
             raise ValueError("Cannot modify completed attempt")
+        
+        # Update existing answer if it exists (user went back and changed answer)
+        question_id = self.request.data.get('question')
+        existing = Answer.objects.filter(attempt=attempt, question_id=question_id).first()
+        if existing:
+            # Update existing answer
+            choice = self.request.data.get('choice')
+            text_answer = self.request.data.get('text_answer', '')
+            notes = self.request.data.get('notes', '')
+            choices_ids = self.request.data.get('choices_ids', [])
+            
+            existing.choice_id = choice
+            existing.text_answer = text_answer
+            existing.notes = notes
+            existing.save()
+            
+            if choices_ids:
+                existing.choices.set(Choice.objects.filter(id__in=choices_ids))
+            
+            # Return the existing answer (override serializer instance)
+            serializer.instance = existing
+            return
         
         serializer.save(attempt=attempt)
 

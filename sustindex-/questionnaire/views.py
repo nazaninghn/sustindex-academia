@@ -128,8 +128,8 @@ def questionnaire_page(request, attempt_id):
         # Otherwise, complete the assessment
         attempt.is_completed = True
         attempt.completed_at = timezone.now()
-        attempt.calculate_score()
         attempt.save()
+        attempt.calculate_scores()
         
         return redirect('questionnaire_result', attempt_id=attempt.id)
     

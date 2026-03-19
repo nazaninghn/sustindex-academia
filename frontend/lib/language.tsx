@@ -407,6 +407,8 @@ const translations = {
     'results.exporting': 'Dışa aktarılıyor...',
     'results.back': 'Kontrol Paneline Dön',
     'results.exporterror': 'PDF dışa aktarılamadı. Lütfen tekrar deneyin.',
+    'results.textAnswer': 'Yazılı Cevap',
+    'results.noAnswer': 'Cevap verilmedi',
   },
   en: {
     // Navbar
@@ -661,6 +663,8 @@ const translations = {
     'results.exporting': 'Exporting...',
     'results.back': 'Back to Dashboard',
     'results.exporterror': 'Failed to export PDF. Please try again.',
+    'results.textAnswer': 'Written Answer',
+    'results.noAnswer': 'No answer provided',
     
     // Login & Register
     'auth.login.title': 'Sign In',
