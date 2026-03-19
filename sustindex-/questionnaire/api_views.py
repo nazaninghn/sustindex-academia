@@ -114,7 +114,12 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(attempt)
         return Response({
             'attempt': serializer.data,
-            'scores': scores
+            'summary': {
+                'total_score': scores['total_score'],
+                'total_possible': scores['total_possible'],
+                'total_percentage': scores['total_percentage'],
+                'grade': scores['grade'],
+            }
         })
     
     @action(detail=True, methods=['get'])

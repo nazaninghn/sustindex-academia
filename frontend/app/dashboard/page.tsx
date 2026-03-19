@@ -8,6 +8,8 @@ import { attemptAPI } from '@/lib/api';
 import DashboardNavbar from '@/components/DashboardNavbar';
 import { useLanguage } from '@/lib/language';
 
+import { CategoryScore } from '@/lib/types';
+
 interface Attempt {
   id: number;
   survey_name: string;
@@ -15,11 +17,8 @@ interface Attempt {
   started_at: string;
   is_completed: boolean;
   total_score: number;
-  environmental_score: number;
-  social_score: number;
-  governance_score: number;
   overall_grade: string;
-  category_scores?: { id: number; key: string; name: string; score: number; max_score: number; percentage: number }[];
+  category_scores: CategoryScore[];
 }
 
 export default function DashboardPage() {
@@ -228,11 +227,7 @@ export default function DashboardPage() {
                           );
                         })
                       ) : (
-                        <>
-                          <ScoreBar title={t('dashboard.esg.environmental')} score={latestAttempt.environmental_score} icon="fa-leaf" color="green" />
-                          <ScoreBar title={t('dashboard.esg.social')} score={latestAttempt.social_score} icon="fa-users" color="blue" />
-                          <ScoreBar title={t('dashboard.esg.governance')} score={latestAttempt.governance_score} icon="fa-balance-scale" color="purple" />
-                        </>
+                        <div className="text-center py-4 text-gray-500 text-sm">No category data available</div>
                       )}
                     </div>
 

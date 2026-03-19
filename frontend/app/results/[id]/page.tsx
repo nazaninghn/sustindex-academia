@@ -10,53 +10,9 @@ import DashboardNavbar from '@/components/DashboardNavbar';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-interface Document {
-  id: number;
-  title: string;
-  file: string;
-  uploaded_at: string;
-  file_size_display: string;
-}
+import { AttemptResponse, getScoreTone, toneTailwind } from '@/lib/types';
 
-interface Answer {
-  id: number;
-  question_text: string;
-  choice_text?: string;
-  choices_display?: string;
-  text_answer?: string;
-  notes?: string;
-  total_score: number;
-  documents: Document[];
-}
-
-interface CategoryScore {
-  id: number;
-  key: string;
-  name: string;
-  score: number;
-  max_score: number;
-  percentage: number;
-}
-
-interface Attempt {
-  id: number;
-  survey_name: string;
-  completed_at: string;
-  total_score: number;
-  environmental_score: number;
-  social_score: number;
-  governance_score: number;
-  overall_grade: string;
-  recommendations: Recommendation[];
-  answers: Answer[];
-  category_scores: CategoryScore[];
-}
-
-interface Recommendation {
-  category: string;
-  priority: string;
-  suggestion: string;
-}
+type Attempt = AttemptResponse;
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -204,8 +160,8 @@ export default function ResultsPage() {
           {attempt.category_scores && attempt.category_scores.length > 0 && (
           <div className={`grid gap-6 mb-8 ${attempt.category_scores.length === 1 ? 'md:grid-cols-1' : attempt.category_scores.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
             {attempt.category_scores.map((cat, index) => {
-              const colors = ['green', 'emerald', 'yellow', 'blue', 'purple', 'orange'];
               const icons = ['fa-leaf', 'fa-users', 'fa-balance-scale', 'fa-laptop', 'fa-globe', 'fa-chart-bar'];
+              const tone = getScoreTone(cat.percentage);
               return (
                 <ScoreCard
                   key={cat.id}
@@ -214,7 +170,7 @@ export default function ResultsPage() {
                   earned={cat.score}
                   maxScore={cat.max_score}
                   icon={icons[index % icons.length]}
-                  color={colors[index % colors.length]}
+                  tone={tone}
                 />
               );
             })}
@@ -403,27 +359,18 @@ export default function ResultsPage() {
   );
 }
 
-function ScoreCard({ title, score, earned, maxScore, icon, color }: { title: string; score: number; earned?: number; maxScore?: number; icon: string; color: string }) {
-  const colorClasses: Record<string, string> = {
-    green: 'bg-green-600',
-    emerald: 'bg-emerald-600',
-    yellow: 'bg-yellow-500',
-    blue: 'bg-blue-600',
-    purple: 'bg-purple-600',
-    orange: 'bg-orange-500',
-  };
-
-  const bgColor = colorClasses[color] || 'bg-green-600';
+function ScoreCard({ title, score, earned, maxScore, icon, tone }: { title: string; score: number; earned?: number; maxScore?: number; icon: string; tone: import('@/lib/types').ScoreTone }) {
+  const tw = toneTailwind[tone];
 
   return (
     <div className="bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border-2 border-green-100 p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-        <div className={`w-10 h-10 ${bgColor}/10 rounded-full flex items-center justify-center`}>
-          <i className={`fas ${icon} ${bgColor.replace('bg-', 'text-')} text-lg`}></i>
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${tw.bar}/10`}>
+          <i className={`fas ${icon} ${tw.text} text-lg`}></i>
         </div>
       </div>
-      <div className="text-4xl font-bold text-green-600 mb-1">
+      <div className={`text-4xl font-bold ${tw.text} mb-1`}>
         {Math.round(score)}%
       </div>
       {earned !== undefined && maxScore !== undefined && (
@@ -433,7 +380,7 @@ function ScoreCard({ title, score, earned, maxScore, icon, color }: { title: str
       )}
       <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
         <div
-          className={`h-full ${bgColor} transition-all duration-1000`}
+          className={`h-full ${tw.bar} transition-all duration-1000`}
           style={{ width: `${Math.min(score, 100)}%` }}
         />
       </div>

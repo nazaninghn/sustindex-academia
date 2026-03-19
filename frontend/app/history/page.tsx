@@ -7,6 +7,8 @@ import { useAuth } from '@/lib/auth';
 import { attemptAPI } from '@/lib/api';
 import DashboardNavbar from '@/components/DashboardNavbar';
 
+import { CategoryScore } from '@/lib/types';
+
 interface Attempt {
   id: number;
   survey_name: string;
@@ -14,11 +16,8 @@ interface Attempt {
   started_at: string;
   is_completed: boolean;
   total_score: number;
-  environmental_score: number;
-  social_score: number;
-  governance_score: number;
   overall_grade: string;
-  category_scores?: { id: number; key: string; name: string; score: number; max_score: number; percentage: number }[];
+  category_scores: CategoryScore[];
 }
 
 export default function HistoryPage() {
@@ -302,11 +301,7 @@ export default function HistoryPage() {
                               );
                             })
                           ) : (
-                            <>
-                              <ScoreItem label="Environmental" score={attempt.environmental_score} color="green" />
-                              <ScoreItem label="Social" score={attempt.social_score} color="blue" />
-                              <ScoreItem label="Governance" score={attempt.governance_score} color="purple" />
-                            </>
+                            <div className="col-span-full text-center text-gray-500 text-sm">No category data</div>
                           )}
                         </div>
                       </div>
