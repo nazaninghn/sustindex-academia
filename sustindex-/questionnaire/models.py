@@ -113,28 +113,36 @@ class Category(models.Model):
         return f"{survey_name} - {self.name}"
     
     def get_category_score(self, attempt):
-        """Calculate category score for an attempt"""
+        """Calculate category percentage score for an attempt."""
         if attempt.survey:
             questions = self.questions.filter(is_active=True, survey=attempt.survey)
         else:
             questions = self.questions.filter(is_active=True)
+
         if not questions.exists():
             return 0
-        
+
         total_score = 0
         total_possible = 0
-        
-        for question in questions:
-            answer = attempt.answers.filter(question=question).first()
+
+        answers_by_qid = {
+            a.question_id: a
+            for a in attempt.answers.filter(
+                question__in=questions
+            ).select_related('choice').prefetch_related('choices')
+        }
+
+        for question in questions.prefetch_related('choices'):
+            answer = answers_by_qid.get(question.id)
             if answer:
                 total_score += answer.get_total_score()
             total_possible += question.get_max_possible_score()
-        
+
         if total_possible == 0:
             return 0
-        
+
         percentage = (total_score / total_possible) * 100
-        return min(percentage, 100)
+        return min(round(percentage, 2), 100)
 
 
 class Question(models.Model):
@@ -228,77 +236,101 @@ class QuestionnaireAttempt(models.Model):
         self.total_score = total
         self.save()
         return total
-    
-    def calculate_scores(self):
-        """Calculate scores per category dynamically"""
-        # Get categories belonging to this survey
+
+    def get_survey_categories(self):
+        """Return categories for the current survey in display order."""
         if self.survey:
-            categories = Category.objects.filter(
-                survey=self.survey
-            ).order_by('order')
-            if not categories.exists():
-                categories = Category.objects.filter(
-                    questions__survey=self.survey, 
-                    questions__is_active=True
-                ).distinct().order_by('order')
-        else:
-            categories = Category.objects.filter(
+            categories = Category.objects.filter(survey=self.survey).order_by('order')
+            if categories.exists():
+                return categories
+            return Category.objects.filter(
+                questions__survey=self.survey,
                 questions__is_active=True
             ).distinct().order_by('order')
-        
+        return Category.objects.filter(
+            questions__is_active=True
+        ).distinct().order_by('order')
+
+    def get_category_breakdown(self):
+        """Build dynamic category breakdown for the current attempt."""
+        categories = self.get_survey_categories()
+
+        all_answers = self.answers.select_related(
+            'choice', 'question'
+        ).prefetch_related('choices')
+        answers_by_qid = {a.question_id: a for a in all_answers}
+
         category_scores = {}
         total_score_sum = 0
         total_possible_sum = 0
-        
+
         for category in categories:
             if self.survey:
-                questions = category.questions.filter(is_active=True, survey=self.survey)
+                questions = category.questions.filter(
+                    is_active=True, survey=self.survey
+                ).prefetch_related('choices')
             else:
-                questions = category.questions.filter(is_active=True)
-            
+                questions = category.questions.filter(
+                    is_active=True
+                ).prefetch_related('choices')
+
             cat_score = 0
             cat_possible = 0
-            
+
             for question in questions:
-                answer = self.answers.filter(question=question).first()
+                answer = answers_by_qid.get(question.id)
                 if answer:
                     cat_score += answer.get_total_score()
                 cat_possible += question.get_max_possible_score()
-            
+
+            percentage = min(
+                round((cat_score / cat_possible) * 100, 2), 100
+            ) if cat_possible > 0 else 0
+
             category_scores[category.name] = {
                 'score': cat_score,
                 'max_score': cat_possible,
-                'percentage': min(round((cat_score / cat_possible * 100), 2), 100) if cat_possible > 0 else 0,
+                'percentage': percentage,
                 'category_id': category.id,
             }
-            
+
             total_score_sum += cat_score
             total_possible_sum += cat_possible
-        
-        # Calculate overall percentage
-        overall_percentage = min(round((total_score_sum / total_possible_sum * 100), 2), 100) if total_possible_sum > 0 else 0
-        
-        # Store in legacy fields for backward compatibility (only if ESG-style survey)
-        cat_list = list(category_scores.values())
-        if len(cat_list) >= 3:
-            self.environmental_score = cat_list[0]['percentage']
-            self.social_score = cat_list[1]['percentage']
-            self.governance_score = cat_list[2]['percentage']
-        else:
-            self.environmental_score = 0
-            self.social_score = 0
-            self.governance_score = 0
-        
-        self.total_score = overall_percentage
-        self.overall_grade = self.get_overall_grade()
-        self.save()
-        
+
+        total_percentage = min(
+            round((total_score_sum / total_possible_sum) * 100, 2), 100
+        ) if total_possible_sum > 0 else 0
+
         return {
             'categories': category_scores,
             'total_score': total_score_sum,
             'total_possible': total_possible_sum,
-            'total_percentage': overall_percentage,
-            'grade': self.overall_grade
+            'total_percentage': total_percentage,
+        }
+
+    def calculate_scores(self):
+        """Calculate scores per category dynamically."""
+        results = self.get_category_breakdown()
+
+        # Legacy fields for backward compatibility
+        cat_list = list(results['categories'].values())
+        self.environmental_score = cat_list[0]['percentage'] if len(cat_list) > 0 else 0
+        self.social_score = cat_list[1]['percentage'] if len(cat_list) > 1 else 0
+        self.governance_score = cat_list[2]['percentage'] if len(cat_list) > 2 else 0
+
+        self.total_score = round(results['total_percentage'])
+        self.overall_grade = self.get_overall_grade()
+        self.save(update_fields=[
+            'environmental_score',
+            'social_score',
+            'governance_score',
+            'total_score',
+            'overall_grade',
+        ])
+
+        return {
+            **results,
+            'grade': self.overall_grade,
         }
     
     def get_overall_grade(self):
@@ -321,21 +353,8 @@ class QuestionnaireAttempt(models.Model):
     def get_recommendations(self):
         """Provide dynamic recommendations based on category scores"""
         recommendations = []
-        
-        if self.survey:
-            categories = Category.objects.filter(
-                survey=self.survey
-            ).order_by('order')
-            if not categories.exists():
-                categories = Category.objects.filter(
-                    questions__survey=self.survey,
-                    questions__is_active=True
-                ).distinct().order_by('order')
-        else:
-            categories = Category.objects.filter(
-                questions__is_active=True
-            ).distinct().order_by('order')
-        
+        categories = self.get_survey_categories()
+
         for category in categories:
             cat_score = category.get_category_score(self)
             if cat_score < 50:
@@ -350,7 +369,7 @@ class QuestionnaireAttempt(models.Model):
                     'priority': 'Medium',
                     'suggestion': f'Good progress in {category.name}, but there is room for improvement.'
                 })
-        
+
         return recommendations
 
 
@@ -373,14 +392,10 @@ class Answer(models.Model):
         return f"{self.attempt.user.username} - {self.question}"
     
     def get_total_score(self):
-        """Calculate total score for this answer"""
-        if not self.choice and not self.choices.exists():
-            return 0
-        
+        """Calculate total score for this answer."""
         if self.question.allow_multiple:
             return sum(choice.score for choice in self.choices.all())
-        else:
-            return self.choice.score if self.choice else 0
+        return self.choice.score if self.choice else 0
     
     def is_cannot_answer(self):
         """Check if user selected 'cannot answer'"""

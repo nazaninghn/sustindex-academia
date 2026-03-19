@@ -370,7 +370,7 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     readonly_fields = [
         'started_at', 'total_score', 'environmental_score', 
         'social_score', 'governance_score', 'overall_grade',
-        'progress_display', 'score_breakdown'
+        'progress_display', 'score_breakdown', 'dynamic_category_breakdown'
     ]
     inlines = [AnswerInline]
     date_hierarchy = 'started_at'
@@ -384,11 +384,11 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
             'fields': ('started_at', 'completed_at', 'is_completed', 'progress_display')
         }),
         (_('Scores'), {
-            'fields': ('score_breakdown', 'total_score', 'overall_grade'),
+            'fields': ('dynamic_category_breakdown', 'total_score', 'overall_grade'),
             'classes': ('wide',)
         }),
-        (_('Detailed Scores'), {
-            'fields': ('environmental_score', 'social_score', 'governance_score'),
+        (_('Legacy ESG Scores'), {
+            'fields': ('score_breakdown', 'environmental_score', 'social_score', 'governance_score'),
             'classes': ('collapse',)
         }),
     )
@@ -468,27 +468,51 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
             stats['cannot_answer_count']
         )
     
-    @admin.display(description=_('Score Breakdown'))
+    @admin.display(description=_('Legacy ESG Breakdown'))
     def score_breakdown(self, obj):
+        env = obj.environmental_score or 0
+        soc = obj.social_score or 0
+        gov = obj.governance_score or 0
         return format_html(
             '<div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">'
-            '<div style="margin-bottom: 10px;">'
-            '<span style="color: #28A745; font-weight: bold;">🌱 Environmental:</span> '
-            '<strong>{:.1f}</strong>/100'
-            '</div>'
-            '<div style="margin-bottom: 10px;">'
-            '<span style="color: #4C6EF5; font-weight: bold;">👥 Social:</span> '
-            '<strong>{:.1f}</strong>/100'
-            '</div>'
-            '<div>'
-            '<span style="color: #FF6B35; font-weight: bold;">⚖️ Governance:</span> '
-            '<strong>{:.1f}</strong>/100'
-            '</div>'
+            '<div style="margin-bottom: 10px;"><strong>Environmental:</strong> {:.1f}%</div>'
+            '<div style="margin-bottom: 10px;"><strong>Social:</strong> {:.1f}%</div>'
+            '<div><strong>Governance:</strong> {:.1f}%</div>'
             '</div>',
-            obj.environmental_score,
-            obj.social_score,
-            obj.governance_score
+            env, soc, gov
         )
+
+    @admin.display(description=_('Category Breakdown'))
+    def dynamic_category_breakdown(self, obj):
+        results = obj.get_category_breakdown()
+        categories = results.get('categories', {})
+
+        if not categories:
+            return format_html('<div style="padding:10px;">No category data</div>')
+
+        rows = []
+        for name, data in categories.items():
+            rows.append(
+                '<div style="margin-bottom:10px; padding:10px; background:#f8f9fa; border-radius:8px;">'
+                '<div style="font-weight:600;">{}</div>'
+                '<div>Raw score: <strong>{}</strong> / {}</div>'
+                '<div>Percentage: <strong>{}%</strong></div>'
+                '</div>'.format(name, data['score'], data['max_score'], data['percentage'])
+            )
+
+        rows_html = ''.join(rows)
+        footer = (
+            '<div style="margin-top:12px; padding-top:12px; border-top:1px solid #ddd;">'
+            '<div><strong>Total raw:</strong> {} / {}</div>'
+            '<div><strong>Total percentage:</strong> {}%</div>'
+            '</div>'.format(
+                results['total_score'],
+                results['total_possible'],
+                results['total_percentage']
+            )
+        )
+
+        return mark_safe('<div style="padding:15px;">{}{}</div>'.format(rows_html, footer))
     
     @admin.action(description=_('Recalculate scores'))
     def recalculate_scores(self, request, queryset):
