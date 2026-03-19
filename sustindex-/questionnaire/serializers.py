@@ -228,7 +228,7 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
         total_possible = sum(c['max_score'] for c in cat_scores.values())
         if total_possible == 0:
             return 0
-        return round(total_earned / total_possible * 100, 2)
+        return min(round(total_earned / total_possible * 100, 2), 100)
     
     def get_overall_grade(self, obj):
         """Compute grade dynamically"""
@@ -344,7 +344,7 @@ class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
         total_possible = sum(c['max_score'] for c in cat_scores.values())
         if total_possible == 0:
             return 0
-        return round(total_earned / total_possible * 100, 2)
+        return min(round(total_earned / total_possible * 100, 2), 100)
     
     def get_overall_grade(self, obj):
         """Compute grade dynamically"""

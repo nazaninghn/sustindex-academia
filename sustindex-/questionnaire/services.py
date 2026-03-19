@@ -7,21 +7,10 @@ from django.db.models import Count, Q
 def recalc_attempt_score(attempt):
     """
     محاسبه مجدد امتیاز کل یک attempt
+    Uses calculate_scores() which handles all question types properly.
     """
-    from .models import Answer
-    
-    total = 0
-    answers = attempt.answers.select_related('question').prefetch_related('choice')
-    
-    for answer in answers:
-        if answer.choice:
-            total += answer.choice.score
-    
-    attempt.total_score = total
-    
     attempt.calculate_scores()
-    
-    return total
+    return attempt.total_score
 
 
 def attempt_stats(attempt):
@@ -44,7 +33,7 @@ def attempt_stats(attempt):
     for answer in attempt.answers.all():
         if answer.is_cannot_answer():
             cannot_answer_count += 1
-        elif answer.choice or answer.choices.exists():
+        elif answer.choice or answer.choices.exists() or (answer.text_answer and answer.text_answer.strip()):
             answered_questions += 1
     
     progress_percent = 0
@@ -61,11 +50,24 @@ def attempt_stats(attempt):
 
 def get_category_performance(attempt):
     """
-    محاسبه عملکرد در هر دسته‌بندی
+    محاسبه عملکرد در هر دسته‌بندی - filtered by survey
     """
     from .models import Category
     
-    categories = Category.objects.all()
+    if attempt.survey:
+        categories = Category.objects.filter(
+            survey=attempt.survey
+        ).order_by('order')
+        if not categories.exists():
+            categories = Category.objects.filter(
+                questions__survey=attempt.survey,
+                questions__is_active=True
+            ).distinct().order_by('order')
+    else:
+        categories = Category.objects.filter(
+            questions__is_active=True
+        ).distinct().order_by('order')
+    
     performance = []
     
     for category in categories:
@@ -74,7 +76,7 @@ def get_category_performance(attempt):
             'category': category.name,
             'score': category_score,
             'max_score': category.max_score,
-            'percentage': round((category_score / category.max_score * 100) if category.max_score > 0 else 0, 1)
+            'percentage': min(round(category_score, 1), 100)
         })
     
     return performance

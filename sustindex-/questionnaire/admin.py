@@ -81,10 +81,23 @@ class SurveyAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
                 show_results_immediately=survey.show_results_immediately
             )
             
+            # Duplicate categories and build old->new mapping
+            category_map = {}
+            for category in survey.categories.all():
+                old_id = category.pk
+                category.pk = None
+                category.survey = new_survey
+                category.save()
+                category_map[old_id] = category
+            
             for question in survey.questions.all():
                 old_choices = list(question.choices.all())
+                old_cat_id = question.category_id
                 question.pk = None
                 question.survey = new_survey
+                # Map to the new category
+                if old_cat_id in category_map:
+                    question.category = category_map[old_cat_id]
                 question.save()
                 
                 for choice in old_choices:
