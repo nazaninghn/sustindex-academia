@@ -1,18 +1,26 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import Logo from './Logo';
 import LangToggle from './LangToggle';
 import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 
 export default function AppNav() {
-  const { t } = useLang();
-  const path = usePathname();
+  const { t }    = useLang();
+  const path     = usePathname();
   const { user } = useAuth();
+  const [open, setOpen] = useState(false);
 
-  // Fix J: removed dead '/results' route (no index page — only /results/[id] exists);
-  // '/history' already covers the assessments list.
+  // Close menu on route change
+  useEffect(() => { setOpen(false); }, [path]);
+  // Lock body scroll when open
+  useEffect(() => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
   const items: [string, string][] = [
     [t('nav_overview'), '/dashboard'],
     [t('nav_surveys'),  '/surveys'],
@@ -32,42 +40,45 @@ export default function AppNav() {
       background: 'var(--cream)',
       position: 'sticky', top: 0, zIndex: 50,
     }}>
-      <div className="wrap app-nav-row" style={{
+      {/* ── Top bar ── */}
+      <div className="wrap" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 32px',
+        padding: '0 32px', height: 57,
       }}>
-        <div className="app-nav-primary" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <Link href="/" style={{ textDecoration: 'none' }}><Logo size={22} /></Link>
-          <span style={{ width: 1, height: 22, background: 'var(--line)' }}></span>
-          <nav className="app-nav-links" style={{ display: 'flex', gap: 2 }}>
+
+        {/* Left: logo + separator + nav links (desktop) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+          <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
+            <Logo size={22} />
+          </Link>
+          <span className="appnav-separator" style={{ width: 1, height: 22, background: 'var(--line)', flexShrink: 0 }} />
+          <nav className="appnav-links" style={{ display: 'flex', gap: 2 }}>
             {items.map(([label, href]) => (
-              <Link
-                key={href}
-                href={href}
-                style={{
-                  fontFamily: "'IBM Plex Sans', sans-serif",
-                  fontWeight: 500, fontSize: 12,
-                  color: path === href ? 'var(--ink)' : 'var(--ink-3)',
-                  padding: '5px 11px', borderRadius: 999,
-                  background: path === href ? 'var(--cream-deep)' : 'transparent',
-                  textDecoration: 'none',
-                }}
-              >
+              <Link key={href} href={href} style={{
+                fontFamily: "'IBM Plex Sans', sans-serif",
+                fontWeight: 500, fontSize: 12,
+                color: path === href ? 'var(--ink)' : 'var(--ink-3)',
+                padding: '5px 11px', borderRadius: 999,
+                background: path === href ? 'var(--cream-deep)' : 'transparent',
+                textDecoration: 'none', whiteSpace: 'nowrap',
+              }}>
                 {label}
               </Link>
             ))}
           </nav>
         </div>
 
-        <div className="app-nav-user" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {/* Right: user info (desktop) */}
+        <div className="appnav-user" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <LangToggle />
-          <div style={{ width: 1, height: 22, background: 'var(--line)' }}></div>
+          <div style={{ width: 1, height: 22, background: 'var(--line)', flexShrink: 0 }} />
           <Link href="/profile" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 28, height: 28, borderRadius: '50%',
               background: 'var(--olive)', color: 'var(--ink)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 11,
+              flexShrink: 0,
             }}>
               {initials}
             </div>
@@ -81,7 +92,105 @@ export default function AppNav() {
             </div>
           </Link>
         </div>
+
+        {/* Mobile controls: lang + hamburger */}
+        <div className="appnav-mobile-controls" style={{ display: 'none', alignItems: 'center', gap: 10 }}>
+          <LangToggle />
+          <button
+            onClick={() => setOpen(!open)}
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            aria-expanded={open}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: 6, display: 'flex', flexDirection: 'column',
+              gap: 5, width: 34, height: 34, justifyContent: 'center', alignItems: 'center',
+            }}
+          >
+            <span style={{
+              display: 'block', width: 22, height: 1.5,
+              background: 'var(--ink)',
+              transform: open ? 'translateY(6.5px) rotate(45deg)' : 'none',
+              transition: 'transform 0.2s',
+            }} />
+            <span style={{
+              display: 'block', width: 22, height: 1.5,
+              background: 'var(--ink)',
+              opacity: open ? 0 : 1,
+              transition: 'opacity 0.15s',
+            }} />
+            <span style={{
+              display: 'block', width: 22, height: 1.5,
+              background: 'var(--ink)',
+              transform: open ? 'translateY(-6.5px) rotate(-45deg)' : 'none',
+              transition: 'transform 0.2s',
+            }} />
+          </button>
+        </div>
       </div>
+
+      {/* ── Mobile drawer ── */}
+      {open && (
+        <div style={{
+          position: 'fixed', top: 57, left: 0, right: 0, bottom: 0,
+          background: 'var(--cream)', zIndex: 49,
+          display: 'flex', flexDirection: 'column',
+          padding: '0 24px 32px',
+          overflowY: 'auto',
+        }}>
+          {/* Nav links */}
+          <nav style={{ borderBottom: '1px solid var(--line)', paddingBottom: 16, marginBottom: 16 }}>
+            {items.map(([label, href]) => (
+              <Link key={href} href={href} onClick={() => setOpen(false)} style={{
+                display: 'block', padding: '14px 0',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 16,
+                color: path === href ? 'var(--olive-deep)' : 'var(--ink)',
+                textDecoration: 'none',
+                borderBottom: '1px solid var(--line)',
+              }}>
+                {label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* User / Profile */}
+          <Link href="/profile" onClick={() => setOpen(false)} style={{ textDecoration: 'none' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '16px 0',
+              borderBottom: '1px solid var(--line)',
+            }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: '50%',
+                background: 'var(--olive)', color: 'var(--ink)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 14,
+                flexShrink: 0,
+              }}>
+                {initials}
+              </div>
+              <div>
+                <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 14, color: 'var(--ink)' }}>
+                  {firstName}
+                </div>
+                {company && (
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{company}</div>
+                )}
+              </div>
+              <span style={{ marginLeft: 'auto', color: 'var(--ink-4)', fontSize: 14 }}>→</span>
+            </div>
+          </Link>
+        </div>
+      )}
+
+      {/* Responsive CSS */}
+      <style>{`
+        @media (max-width: 760px) {
+          .appnav-links           { display: none !important; }
+          .appnav-separator       { display: none !important; }
+          .appnav-user            { display: none !important; }
+          .appnav-mobile-controls { display: flex !important; }
+        }
+      `}</style>
     </header>
   );
 }

@@ -103,13 +103,13 @@ function PillarsCompact() {
   return (
     <section style={{ padding: '0 0 80px' }}>
       <div className="wrap">
-        <div style={{
+        <div className="pillars-grid" style={{
           display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
           borderTop: '1px solid var(--line)',
           borderBottom: '1px solid var(--line)',
         }}>
           {pillars.map((p, i) => (
-            <div key={p.n} style={{
+            <div key={p.n} className="pillar-cell" style={{
               padding: '40px 32px',
               borderRight: i < 2 ? '1px solid var(--line)' : 'none',
               display: 'flex', alignItems: 'center', gap: 24,
@@ -148,9 +148,9 @@ function HowItWorks() {
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <span className="eyebrow">{t('meth_process')}</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        <div className="steps-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {steps.map(([h, d], i) => (
-            <div key={i} style={{
+            <div key={i} className="step-cell" style={{
               padding: '0 28px',
               borderRight: i < 2 ? '1px solid var(--line)' : 'none',
               textAlign: 'center',
@@ -183,7 +183,7 @@ function CTABanner() {
         <p style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 440, margin: '0 auto 28px' }}>
           {t('cta_desc_short')}
         </p>
-        <div style={{ display: 'inline-flex', gap: 10 }}>
+        <div className="cta-btns" style={{ display: 'inline-flex', gap: 10 }}>
           <Link href="/register" style={{ textDecoration: 'none' }}>
             <button className="btn btn-primary btn-lg">
               {t('hero_cta_main')} <Icon.arrow />

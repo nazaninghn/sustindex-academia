@@ -309,7 +309,7 @@ export default function DashboardPage() {
         {!hasData ? (
           <>
             {/* Hero empty card */}
-            <div style={{
+            <div className="empty-card" style={{
               background: 'var(--paper)', border: '1px solid var(--line)',
               display: 'grid', gridTemplateColumns: '1fr 1px 1fr',
               marginBottom: 24, overflow: 'hidden',
@@ -337,7 +337,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Divider */}
-              <div style={{ background: 'var(--line)' }} />
+              <div className="empty-card-divider" style={{ background: 'var(--line)' }} />
 
               {/* Right: what to expect */}
               <div style={{ padding: '52px 48px' }}>
@@ -609,7 +609,7 @@ export default function DashboardPage() {
               ) : (
                 <div style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
                   {/* Table header */}
-                  <div style={{
+                  <div className="activity-header" style={{
                     display: 'grid', gridTemplateColumns: '1fr 140px 60px 52px 22px',
                     gap: 16, padding: '10px 24px',
                     borderBottom: '1px solid var(--line)',
@@ -632,6 +632,7 @@ export default function DashboardPage() {
                   {recentRows.map((row, i) => (
                     <Link key={row.id} href={`/results/${row.id}`} style={{ textDecoration: 'none' }}>
                       <div
+                        className="activity-row"
                         style={{
                           display: 'grid', gridTemplateColumns: '1fr 140px 60px 52px 22px',
                           gap: 16, alignItems: 'center',
@@ -645,7 +646,7 @@ export default function DashboardPage() {
                         <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 13 }}>
                           {row.survey_name}
                         </span>
-                        <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                        <span className="activity-date" style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: "'IBM Plex Mono', monospace" }}>
                           {row.completed_at ? new Date(row.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB') : '—'}
                         </span>
                         <span style={{
