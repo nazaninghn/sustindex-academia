@@ -112,6 +112,7 @@ export default function ResultsPage() {
   const recs        = attempt.recommendations ?? [];
   const answersArr: any[] = attempt.answers ?? [];
   const companyName = user?.company_name || user?.username || '';
+  const surveyName  = attempt.survey_name || (lang === 'tr' ? 'ESG Degerlendirmesi' : 'ESG Assessment');
   const completedAt = attempt.completed_at
     ? new Date(attempt.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : '—';
@@ -174,7 +175,7 @@ export default function ResultsPage() {
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
                 <strong style={{ fontWeight: 600, color: 'var(--ink)' }}>{lang === 'tr' ? 'Anket:' : 'Survey:'}</strong>
-                {' '}{attempt.survey_name}
+                {' '}{surveyName}
               </span>
               <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>·</span>
               <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
