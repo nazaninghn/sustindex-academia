@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.exceptions import PermissionDenied, ValidationError as DRFValidationError
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .models import (
@@ -87,7 +88,16 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
         Category.objects.all()
         .order_by('order')
-        .prefetch_related('questions__choices')                              # Fix N
+        # Fix BUG-06: select_related('category') on nested questions prevents
+        # QuestionSerializer.to_representation from lazy-loading category per question.
+        .prefetch_related(
+            Prefetch(
+                'questions',
+                queryset=Question.objects.filter(is_active=True)
+                    .select_related('category')
+                    .prefetch_related('choices'),
+            )
+        )
     )
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -114,7 +124,9 @@ class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
-    queryset = QuestionnaireAttempt.objects.all()
+    # Fix BUG-07: .none() prevents unfiltered exposure if get_queryset() is bypassed
+    # (schema generation, router introspection, etc.)
+    queryset = QuestionnaireAttempt.objects.none()
     serializer_class = QuestionnaireAttemptSerializer
     permission_classes = [IsAuthenticated]
 
@@ -238,6 +250,11 @@ class AnswerViewSet(viewsets.ModelViewSet):
             notes = self.request.data.get('notes', '')
             choices_ids = self.request.data.get('choices_ids', [])
 
+            # Fix BUG-04: validate choice belongs to this question before assigning
+            if choice is not None:
+                if not Choice.objects.filter(id=choice, question=existing.question).exists():
+                    raise DRFValidationError({'choice': 'Choice does not belong to this question.'})
+
             existing.choice_id = choice
             existing.text_answer = text_answer
             existing.notes = notes
@@ -288,5 +305,13 @@ class UserDocumentViewSet(viewsets.ModelViewSet):
                 raise DRFValidationError(
                     {'file': f'Unsupported file type: {file.content_type}.'}
                 )
+
+        # Fix BUG-01: verify the answer's attempt belongs to the current user
+        # so one user cannot attach documents to another user's answer.
+        answer_id = self.request.data.get('answer')
+        if answer_id:
+            answer_obj = get_object_or_404(Answer, id=answer_id)
+            if answer_obj.attempt.user != self.request.user:
+                raise PermissionDenied("Cannot upload documents to another user's answer.")
 
         serializer.save(file_size=file.size)

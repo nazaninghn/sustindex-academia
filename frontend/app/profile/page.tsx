@@ -8,6 +8,7 @@ import { userAPI } from '@/lib/api';
 import AppNav from '@/components/AppNav';
 import { useLang } from '@/lib/i18n';
 import { Icon } from '@/components/shared';
+import { emitDataChange } from '@/lib/events';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -119,6 +120,7 @@ export default function ProfilePage() {
       await userAPI.updateProfile(formData);
       setIsEditing(false);
       setSaveSuccess(true);
+      emitDataChange({ source: 'profile' });   // ← live-refresh dashboard greeting
       await refreshUser();
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {

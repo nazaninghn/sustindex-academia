@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/shared';
 import { attemptAPI, elearningAPI } from '@/lib/api';
 import { gradeColor } from '@/lib/utils';
+import { onDataChange } from '@/lib/events';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface StripCourse {
@@ -87,7 +88,7 @@ function CoursesStrip() {
         </Link>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+      <div className="courses-strip-grid">
         {stripLoading
           ? [1, 2, 3, 4].map((i) => (
               <div key={i} style={{
@@ -208,21 +209,31 @@ export default function DashboardPage() {
     if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
+  /** Fetch attempts — extracted so it can be called on refresh events too */
+  const refreshAttempts = useCallback(() => {
+    if (!user) return;
+    attemptAPI.getMyAttempts()
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : (data?.results ?? []);
+        setAttempts(list);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  /* Initial load */
   useEffect(() => {
     if (user) {
-      attemptAPI.getMyAttempts()
-        .then((data: any) => {
-          const list = Array.isArray(data) ? data : (data?.results ?? []);
-          setAttempts(list);
-        })
-        .catch(() => setAttempts([]))
-        .finally(() => setLoading(false));
+      refreshAttempts();
     } else if (!authLoading) {
-      // Not authenticated — the redirect effect will navigate away;
-      // release the loading gate so we don't spin indefinitely.
       setLoading(false);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, refreshAttempts]);
+
+  /* Live refresh — triggered by questionnaire complete, profile save, lesson complete */
+  useEffect(() => {
+    return onDataChange(() => { refreshAttempts(); });
+  }, [refreshAttempts]);
 
   /* ── Loading ── */
   if (authLoading || loading) {
@@ -261,10 +272,7 @@ export default function DashboardPage() {
         {/* ════════════════════════════════════════
             HEADER
             ════════════════════════════════════════ */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between',
-          alignItems: 'flex-end', marginBottom: 36,
-        }}>
+        <div className="dash-header">
           <div>
             <span style={{
               fontFamily: "'IBM Plex Mono', monospace", fontSize: 11,
@@ -283,7 +291,7 @@ export default function DashboardPage() {
                   : (lang === 'tr' ? `${completed.length} değerlendirme tamamlandı.` : `${completed.length} assessment${completed.length !== 1 ? 's' : ''} completed.`)}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="dash-header-actions">
             <Link href="/history"  style={{ textDecoration: 'none' }}>
               <button className="btn btn-outline btn-sm">{lang === 'tr' ? 'Geçmiş' : 'History'}</button>
             </Link>
@@ -363,21 +371,14 @@ export default function DashboardPage() {
              ════════════════════════════════════════ */
           <>
             {/* ── Stat Row ── */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-              borderTop: '2px solid var(--ink)', marginBottom: 36,
-            }}>
+            <div className="stat-grid">
               {[
                 { l: lang === 'tr' ? 'TAMAMLANAN' : 'COMPLETED',    v: completed.length,                d: lang === 'tr' ? 'değerlendirme' : 'assessments'  },
                 { l: lang === 'tr' ? 'DEVAM EDEN' : 'IN PROGRESS',  v: inProgress.length,              d: lang === 'tr' ? 'aktif'          : 'active'        },
                 { l: lang === 'tr' ? 'ORT. SKOR'  : 'AVG. SCORE',   v: avgScore > 0 ? avgScore : '—',  d: lang === 'tr' ? 'genel ortalama' : 'overall avg.'  },
                 { l: lang === 'tr' ? 'SON NOT'    : 'LATEST GRADE', v: latest?.overall_grade ?? '—',   d: latest ? `${Math.round(latest.total_score ?? 0)} pts` : '—' },
               ].map((s, i) => (
-                <div key={i} style={{
-                  padding: '20px 24px 22px',
-                  borderRight: i < 3 ? '1px solid var(--line)' : 'none',
-                  borderBottom: '1px solid var(--line)',
-                }}>
+                <div key={i} className="stat-cell">
                   <span style={{
                     fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
                     color: 'var(--ink-4)', letterSpacing: '0.14em', textTransform: 'uppercase',
@@ -395,7 +396,7 @@ export default function DashboardPage() {
             </div>
 
             {/* ── 2-col: performance + sidebar ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.65fr 1fr', gap: 20, marginBottom: 24 }}>
+            <div className="content-grid-main">
 
               {/* ── Performance card ── */}
               <div style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>

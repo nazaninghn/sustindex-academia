@@ -109,10 +109,12 @@ def download_report_pdf(request, report_id):
         
         esg_data = [
             ['ESG Component', 'Score', 'Grade'],
-            ['Environmental', f"{report.attempt.environmental_score:.1f}", get_component_grade(report.attempt.environmental_score)],
-            ['Social', f"{report.attempt.social_score:.1f}", get_component_grade(report.attempt.social_score)],
-            ['Governance', f"{report.attempt.governance_score:.1f}", get_component_grade(report.attempt.governance_score)],
-            ['Overall ESG', f"{report.attempt.total_score:.1f}", report.attempt.overall_grade]
+            # Fix BUG-11: environmental/social/governance are FloatField(null=True);
+            # without `or 0` f-format crashes with TypeError when value is None.
+            ['Environmental', f"{report.attempt.environmental_score or 0:.1f}", get_component_grade(report.attempt.environmental_score or 0)],
+            ['Social',        f"{report.attempt.social_score        or 0:.1f}", get_component_grade(report.attempt.social_score        or 0)],
+            ['Governance',    f"{report.attempt.governance_score    or 0:.1f}", get_component_grade(report.attempt.governance_score    or 0)],
+            ['Overall ESG',   f"{report.attempt.total_score         or 0:.1f}", report.attempt.overall_grade]
         ]
         
         esg_table = Table(esg_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
@@ -160,12 +162,12 @@ def create_report_sections(report, attempt, esg_scores):
     
     executive_summary = f"""
     This sustainability assessment evaluates your organization's Environmental, Social, and Governance (ESG) performance.
-    
-    Overall ESG Score: {esg_scores['total']:.1f}/100 (Grade: {esg_scores['grade']})
-    
-    • Environmental Score: {esg_scores['environmental']:.1f}/100
-    • Social Score: {esg_scores['social']:.1f}/100  
-    • Governance Score: {esg_scores['governance']:.1f}/100
+
+    Overall ESG Score: {esg_scores['total'] or 0:.1f}/100 (Grade: {esg_scores['grade']})
+
+    • Environmental Score: {esg_scores['environmental'] or 0:.1f}/100
+    • Social Score: {esg_scores['social'] or 0:.1f}/100
+    • Governance Score: {esg_scores['governance'] or 0:.1f}/100
     
     This assessment is based on internationally recognized ESG frameworks and best practices.
     

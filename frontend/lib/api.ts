@@ -16,8 +16,9 @@ api.interceptors.request.use((config) => {
     const token = getToken('access_token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
 
-    // Fix A: use the same key ('sx_lang') that LangProvider writes to.
-    const lang = localStorage.getItem('sx_lang') || 'en';
+    // Fix BUG-15: wrap in try/catch — localStorage throws in Safari ITP / incognito / quota exceeded.
+    let lang = 'en';
+    try { lang = (typeof window !== 'undefined' && localStorage.getItem('sx_lang')) || 'en'; } catch { /* ignore */ }
     config.headers['Accept-Language'] = lang;
     config.params = { ...(config.params || {}), lang };
   }
@@ -125,7 +126,8 @@ export const attemptAPI = {
   /** Upload a supporting document for a saved answer (uses native fetch so FormData boundary is set correctly) */
   uploadDocument: async (answerId: number, file: File, title?: string): Promise<any> => {
     if (typeof window === 'undefined') throw new Error('uploadDocument is browser-only');
-    const token = localStorage.getItem('access_token');
+    // Fix BUG-03: use getToken() helper so session-storage users (remember=false) are covered.
+    const token = getToken('access_token');
     const form  = new FormData();
     form.append('answer', String(answerId));
     form.append('file',   file);

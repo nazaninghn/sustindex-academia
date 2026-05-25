@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { useLang } from '@/lib/i18n';
 import { elearningAPI } from '@/lib/api';
 import { Icon } from '@/components/shared';
+import { emitDataChange } from '@/lib/events';
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 interface Attachment {
@@ -96,6 +97,7 @@ export default function CourseDetailPage() {
     setCompleting(lessonId);
     try {
       await elearningAPI.completeLesson(lessonId);
+      emitDataChange({ source: 'lesson', lessonId });  // ← live-refresh dashboard
       // Refresh course to get updated progress / is_completed flags
       await loadCourse();
     } catch {

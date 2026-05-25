@@ -206,7 +206,7 @@ export default function CoursesPage() {
 
         {/* Course grid */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+          <div className="courses-page-grid">
             {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
           </div>
         ) : visible.length === 0 ? (
@@ -219,7 +219,7 @@ export default function CoursesPage() {
             </p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+          <div className="courses-page-grid">
             {visible.map((c, idx) => {
               const status = getStatus(c);
               return (
@@ -324,7 +324,12 @@ export default function CoursesPage() {
                         fontSize: 20, letterSpacing: '-0.03em',
                       }}>{c.duration_hours}</span>
                     </div>
-                    <button className={status === 'done' ? 'btn btn-outline btn-sm' : 'btn btn-primary btn-sm'}>
+                    {/* Fix BUG-23: button had no onClick — click bubbled to outer div causing
+                        unclear semantics. Now button stopPropagates and navigates explicitly. */}
+                    <button
+                      className={status === 'done' ? 'btn btn-outline btn-sm' : 'btn btn-primary btn-sm'}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/courses/${c.id}`); }}
+                    >
                       {status === 'done'
                         ? t('courses_review')
                         : status === 'active'

@@ -113,14 +113,18 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_completed_lessons(self, obj):
         # Fix I: reuse the cached completed-lesson set — no extra DB round-trip
+        # Fix BUG-08: use set comprehension over obj.lessons.all() to hit the
+        # prefetch cache; .values_list() always issues a new DB query.
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            lesson_ids = set(obj.lessons.values_list('id', flat=True))
+            lesson_ids = {l.id for l in obj.lessons.all()}
             return len(lesson_ids & self._completed_lesson_ids())
         return 0
 
     def get_progress_percentage(self, obj):
-        total = obj.lessons.count()
+        # Fix BUG-09: use len(list(...)) to hit the prefetch cache;
+        # .count() always issues a COUNT(*) query regardless of prefetch.
+        total = len(list(obj.lessons.all()))
         if total == 0:
             return 0
         completed = self.get_completed_lessons(obj)

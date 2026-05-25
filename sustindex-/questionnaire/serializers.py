@@ -100,13 +100,17 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class SurveySessionSerializer(serializers.ModelSerializer):
-    status = serializers.CharField(source='get_status_display', read_only=True)
-    is_open = serializers.BooleanField(read_only=True)
+    status  = serializers.CharField(source='get_status_label', read_only=True)  # Fix BUG-21
+    is_open = serializers.SerializerMethodField()  # Fix BUG-22: was BooleanField — model method, not property
     
     class Meta:
         model = SurveySession
         fields = ['id', 'survey', 'name', 'description', 'start_date', 
                   'end_date', 'is_active', 'status', 'is_open', 'created_at']
+
+
+    def get_is_open(self, obj):  # Fix BUG-22
+        return obj.is_open()
 
 
 class SurveySerializer(serializers.ModelSerializer):
@@ -178,15 +182,19 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
     choices_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
-        required=False
+        required=False,
+    )
+    # Fix BUG-17: declare `attempt` explicitly so the field is validated and
+    # documented rather than being injected silently via serializer.save().
+    attempt = serializers.PrimaryKeyRelatedField(
+        queryset=QuestionnaireAttempt.objects.all(),
+        write_only=True,
+        required=True,
     )
 
     class Meta:
         model = Answer
-        # Fix Q: added 'id' so the response includes the answer PK.
-        # The frontend needs this to upload supporting documents via
-        # UserDocumentViewSet (which requires an answer FK).
-        fields = ['id', 'question', 'choice', 'choices_ids', 'text_answer', 'notes']
+        fields = ['id', 'attempt', 'question', 'choice', 'choices_ids', 'text_answer', 'notes']
         read_only_fields = ['id']
     
     def create(self, validated_data):

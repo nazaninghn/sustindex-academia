@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/shared';
 import { attemptAPI } from '@/lib/api';
 import { sanitizeHtml } from '@/lib/utils';
+import { emitDataChange } from '@/lib/events';
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface Choice   { id: number; text: string; score: number; order: number }
@@ -71,6 +72,11 @@ export default function QuestionnairePage() {
       if (attempt.is_completed) { router.replace(`/results/${id}`); return; }
 
       const { surveyAPI } = await import('@/lib/api');
+      // Fix BUG-10: attempt.survey is nullable — guard before API call
+      if (!attempt.survey) {
+        setError(langRef.current === 'tr' ? 'Ankete bağlı deneme bulunamadı.' : 'Attempt has no associated survey.');
+        return;
+      }
       const survey = await surveyAPI.getSurvey(attempt.survey);
       setSurveyName(survey.name || '');
 
@@ -128,12 +134,12 @@ export default function QuestionnairePage() {
   const isMixedType  = q?.question_type === 'mixed';
   const hasChoices   = (q?.choices?.length ?? 0) > 0 && !isTextType;
 
+  // Fix BUG-14: note alone should not unlock Next — it is supplementary, not an answer.
   const canSubmit =
     (hasChoices && selection.length > 0) ||
     (isTextType && textAns.trim().length > 0) ||
     (isMixedType && (selection.length > 0 || textAns.trim().length > 0)) ||
-    (!hasChoices && !isTextType) ||       // edge: no choices, not text — allow skip
-    note.trim().length > 0;
+    (!hasChoices && !isTextType);          // edge: no choices, not text — allow skip
 
   /* ── Handlers ── */
   const toggleChoice = (choiceId: number) => {
@@ -187,6 +193,7 @@ export default function QuestionnairePage() {
 
       if (isLast) {
         await attemptAPI.completeAttempt(Number(id));
+        emitDataChange({ source: 'questionnaire', id });   // ← live-refresh dashboard
         router.push(`/results/${id}`);
       } else {
         setCurrentIdx((i) => i + 1);

@@ -22,7 +22,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-mk-g2ptinu4*8ojldf$f*&umb_2zn&roo5de_nw9mshcnah^2a')
+# Fix BUG-19: raise hard error if SECRET_KEY is missing in production so the
+# insecure default never silently reaches a live server.
+_secret = os.environ.get('SECRET_KEY', '')
+if not _secret:
+    if os.environ.get('DEBUG', 'True').lower() != 'true':
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured("SECRET_KEY environment variable must be set in production.")
+    _secret = 'django-insecure-mk-g2ptinu4*8ojldf$f*&umb_2zn&roo5de_nw9mshcnah^2a'
+SECRET_KEY = _secret
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'  # Default True for development
@@ -32,9 +40,10 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'  # Default True for de
 # e.g. "sustindex.com,www.sustindex.com,your-render-slug.onrender.com"
 _allowed = os.environ.get('ALLOWED_HOSTS', '')
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(',') if h.strip()] if _allowed else ['localhost', '127.0.0.1', '[::1]']
-# Development convenience: also allow ngrok / Render preview URLs
+# Fix BUG-13: replace wildcard with named preview host patterns only in dev.
+# Wildcard would negate the ALLOWED_HOSTS hardening in production.
 if DEBUG:
-    ALLOWED_HOSTS += ['*']
+    ALLOWED_HOSTS += ['.ngrok.io', '.ngrok-free.app', '.onrender.com', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -281,6 +290,10 @@ if REST_FRAMEWORK_INSTALLED:
         "http://127.0.0.1:3000",
         "https://sustindex-academia.vercel.app",
     ]
+    # Fix BUG-26: allow additional origins via env var (comma-separated) without a code change.
+    _extra_cors = os.environ.get('CORS_EXTRA_ORIGINS', '')
+    if _extra_cors:
+        CORS_ALLOWED_ORIGINS += [o.strip() for o in _extra_cors.split(',') if o.strip()]
 
     CORS_ALLOW_CREDENTIALS = True
 
