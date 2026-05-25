@@ -54,7 +54,7 @@ function SkeletonCard() {
    Courses Page
    ═══════════════════════════════════════════════════════════════ */
 export default function CoursesPage() {
-  const { t, lang } = useLang();
+  const { t } = useLang();
   const { user, isLoading: authLoading } = useAuth();  // Fix C
   const router = useRouter();
   const [filter, setFilter] = useState('all');
@@ -139,7 +139,7 @@ export default function CoursesPage() {
             }} />
             <div style={{ position: 'relative' }}>
               <span className="eyebrow" style={{ color: 'rgba(249,239,229,0.55)', display: 'block', marginBottom: 6 }}>
-                {lang === 'tr' ? 'Öğrenmeye Devam Et' : 'Continue Learning'}
+                {t('dash_cont_learn')}
               </span>
               <h3 style={{ fontSize: 20, fontWeight: 500, marginBottom: 8, color: 'var(--cream)', letterSpacing: '-0.01em' }}>
                 {activeCourse.title_display}
@@ -147,7 +147,7 @@ export default function CoursesPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontSize: 11.5, color: 'rgba(249,239,229,0.65)', marginBottom: 14 }}>
                 <span>
                   {Math.round(activeCourse.total_lessons * activeCourse.progress_percentage / 100)} / {activeCourse.total_lessons}{' '}
-                  {lang === 'tr' ? 'modül' : 'modules'}
+                  {t('courses_modules')}
                 </span>
                 <span>·</span>
                 <span>{activeCourse.duration_hours}</span>
@@ -200,7 +200,7 @@ export default function CoursesPage() {
             ))}
           </div>
           <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-            {loading ? '…' : `${visible.length} ${lang === 'tr' ? 'sonuç' : 'results'}`}
+            {loading ? '…' : `${visible.length} ${t('courses_results')}`}
           </span>
         </div>
 
@@ -215,7 +215,7 @@ export default function CoursesPage() {
             padding: '64px 40px', textAlign: 'center',
           }}>
             <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>
-              {lang === 'tr' ? 'Bu kategoride kurs bulunamadı.' : 'No courses found in this category.'}
+              {t('courses_empty')}
             </p>
           </div>
         ) : (
@@ -273,7 +273,7 @@ export default function CoursesPage() {
                         fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 10,
                         fontWeight: 600, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
                       }}>
-                        {lang === 'tr' ? 'YENİ' : 'NEW'}
+                        {t('courses_filter_new').toUpperCase()}
                       </span>
                     )}
                   </div>

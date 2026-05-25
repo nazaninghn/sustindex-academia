@@ -209,7 +209,9 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
 
 
 class AnswerViewSet(viewsets.ModelViewSet):
-    queryset = Answer.objects.all()
+    # Fix BUG-28: .none() prevents accidental full exposure during schema
+    # generation or router introspection — same pattern as QuestionnaireAttemptViewSet.
+    queryset = Answer.objects.none()
     serializer_class = AnswerSerializer
     permission_classes = [IsAuthenticated]
 
@@ -261,7 +263,11 @@ class AnswerViewSet(viewsets.ModelViewSet):
             existing.save()
 
             # Fix D (Round 2): always sync M2M — empty list clears stale multi-select choices.
-            existing.choices.set(Choice.objects.filter(id__in=choices_ids) if choices_ids else [])
+            # Fix BUG-29: filter by question so IDs from other questions are rejected.
+            existing.choices.set(
+                Choice.objects.filter(id__in=choices_ids, question=existing.question)
+                if choices_ids else []
+            )
 
             serializer.instance = existing
             return

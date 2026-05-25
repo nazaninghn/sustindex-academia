@@ -221,6 +221,11 @@ table.t tbody tr:hover { background: var(--cream-deep); }
 .empty-card { display: grid; grid-template-columns: 1fr 1px 1fr; }
 .empty-card-divider { background: var(--line); }
 
+/* Register page layout */
+.reg-layout { display: grid; grid-template-columns: 300px 1fr; gap: 56px; }
+.reg-aside  { position: sticky; top: 80px; height: fit-content; }
+.reg-submit-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+
 /* Homepage sections */
 .pillars-grid {
   display: grid;
@@ -245,6 +250,12 @@ button, input, select, textarea { font: inherit; }
 .app-nav-links,
 .app-nav-user {
   min-width: 0;
+}
+
+@media (max-width: 900px) {
+  /* Register page — collapse sidebar */
+  .reg-layout { grid-template-columns: 1fr !important; gap: 24px !important; padding-top: 28px !important; padding-bottom: 40px !important; }
+  .reg-aside  { position: static !important; padding-bottom: 20px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 }
 
 @media (max-width: 1024px) {
@@ -487,6 +498,15 @@ button, input, select, textarea { font: inherit; }
   }
   .cta-btns > a { width: 100%; }
   .cta-btns > a .btn { width: 100%; justify-content: center; }
+
+  /* ── Register page ── */
+  .reg-submit-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+  }
+  .reg-submit-row p   { max-width: 100% !important; }
+  .reg-submit-row button { width: 100% !important; justify-content: center !important; }
 
   /* ── Dashboard: activity table → compact card rows ── */
   .activity-header { display: none !important; }

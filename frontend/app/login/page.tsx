@@ -11,7 +11,7 @@ import { Icon } from '@/components/shared';
 export default function LoginPage() {
   const router   = useRouter();
   const { login } = useAuth();
-  const { t, lang } = useLang();
+  const { t } = useLang();
 
   const [formData, setFormData] = useState({ username: '', password: '' });
   const [remember, setRemember] = useState(true);
@@ -26,7 +26,7 @@ export default function LoginPage() {
       await login(formData.username, formData.password, remember);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || (lang === 'tr' ? 'Giriş başarısız. Bilgilerinizi kontrol edin.' : 'Login failed. Please check your credentials.'));
+      setError(err.response?.data?.detail || t('login_fail'));
     } finally {
       setLoading(false);
     }
@@ -111,7 +111,7 @@ export default function LoginPage() {
                 onChange={(e) => setRemember(e.target.checked)}
                 style={{ width: 14, height: 14, accentColor: 'var(--olive-deep)' }}
               />
-              {lang === 'tr' ? 'Beni hatırla' : 'Remember me on this device'}
+              {t('login_remember')}
             </label>
 
             <button
@@ -120,7 +120,7 @@ export default function LoginPage() {
               disabled={loading}
               style={{ padding: '12px 18px', fontSize: 12.5, justifyContent: 'space-between', opacity: loading ? 0.6 : 1 }}
             >
-              {loading ? (lang === 'tr' ? 'Giriş yapılıyor…' : 'Signing in…') : t('login_submit')}
+              {loading ? t('login_submitting') : t('login_submit')}
               <Icon.arrow />
             </button>
           </form>
@@ -129,7 +129,7 @@ export default function LoginPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0' }}>
             <div style={{ flex: 1, height: 1, background: 'var(--line)' }}></div>
             <span style={{ fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-              {lang === 'tr' ? 'veya' : 'or'}
+              {t('t_or')}
             </span>
             <div style={{ flex: 1, height: 1, background: 'var(--line)' }}></div>
           </div>

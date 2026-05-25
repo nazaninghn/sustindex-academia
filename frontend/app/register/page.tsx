@@ -38,7 +38,7 @@ function Section({ num, title, subtitle, children }: { num: string; title: strin
 export default function RegisterPage() {
   const router     = useRouter();
   const { register } = useAuth();
-  const { t, lang }  = useLang();
+  const { t } = useLang();
 
   const [formData, setFormData] = useState({
     username: '', email: '', password: '', password_confirm: '',
@@ -53,7 +53,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     if (formData.password !== formData.password_confirm) {
-      setError(lang === 'tr' ? 'Şifreler eşleşmiyor.' : 'Passwords do not match.');
+      setError(t('reg_pw_mismatch'));
       return;
     }
     setLoading(true);
@@ -67,7 +67,7 @@ export default function RegisterPage() {
         err.response?.data?.username?.[0] ||
         err.response?.data?.email?.[0] ||
         err.response?.data?.detail ||
-        (lang === 'tr' ? 'Kayıt başarısız. Lütfen bilgileri kontrol edin.' : 'Registration failed. Please check your details.')
+        t('reg_fail')
       );
     } finally {
       setLoading(false);
@@ -97,12 +97,12 @@ export default function RegisterPage() {
       </header>
 
       {/* Body */}
-      <div className="wrap" style={{
+      <div className="wrap reg-layout" style={{
         maxWidth: 980, margin: '0 auto', padding: '48px 32px 72px',
         display: 'grid', gridTemplateColumns: '300px 1fr', gap: 56,
       }}>
         {/* Sticky left rail */}
-        <aside style={{ position: 'sticky', top: 80, height: 'fit-content' }}>
+        <aside className="reg-aside" style={{ position: 'sticky', top: 80, height: 'fit-content' }}>
           <span className="eyebrow" style={{ display: 'block', marginBottom: 10 }}>{t('reg_eyebrow')}</span>
           <h1 style={{ fontSize: 30, marginBottom: 12, lineHeight: 1.1, fontWeight: 600, letterSpacing: '-0.02em' }}>
             {t('reg_title_1')}<br/>
@@ -165,7 +165,7 @@ export default function RegisterPage() {
             </div>
           </Section>
 
-          <div style={{
+          <div className="reg-submit-row" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             borderTop: '1px solid var(--ink)', paddingTop: 20, marginTop: 8, gap: 24,
           }}>
@@ -181,7 +181,7 @@ export default function RegisterPage() {
               disabled={loading}
               style={{ minWidth: 180, padding: '12px 18px', justifyContent: 'space-between', fontSize: 12.5, opacity: loading ? 0.6 : 1 }}
             >
-              {loading ? (lang === 'tr' ? 'Oluşturuluyor…' : 'Creating…') : t('reg_submit')}
+              {loading ? t('reg_submitting') : t('reg_submit')}
               <Icon.arrow />
             </button>
           </div>

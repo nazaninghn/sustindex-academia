@@ -40,6 +40,8 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   courses_level_beg:     { en: 'Beginner',    tr: 'Başlangıç' },
   courses_level_int:     { en: 'Intermediate',tr: 'Orta' },
   courses_level_adv:     { en: 'Advanced',    tr: 'İleri' },
+  courses_results:       { en: 'results',     tr: 'sonuç' },
+  courses_empty:         { en: 'No courses found in this category.', tr: 'Bu kategoride kurs bulunamadı.' },
 
   course_1_t: { en: 'ISO 26000 Fundamentals',          tr: 'ISO 26000 Temelleri' },
   course_1_d: { en: 'A comprehensive introduction to the international social responsibility standard.', tr: 'Uluslararası sosyal sorumluluk standardına kapsamlı bir giriş.' },
@@ -145,7 +147,10 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   reg_legal_and:  { en: 'and acknowledge our',  tr: 've şunları onaylıyorsunuz:' },
   reg_legal_terms:{ en: 'Terms',          tr: 'Şartlar' },
   reg_legal_priv: { en: 'Privacy Policy', tr: 'Gizlilik Politikası' },
-  reg_submit:     { en: 'Create account', tr: 'Hesap oluştur' },
+  reg_submit:       { en: 'Create account',  tr: 'Hesap oluştur' },
+  reg_pw_mismatch:  { en: 'Passwords do not match.', tr: 'Şifreler eşleşmiyor.' },
+  reg_fail:         { en: 'Registration failed. Please check your details.', tr: 'Kayıt başarısız. Lütfen bilgileri kontrol edin.' },
+  reg_submitting:   { en: 'Creating…',       tr: 'Oluşturuluyor…' },
 
   /* Dashboard */
   dash_new:       { en: 'New assessment',    tr: 'Yeni değerlendirme' },
@@ -235,6 +240,41 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   res_r_4_d:      { en: 'A documented anonymous reporting channel would close a key ethics indicator.', tr: 'Belgelenmiş anonim raporlama kanalı önemli bir etik göstergeyi kapatır.' },
   res_r_5_t:      { en: 'Set science-based emissions targets', tr: 'Bilim temelli emisyon hedefleri belirleyin' },
   res_r_5_d:      { en: 'Commit to SBTi-validated reduction pathway by next reporting cycle.', tr: 'Bir sonraki raporlama döngüsüne kadar SBTi onaylı azaltım yoluna bağlanın.' },
+
+  /* Course detail */
+  course_back:         { en: '← Back to Courses',           tr: '← Kurslara Dön' },
+  course_not_found:    { en: 'Course not found.',            tr: 'Kurs bulunamadı.' },
+  course_load_fail:    { en: 'Failed to load course.',       tr: 'Kurs yüklenemedi.' },
+  course_progress:     { en: 'Progress',                     tr: 'İlerleme' },
+  course_lessons_word: { en: 'lessons',                      tr: 'ders' },
+  course_lessons_head: { en: 'Lessons',                      tr: 'Dersler' },
+  course_complete_msg: { en: 'Course complete!',             tr: 'Kurs tamamlandı!' },
+  course_start:        { en: 'Start lesson',                 tr: 'Derse başla' },
+  course_mark_done:    { en: 'Mark complete',                tr: 'Tamamlandı olarak işaretle' },
+  course_completing:   { en: 'Saving…',                      tr: 'Kaydediliyor…' },
+  course_completed_b:  { en: '✓ Completed',                  tr: '✓ Tamamlandı' },
+  course_mins:         { en: 'min',                          tr: 'dk' },
+  course_attachment:   { en: 'Attachment',                   tr: 'Ek dosya' },
+  course_attachments:  { en: 'Attachments',                  tr: 'Ekler' },
+  course_video:        { en: 'Watch video',                  tr: 'Videoyu izle' },
+  course_remaining:    { en: 'lessons remaining',            tr: 'ders kaldı' },
+  course_back_dash:    { en: 'Back to Dashboard',            tr: 'Panele Dön' },
+  t_loading:           { en: 'Loading…',                     tr: 'Yükleniyor…' },
+
+  /* Login extras */
+  login_remember:      { en: 'Remember me',                  tr: 'Beni hatırla' },
+  login_no_account:    { en: 'No account?',                  tr: 'Hesabınız yok mu?' },
+  login_fail:          { en: 'Login failed. Please check your credentials.', tr: 'Giriş başarısız. Bilgilerinizi kontrol edin.' },
+  login_submitting:    { en: 'Signing in…',                  tr: 'Giriş yapılıyor…' },
+  t_or:                { en: 'or',                           tr: 'veya' },
+
+  /* Dashboard extras */
+  dash_cont_learn:     { en: 'Continue Learning',            tr: 'Öğrenmeye Devam Et' },
+  dash_all_courses:    { en: 'All courses',                  tr: 'Tüm kurslar' },
+  dash_coming_soon:    { en: '🔒 More courses coming soon — content being prepared.', tr: '🔒 Daha fazla kurs yakında eklenecek.' },
+  dash_e_learning:     { en: 'E-Learning',                   tr: 'E-Öğrenim' },
+  dash_sust_courses:   { en: 'Sustainability courses',       tr: 'Sürdürülebilirlik kursları' },
+  dash_view_all:       { en: 'View All',                     tr: 'Tüm Kurslar' },
 
   /* About */
   about_eye:       { en: 'About sustindex',           tr: 'Sustindex hakkında' },

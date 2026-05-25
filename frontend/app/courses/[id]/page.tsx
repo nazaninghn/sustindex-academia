@@ -50,7 +50,7 @@ export default function CourseDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
-  const { lang } = useLang();
+  const { t } = useLang();
 
   const courseId = Number(params?.id);
 
@@ -80,11 +80,11 @@ export default function CourseDetailPage() {
       );
       setCourse(data);
     } catch {
-      setError(lang === 'tr' ? 'Kurs yüklenemedi.' : 'Failed to load course.');
+      setError(t('course_load_fail'));
     } finally {
       setLoadingCourse(false);
     }
-  }, [courseId, lang]);
+  }, [courseId, t]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -112,7 +112,7 @@ export default function CourseDetailPage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>
-          {lang === 'tr' ? 'Yükleniyor…' : 'Loading…'}
+          {t('t_loading')}
         </p>
       </div>
     );
@@ -122,11 +122,11 @@ export default function CourseDetailPage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <p style={{ fontSize: 13, color: 'var(--danger)' }}>
-          {error || (lang === 'tr' ? 'Kurs bulunamadı.' : 'Course not found.')}
+          {error || t('course_not_found')}
         </p>
         <Link href="/courses" style={{ textDecoration: 'none' }}>
           <button className="btn btn-outline" style={{ fontSize: 12 }}>
-            ← {lang === 'tr' ? 'Kurslara Dön' : 'Back to Courses'}
+            {t('course_back')}
           </button>
         </Link>
       </div>
@@ -143,7 +143,7 @@ export default function CourseDetailPage() {
         <div className="wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 32px' }}>
           <Link href="/" style={{ textDecoration: 'none' }}><Logo size={20} /></Link>
           <Link href="/courses" style={{ textDecoration: 'none', fontSize: 11.5, color: 'var(--ink-3)' }}>
-            ← {lang === 'tr' ? 'Kurslara Dön' : 'Back to Courses'}
+            {t('course_back')}
           </Link>
         </div>
       </header>
@@ -206,12 +206,12 @@ export default function CourseDetailPage() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                 <span style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                  {lang === 'tr' ? 'İlerleme' : 'Progress'}
+                  {t('course_progress')}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>
                   {course.completed_lessons} / {course.total_lessons}
                   <span style={{ fontWeight: 400, color: 'var(--ink-3)', marginLeft: 6 }}>
-                    {lang === 'tr' ? 'ders' : 'lessons'}
+                    {t('course_lessons_word')}
                   </span>
                   <span style={{ color: 'var(--ink-4)', margin: '0 6px' }}>·</span>
                   {progressPct}%
@@ -227,7 +227,7 @@ export default function CourseDetailPage() {
               </div>
               {progressPct === 100 && (
                 <p style={{ fontSize: 11.5, color: 'var(--olive-deep)', marginTop: 8, fontWeight: 500 }}>
-                  ✓ {lang === 'tr' ? 'Kurs tamamlandı!' : 'Course complete!'}
+                  ✓ {t('course_complete_msg')}
                 </p>
               )}
             </div>
@@ -236,7 +236,7 @@ export default function CourseDetailPage() {
           {/* ── Lesson list ── */}
           <div>
             <h2 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-3)', marginBottom: 16 }}>
-              {lang === 'tr' ? 'Dersler' : 'Lessons'}
+              {t('course_lessons_head')}
             </h2>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -290,10 +290,10 @@ export default function CourseDetailPage() {
                           {lesson.title_display}
                         </p>
                         <p style={{ fontSize: 11, color: 'var(--ink-4)' }}>
-                          {lesson.duration_minutes} {lang === 'tr' ? 'dk' : 'min'}
+                          {lesson.duration_minutes} {t('course_mins')}
                           {lesson.attachments.length > 0 && (
                             <span style={{ marginLeft: 8 }}>
-                              · {lesson.attachments.length} {lang === 'tr' ? 'ek' : 'attachment'}{lesson.attachments.length !== 1 ? 's' : ''}
+                              · {lesson.attachments.length} {t('course_attachment')}
                             </span>
                           )}
                         </p>
@@ -307,9 +307,7 @@ export default function CourseDetailPage() {
                           onClick={(e) => { e.stopPropagation(); handleComplete(lesson.id); }}
                           style={{ fontSize: 11, padding: '6px 12px', opacity: isBeingCompleted ? 0.5 : 1 }}
                         >
-                          {isBeingCompleted
-                            ? (lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
-                            : (lang === 'tr' ? 'Tamamlandı İşaretle' : 'Mark Complete')}
+                          {isBeingCompleted ? t('course_completing') : t('course_mark_done')}
                         </button>
                       )}
 
@@ -334,7 +332,7 @@ export default function CourseDetailPage() {
                               rel="noopener noreferrer"
                               style={{ fontSize: 12, color: 'var(--olive-deep)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                             >
-                              ▶ {lang === 'tr' ? 'Videoyu İzle' : 'Watch Video'}
+                              ▶ {t('course_video')}
                             </a>
                           </div>
                         )}
@@ -351,7 +349,7 @@ export default function CourseDetailPage() {
                         {lesson.attachments.length > 0 && (
                           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
                             <p style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', marginBottom: 10 }}>
-                              {lang === 'tr' ? 'Ekler' : 'Attachments'}
+                              {t('course_attachments')}
                             </p>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                               {lesson.attachments.map((att) => (
@@ -381,18 +379,18 @@ export default function CourseDetailPage() {
           <div style={{ marginTop: 40, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Link href="/courses" style={{ textDecoration: 'none' }}>
               <button className="btn btn-outline" style={{ fontSize: 12, padding: '10px 16px' }}>
-                ← {lang === 'tr' ? 'Tüm Kurslar' : 'All Courses'}
+                ← {t('dash_all_courses')}
               </button>
             </Link>
             {progressPct < 100 && (
               <p style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>
-                {course.total_lessons - course.completed_lessons} {lang === 'tr' ? 'ders kaldı' : 'lessons remaining'}
+                {course.total_lessons - course.completed_lessons} {t('course_remaining')}
               </p>
             )}
             {progressPct === 100 && (
               <Link href="/dashboard" style={{ textDecoration: 'none' }}>
                 <button className="btn btn-primary" style={{ fontSize: 12, padding: '10px 16px' }}>
-                  {lang === 'tr' ? 'Panele Dön' : 'Back to Dashboard'} <Icon.arrow />
+                  {t('course_back_dash')} <Icon.arrow />
                 </button>
               </Link>
             )}

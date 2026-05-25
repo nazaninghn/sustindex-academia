@@ -200,10 +200,14 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         choices_ids = validated_data.pop('choices_ids', [])
         answer = Answer.objects.create(**validated_data)
-        
+
         if choices_ids:
-            answer.choices.set(Choice.objects.filter(id__in=choices_ids))
-        
+            # Fix BUG-29: filter by question so invalid choice IDs are silently
+            # dropped rather than polluting the M2M with choices from other questions.
+            answer.choices.set(
+                Choice.objects.filter(id__in=choices_ids, question=answer.question)
+            )
+
         return answer
 
 

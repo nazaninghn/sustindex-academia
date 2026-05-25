@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import SiteNav from '@/components/SiteNav';
@@ -8,20 +9,93 @@ import { useLang } from '@/lib/i18n';
 import { Icon } from '@/components/shared';
 
 /* ============================================================
-   Hero Illustration
+   Hero Illustration — hover scale + click lightbox
    ============================================================ */
 function HeroIllustration() {
+  const [expanded, setExpanded] = useState(false);
+  const [hovering, setHovering] = useState(false);
+
   return (
-    <div style={{ display: 'flex', justifyContent: 'center' }}>
-      <Image
-        src="/assets/hero-s.png"
-        alt="Sustindex hero"
-        width={720}
-        height={400}
-        style={{ width: '100%', maxWidth: 720, height: 'auto', display: 'block' }}
-        priority
-      />
-    </div>
+    <>
+      {/* Thumbnail — hover scales up, click opens lightbox */}
+      <div
+        style={{ display: 'flex', justifyContent: 'center', cursor: 'zoom-in' }}
+        onClick={() => setExpanded(true)}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+      >
+        <Image
+          src="/assets/hero-s.png"
+          alt="Sustindex hero"
+          width={720}
+          height={400}
+          style={{
+            width: '100%', maxWidth: 720, height: 'auto', display: 'block',
+            transform: hovering ? 'scale(1.03)' : 'scale(1)',
+            transition: 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+            borderRadius: 4,
+          }}
+          priority
+        />
+      </div>
+
+      {/* Lightbox overlay */}
+      {expanded && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setExpanded(false)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(26,26,20,0.90)',
+            zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'zoom-out', padding: 24,
+            backdropFilter: 'blur(6px)',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <Image
+            src="/assets/hero-s.png"
+            alt="Sustindex hero — full view"
+            width={1440}
+            height={800}
+            style={{
+              maxWidth: '90vw', maxHeight: '85vh',
+              width: 'auto', height: 'auto', display: 'block',
+              boxShadow: '0 40px 100px rgba(0,0,0,0.5)',
+              borderRadius: 4,
+              transform: 'scale(1)',
+              transition: 'transform 0.3s ease',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          {/* Close button */}
+          <button
+            onClick={() => setExpanded(false)}
+            aria-label="Close"
+            style={{
+              position: 'absolute', top: 20, right: 20,
+              background: 'rgba(249,239,229,0.12)',
+              border: '1px solid rgba(249,239,229,0.25)',
+              color: '#F9EFE5', cursor: 'pointer',
+              width: 42, height: 42, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20, lineHeight: 1,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(249,239,229,0.25)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(249,239,229,0.12)')}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      `}</style>
+    </>
   );
 }
 
