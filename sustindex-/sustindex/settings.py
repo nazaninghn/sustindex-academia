@@ -27,7 +27,14 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-mk-g2ptinu4*8ojldf$f*
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'  # Default True for development
 
-ALLOWED_HOSTS = ['*']  # Allow access from all devices
+# Fix BA: scope hosts instead of wildcard.
+# Set ALLOWED_HOSTS env var as comma-separated list in production,
+# e.g. "sustindex.com,www.sustindex.com,your-render-slug.onrender.com"
+_allowed = os.environ.get('ALLOWED_HOSTS', '')
+ALLOWED_HOSTS = [h.strip() for h in _allowed.split(',') if h.strip()] if _allowed else ['localhost', '127.0.0.1', '[::1]']
+# Development convenience: also allow ngrok / Render preview URLs
+if DEBUG:
+    ALLOWED_HOSTS += ['*']
 
 
 # Application definition
@@ -56,21 +63,24 @@ except ImportError:
 
 INSTALLED_APPS = [
     *OPTIONAL_APPS,
-    
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
     # Third party apps
     'crispy_forms',
     'crispy_bootstrap5',
     'ckeditor',
     'import_export',
     'simple_history',
-    
+    # Fix G: required for BLACKLIST_AFTER_ROTATION=True — without this, old
+    # refresh tokens remain valid after rotation (security hole).
+    'rest_framework_simplejwt.token_blacklist',
+
     # Local apps
     'accounts',
     'questionnaire',
@@ -241,6 +251,19 @@ if REST_FRAMEWORK_INSTALLED:
         'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
         'PAGE_SIZE': 20,
         'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+        # ── Rate limiting ───────────────────────────────────────────────────
+        # Applied globally; sensitive endpoints add a stricter scoped throttle
+        # on top (LoginRateThrottle / RegisterRateThrottle).
+        'DEFAULT_THROTTLE_CLASSES': [
+            'rest_framework.throttling.AnonRateThrottle',
+            'rest_framework.throttling.UserRateThrottle',
+        ],
+        'DEFAULT_THROTTLE_RATES': {
+            'anon':     '200/day',    # General anonymous API access
+            'user':     '2000/day',   # Authenticated user API access
+            'login':    '5/minute',   # POST /api/v1/auth/token/
+            'register': '5/hour',     # POST /api/v1/users/register/
+        },
     }
 
     # JWT Settings
@@ -268,6 +291,24 @@ if REST_FRAMEWORK_INSTALLED:
         'VERSION': '1.0.0',
         'SERVE_INCLUDE_SCHEMA': False,
     }
+
+# ── Email ──────────────────────────────────────────────────────────────────
+# Development default: prints email to the console (no SMTP needed).
+# Production: set EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# and the SMTP_* environment variables below.
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend',
+)
+EMAIL_HOST          = os.environ.get('EMAIL_HOST',     'smtp.gmail.com')
+EMAIL_PORT          = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS       = os.environ.get('EMAIL_USE_TLS',  'True').lower() == 'true'
+EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER',     '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@sustindex.com')
+
+# URL of the Next.js frontend — used in password-reset emails.
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # Security settings for production
 if not DEBUG:

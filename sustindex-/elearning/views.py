@@ -5,19 +5,14 @@ from .models import Course, Lesson, LessonProgress
 
 @login_required
 def course_list(request):
-    if request.user.membership_type != 'gold':
-        return render(request, 'elearning/access_denied.html')
-    
-    courses = Course.objects.filter(company=request.user, is_active=True)
+    # Note: these are legacy template views; the live API is served by CourseViewSet.
+    courses = Course.objects.filter(is_active=True).order_by('order')
     return render(request, 'elearning/course_list.html', {'courses': courses})
 
 @login_required
 def course_detail(request, course_id):
-    if request.user.membership_type != 'gold':
-        return render(request, 'elearning/access_denied.html')
-    
-    course = get_object_or_404(Course, id=course_id, company=request.user)
-    lessons = course.lessons.all()
+    course = get_object_or_404(Course, id=course_id, is_active=True)
+    lessons = course.lessons.all().order_by('order')
     
     return render(request, 'elearning/course_detail.html', {
         'course': course,

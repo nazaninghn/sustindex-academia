@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { attemptAPI } from '@/lib/api';
-import DashboardNavbar from '@/components/DashboardNavbar';
-
+import { gradeColor } from '@/lib/utils';
+import AppNav from '@/components/AppNav';
+import { useLang } from '@/lib/i18n';
+import { Icon } from '@/components/shared';
 import { CategoryScore } from '@/lib/types';
 
 interface Attempt {
@@ -23,362 +25,258 @@ interface Attempt {
 export default function HistoryPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
+  const { lang } = useLang();
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
+    if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
-  useEffect(() => {
-    if (user) {
-      loadAttempts();
-    }
-  }, [user]);
-
-  const loadAttempts = async () => {
+  // Fix B: wrap in useCallback so the effect dependency is stable
+  const loadAttempts = useCallback(async () => {
     try {
       const data = await attemptAPI.getMyAttempts();
-      if (Array.isArray(data)) {
-        setAttempts(data);
-      } else if (data && Array.isArray(data.results)) {
-        setAttempts(data.results);
-      } else {
-        setAttempts([]);
-      }
+      if (Array.isArray(data)) setAttempts(data);
+      else if (data && Array.isArray(data.results)) setAttempts(data.results);
+      else setAttempts([]);
     } catch (error) {
       console.error('Failed to load attempts:', error);
       setAttempts([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // no external deps — setAttempts/setLoading are stable
+
+  useEffect(() => {
+    if (user) loadAttempts();
+  }, [user, loadAttempts]); // Fix B: loadAttempts now in deps
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-green-50 to-emerald-50">
-        <div className="text-center">
-          <div className="relative inline-block mb-6">
-            <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
-            <div className="relative w-20 h-20 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-          <p className="text-gray-700 font-semibold text-lg">Loading history...</p>
-        </div>
+      <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
+          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
+        </span>
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
-  const filteredAttempts = attempts.filter(a => {
+  const completed = attempts.filter((a) => a.is_completed);
+  const inProgress = attempts.filter((a) => !a.is_completed);
+  const avgScore = completed.length > 0
+    ? Math.round(completed.reduce((s, a) => s + a.total_score, 0) / completed.length)
+    : 0;
+
+  const visible = attempts.filter((a) => {
     if (filter === 'completed') return a.is_completed;
     if (filter === 'in-progress') return !a.is_completed;
     return true;
   });
 
-  const completedAttempts = attempts.filter(a => a.is_completed);
-  const averageScore = completedAttempts.length > 0
-    ? Math.round(completedAttempts.reduce((sum, a) => sum + a.total_score, 0) / completedAttempts.length)
-    : 0;
-
-  const getGradeColor = (grade: string) => {
-    if (grade?.startsWith('A')) return 'text-green-600';
-    if (grade?.startsWith('B')) return 'text-blue-600';
-    if (grade?.startsWith('C')) return 'text-amber-600';
-    return 'text-red-600';
-  };
-
-  const getGradeBg = (grade: string) => {
-    if (grade?.startsWith('A')) return 'from-green-500 to-emerald-500';
-    if (grade?.startsWith('B')) return 'from-blue-500 to-cyan-500';
-    if (grade?.startsWith('C')) return 'from-amber-500 to-orange-500';
-    return 'from-red-500 to-pink-500';
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-emerald-50">
-      <DashboardNavbar />
-      
-      {/* Background Effects */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-green-200/20 rounded-full blur-[150px] animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
-      </div>
-      
-      <main className="relative pt-20 pb-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="mb-5">
-            <Link 
-              href="/dashboard" 
-              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-4 group text-sm"
-            >
-              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform text-xs"></i>
-              <span>Back to Dashboard</span>
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <AppNav />
+
+      <main className="wrap" style={{ padding: '36px 32px 80px' }}>
+
+        {/* Page header */}
+        <div style={{ marginBottom: 40 }}>
+          <Link href="/dashboard" style={{ textDecoration: 'none' }}>
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.08em',
+              display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+            }}>
+              ← {lang === 'tr' ? 'Panele Dön' : 'Back to Dashboard'}
+            </span>
+          </Link>
+          <h1 style={{ fontSize: 36, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginTop: 14, marginBottom: 6 }}>
+            {lang === 'tr' ? 'Değerlendirme ' : 'Assessment '}
+            <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>
+              {lang === 'tr' ? 'Geçmişi' : 'History'}
+            </em>
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>
+            {lang === 'tr'
+              ? 'Tüm sürdürülebilirlik değerlendirmelerinizi görüntüleyin.'
+              : 'View all your sustainability assessments and results.'}
+          </p>
+        </div>
+
+        {/* Stats strip */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 32 }}>
+          {[
+            { label: lang === 'tr' ? 'Toplam' : 'Total',       value: attempts.length },
+            { label: lang === 'tr' ? 'Tamamlanan' : 'Completed', value: completed.length },
+            { label: lang === 'tr' ? 'Devam Eden' : 'In Progress', value: inProgress.length },
+            { label: lang === 'tr' ? 'Ort. Skor' : 'Avg Score', value: avgScore > 0 ? `${avgScore}%` : '—' },
+          ].map(({ label, value }) => (
+            <div key={label} style={{
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              padding: '18px 20px',
+            }}>
+              <div style={{
+                fontFamily: "'IBM Plex Sans', sans-serif",
+                fontWeight: 300, fontSize: 28,
+                letterSpacing: '-0.03em',
+                fontVariantNumeric: 'tabular-nums',
+                marginBottom: 4,
+              }}>{value}</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
+                {label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filter chips */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 18, paddingBottom: 14, borderBottom: '1px solid var(--line)',
+        }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {([
+              ['all',         lang === 'tr' ? 'Tümü' : 'All',             attempts.length],
+              ['completed',   lang === 'tr' ? 'Tamamlanan' : 'Completed', completed.length],
+              ['in-progress', lang === 'tr' ? 'Devam Eden' : 'In Progress', inProgress.length],
+            ] as [string, string, number][]).map(([k, l, count]) => (
+              <button key={k} onClick={() => setFilter(k as typeof filter)} style={{
+                padding: '6px 14px', borderRadius: 999,
+                background: filter === k ? 'var(--ink)' : 'transparent',
+                color: filter === k ? 'var(--cream)' : 'var(--ink-3)',
+                border: 'none', cursor: 'pointer',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 11.5,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}>
+                {l}
+                <span style={{ fontSize: 10, opacity: 0.6, fontFamily: "'IBM Plex Mono', monospace" }}>{count}</span>
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+            {visible.length} {lang === 'tr' ? 'sonuç' : 'results'}
+          </span>
+        </div>
+
+        {/* Empty state */}
+        {visible.length === 0 ? (
+          <div style={{
+            background: 'var(--paper)', border: '1px solid var(--line)',
+            padding: '60px 40px', textAlign: 'center',
+          }}>
+            <p style={{ fontSize: 28, fontWeight: 300, letterSpacing: '-0.02em', marginBottom: 8 }}>0</p>
+            <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 24 }}>
+              {filter === 'all'
+                ? (lang === 'tr' ? 'Henüz değerlendirme yok.' : 'No assessments yet.')
+                : (lang === 'tr' ? `${filter === 'completed' ? 'Tamamlanan' : 'Devam eden'} değerlendirme bulunamadı.` : `No ${filter} assessments found.`)}
+            </p>
+            <Link href="/surveys" style={{ textDecoration: 'none' }}>
+              <button className="btn btn-primary">
+                {lang === 'tr' ? 'Yeni Değerlendirme Başlat' : 'Start New Assessment'} <Icon.arrow />
+              </button>
             </Link>
-            
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl blur-xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-purple-100 p-5">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg blur-md opacity-40"></div>
-                    <div className="relative w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center shadow-lg">
-                      <i className="fas fa-history text-xl text-white"></i>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {visible.map((attempt) => (
+              <div key={attempt.id} style={{
+                background: 'var(--paper)', border: '1px solid var(--line)',
+                padding: 24, transition: 'border-color 0.15s',
+              }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24 }}>
+
+                  {/* Left: info */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>
+                        {attempt.survey_name}
+                      </h3>
+                      <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
+                        padding: '2px 8px',
+                        border: `1px solid ${attempt.is_completed ? 'var(--olive)' : 'var(--amber)'}`,
+                        color: attempt.is_completed ? 'var(--olive-deep)' : 'var(--amber)',
+                        background: attempt.is_completed ? 'var(--olive-pale)' : 'rgba(217,148,68,0.08)',
+                      }}>
+                        {attempt.is_completed
+                          ? (lang === 'tr' ? 'Tamamlandı' : 'Completed')
+                          : (lang === 'tr' ? 'Devam Ediyor' : 'In Progress')}
+                      </span>
                     </div>
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-800">
-                      Assessment History
-                    </h1>
-                    <p className="text-gray-600 text-sm font-medium">
-                      View all your sustainability assessments
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="grid md:grid-cols-4 gap-3 mb-5">
-            <StatCard icon="fa-clipboard-list" label="Total" value={attempts.length.toString()} color="purple" />
-            <StatCard icon="fa-check-circle" label="Completed" value={completedAttempts.length.toString()} color="green" />
-            <StatCard icon="fa-clock" label="In Progress" value={attempts.filter(a => !a.is_completed).length.toString()} color="amber" />
-            <StatCard icon="fa-chart-line" label="Avg Score" value={averageScore > 0 ? `${averageScore}%` : '-'} color="blue" />
-          </div>
-
-          {/* Filters */}
-          <div className="relative group mb-5">
-            <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg blur-lg opacity-10"></div>
-            <div className="relative bg-white/95 backdrop-blur-xl rounded-lg shadow-md border border-green-100 p-3">
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setFilter('all')}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
-                    filter === 'all'
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md scale-105'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
-                  }`}
-                >
-                  All ({attempts.length})
-                </button>
-                <button
-                  onClick={() => setFilter('completed')}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
-                    filter === 'completed'
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md scale-105'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
-                  }`}
-                >
-                  Completed ({completedAttempts.length})
-                </button>
-                <button
-                  onClick={() => setFilter('in-progress')}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
-                    filter === 'in-progress'
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md scale-105'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
-                  }`}
-                >
-                  In Progress ({attempts.filter(a => !a.is_completed).length})
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Attempts List */}
-          {filteredAttempts.length === 0 ? (
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 rounded-xl blur-xl opacity-10"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-gray-200 p-10 text-center">
-                <div className="relative inline-block mb-4">
-                  <div className="absolute inset-0 bg-gray-300 rounded-xl blur-lg opacity-30"></div>
-                  <div className="relative w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center">
-                    <i className="fas fa-inbox text-3xl text-gray-400"></i>
-                  </div>
-                </div>
-                <h3 className="text-xl font-bold text-gray-800 mb-2">No Assessments Found</h3>
-                <p className="text-gray-600 text-sm mb-4">
-                  {filter === 'all'
-                    ? 'Start your first assessment to see it here'
-                    : `No ${filter} assessments found`}
-                </p>
-                <Link
-                  href="/surveys"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-md"
-                >
-                  Start New Assessment
-                  <i className="fas fa-arrow-right text-xs"></i>
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredAttempts.map((attempt) => (
-                <div key={attempt.id} className="group relative">
-                  <div className={`absolute inset-0 bg-gradient-to-br ${attempt.is_completed ? getGradeBg(attempt.overall_grade) : 'from-amber-500 to-orange-500'} rounded-2xl blur-xl opacity-0 group-hover:opacity-20 transition-opacity`}></div>
-                  <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border-2 border-green-100 group-hover:border-green-300 p-6 transition-all">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-3">
-                          <h3 className="text-xl font-bold text-gray-800">
-                            {attempt.survey_name}
-                          </h3>
-                          {attempt.is_completed ? (
-                            <span className="px-4 py-1 bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 text-sm font-bold rounded-full border-2 border-green-200">
-                              <i className="fas fa-check-circle mr-1"></i>
-                              Completed
-                            </span>
-                          ) : (
-                            <span className="px-4 py-1 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 text-sm font-bold rounded-full border-2 border-amber-200">
-                              <i className="fas fa-clock mr-1"></i>
-                              In Progress
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-6 text-sm text-gray-600 font-medium">
-                          <span className="flex items-center gap-2">
-                            <i className="fas fa-calendar text-green-600"></i>
-                            Started: {new Date(attempt.started_at).toLocaleDateString()}
-                          </span>
-                          {attempt.is_completed && (
-                            <span className="flex items-center gap-2">
-                              <i className="fas fa-check-circle text-green-600"></i>
-                              Completed: {new Date(attempt.completed_at).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {attempt.is_completed ? (
-                        <div className="flex items-center gap-6">
-                          <div className="text-right">
-                            <div className="relative inline-block">
-                              <div className={`absolute inset-0 bg-gradient-to-br ${getGradeBg(attempt.overall_grade)} rounded-xl blur-md opacity-30`}></div>
-                              <div className={`relative px-6 py-3 bg-gradient-to-br ${getGradeBg(attempt.overall_grade)} rounded-xl shadow-xl`}>
-                                <span className="text-4xl font-bold text-white">{attempt.overall_grade}</span>
-                              </div>
-                            </div>
-                            <div className="text-sm text-gray-600 font-semibold mt-2">
-                              {Math.round(attempt.total_score)}%
-                            </div>
-                          </div>
-                          <Link
-                            href={`/results/${attempt.id}`}
-                            className="group/btn relative px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:scale-105 transition-all shadow-xl overflow-hidden"
-                          >
-                            <span className="relative z-10 flex items-center gap-2">
-                              View Results
-                              <i className="fas fa-arrow-right group-hover/btn:translate-x-1 transition-transform"></i>
-                            </span>
-                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 opacity-0 group-hover/btn:opacity-100 transition-opacity"></div>
-                          </Link>
-                        </div>
-                      ) : (
-                        <Link
-                          href={`/questionnaire/${attempt.id}`}
-                          className="px-6 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl font-bold hover:scale-105 transition-all shadow-xl"
-                        >
-                          Continue
-                        </Link>
+                    <div style={{ display: 'flex', gap: 20, fontSize: 11.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                      <span>{lang === 'tr' ? 'Başl:' : 'Started:'} {new Date(attempt.started_at).toLocaleDateString()}</span>
+                      {attempt.is_completed && (
+                        <span>{lang === 'tr' ? 'Bitiş:' : 'Finished:'} {new Date(attempt.completed_at).toLocaleDateString()}</span>
                       )}
                     </div>
 
-                    {attempt.is_completed && (
-                      <div className="mt-6 pt-6 border-t-2 border-green-100">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                          {attempt.category_scores && attempt.category_scores.length > 0 ? (
-                            attempt.category_scores.map((cat, index) => {
-                              const colors = ['green', 'blue', 'purple', 'amber', 'cyan', 'pink'];
-                              return (
-                                <ScoreItem key={cat.id} label={cat.name} score={cat.percentage} color={colors[index % colors.length]} />
-                              );
-                            })
-                          ) : (
-                            <div className="col-span-full text-center text-gray-500 text-sm">No category data</div>
-                          )}
-                        </div>
+                    {/* Category scores */}
+                    {attempt.is_completed && attempt.category_scores?.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+                        {attempt.category_scores.map((cat) => (
+                          <div key={cat.id} style={{ minWidth: 120 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <span style={{ fontSize: 10.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
+                                {cat.name}
+                              </span>
+                              <span style={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink-2)' }}>
+                                {Math.round(cat.percentage)}%
+                              </span>
+                            </div>
+                            <div className="bar bar-olive">
+                              <span style={{ width: `${Math.min(cat.percentage, 100)}%` }}></span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
+
+                  {/* Right: grade + action */}
+                  {attempt.is_completed ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{
+                          fontFamily: "'IBM Plex Sans', sans-serif",
+                          fontWeight: 300, fontSize: 40,
+                          letterSpacing: '-0.04em',
+                          color: gradeColor(attempt.overall_grade),
+                          lineHeight: 1,
+                          marginBottom: 4,
+                        }}>
+                          {attempt.overall_grade}
+                        </div>
+                        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)' }}>
+                          {Math.round(attempt.total_score)}%
+                        </div>
+                      </div>
+                      <Link href={`/results/${attempt.id}`} style={{ textDecoration: 'none' }}>
+                        <button className="btn btn-primary btn-sm">
+                          {lang === 'tr' ? 'Sonuçlar' : 'View Results'} <Icon.arrow />
+                        </button>
+                      </Link>
+                    </div>
+                  ) : (
+                    <Link href={`/questionnaire/${attempt.id}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
+                      <button className="btn btn-outline btn-sm">
+                        {lang === 'tr' ? 'Devam Et' : 'Continue'} <Icon.arrow />
+                      </button>
+                    </Link>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
-
-function StatCard({ icon, label, value, color }: {
-  icon: string;
-  label: string;
-  value: string;
-  color: string;
-}) {
-  const colorClasses = {
-    green: { bg: 'from-green-500 to-emerald-500', text: 'text-green-600', light: 'from-green-50 to-emerald-50', border: 'border-green-100 hover:border-green-300' },
-    blue: { bg: 'from-blue-500 to-cyan-500', text: 'text-blue-600', light: 'from-blue-50 to-cyan-50', border: 'border-blue-100 hover:border-blue-300' },
-    purple: { bg: 'from-purple-500 to-pink-500', text: 'text-purple-600', light: 'from-purple-50 to-pink-50', border: 'border-purple-100 hover:border-purple-300' },
-    amber: { bg: 'from-amber-500 to-orange-500', text: 'text-amber-600', light: 'from-amber-50 to-orange-50', border: 'border-amber-100 hover:border-amber-300' },
-  };
-
-  const colors = colorClasses[color as keyof typeof colorClasses];
-
-  return (
-    <div className="group relative">
-      <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg} rounded-lg blur-lg opacity-0 group-hover:opacity-20 transition-opacity`}></div>
-      <div className={`relative bg-white/95 backdrop-blur-xl rounded-lg border ${colors.border} p-3 group-hover:scale-105 transition-all shadow-md`}>
-        <div className="relative inline-block mb-2">
-          <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg} rounded-lg blur-md opacity-30 group-hover:opacity-40 transition-opacity`}></div>
-          <div className={`relative w-8 h-8 bg-gradient-to-br ${colors.light} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-md`}>
-            <i className={`fas ${icon} text-sm ${colors.text}`}></i>
+              </div>
+            ))}
           </div>
-        </div>
-        <div className="text-2xl font-bold text-gray-800 mb-1">{value}</div>
-        <div className="text-xs text-gray-600 font-semibold">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function ScoreItem({ label, score, color }: {
-  label: string;
-  score: number;
-  color: string;
-}) {
-  const colorClasses: Record<string, { bg: string; text: string }> = {
-    green: { bg: 'from-green-500 to-emerald-500', text: 'text-green-600' },
-    blue: { bg: 'from-blue-500 to-cyan-500', text: 'text-blue-600' },
-    purple: { bg: 'from-purple-500 to-pink-500', text: 'text-purple-600' },
-    amber: { bg: 'from-amber-500 to-orange-500', text: 'text-amber-600' },
-    cyan: { bg: 'from-cyan-500 to-teal-500', text: 'text-cyan-600' },
-    pink: { bg: 'from-pink-500 to-rose-500', text: 'text-pink-600' },
-  };
-
-  const colors = colorClasses[color] || colorClasses.green;
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-gray-600 font-bold uppercase tracking-wide">{label}</p>
-        <span className={`text-sm font-bold ${colors.text}`}>
-          {Math.round(score)}%
-        </span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden shadow-inner">
-        <div
-          className={`h-full bg-gradient-to-r ${colors.bg} rounded-full transition-all duration-500`}
-          style={{ width: `${Math.min(score, 100)}%` }}
-        />
-      </div>
+        )}
+      </main>
     </div>
   );
 }

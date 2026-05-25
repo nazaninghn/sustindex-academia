@@ -4,195 +4,160 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
-import { useLanguage } from '@/lib/language';
+import { useLang } from '@/lib/i18n';
+import Logo from '@/components/Logo';
+import { Icon } from '@/components/shared';
 
 export default function LoginPage() {
-  const router = useRouter();
+  const router   = useRouter();
   const { login } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { t, lang } = useLang();
+
+  const [formData, setFormData] = useState({ username: '', password: '' });
+  const [remember, setRemember] = useState(true);
+  const [error,    setError]    = useState('');
+  const [loading,  setLoading]  = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      await login(formData.username, formData.password);
+      await login(formData.username, formData.password, remember);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('error.login.failed'));
+      setError(err.response?.data?.detail || (lang === 'tr' ? 'Giriş başarısız. Bilgilerinizi kontrol edin.' : 'Login failed. Please check your credentials.'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-emerald-50 flex items-center justify-center p-4">
-      {/* Background Effects */}
-      <div className="absolute inset-0">
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-green-200/20 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-200/20 rounded-full blur-[120px]"></div>
-      </div>
-
-      <div className="relative max-w-md w-full">
-        {/* Language Selector */}
-        <div className="flex justify-end mb-6">
-          <div className="inline-flex items-center gap-2 bg-white rounded-xl border-2 border-green-100 p-1 shadow-lg">
-            <button
-              onClick={() => setLanguage('tr')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                language === 'tr' 
-                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg' 
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              🇹🇷 Türkçe
-            </button>
-            <button
-              onClick={() => setLanguage('en')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                language === 'en' 
-                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg' 
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              🇬🇧 English
-            </button>
-          </div>
-        </div>
-
-        {/* Brand */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-block group">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-2">
-              Sustindex
-            </h1>
-            <div className="h-1 w-20 bg-gradient-to-r from-green-600 to-emerald-600 rounded-full mx-auto"></div>
+    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', flexDirection: 'column' }}>
+      {/* Top bar */}
+      <header style={{ borderBottom: '1px solid var(--line)' }}>
+        <div className="wrap" style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '14px 32px',
+        }}>
+          <Link href="/" style={{ textDecoration: 'none' }}><Logo size={20} /></Link>
+          <Link href="/" style={{ textDecoration: 'none', fontSize: 11.5, color: 'var(--ink-3)' }}>
+            ← {t('nav_back_home')}
           </Link>
-          <p className="text-gray-600 mt-6 text-base font-medium">{t('auth.login.welcome')}</p>
         </div>
+      </header>
 
-        {/* Login Form */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border-2 border-green-100 p-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">{t('auth.login.title')}</h2>
+      {/* Centered card */}
+      <main style={{
+        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '48px 24px',
+      }}>
+        <div style={{ width: '100%', maxWidth: 380 }}>
+          <span className="eyebrow" style={{ marginBottom: 10, display: 'block' }}>{t('login_eyebrow')}</span>
+          <h1 style={{ fontSize: 32, marginBottom: 10, fontWeight: 600, letterSpacing: '-0.02em' }}>
+            {t('login_title')}
+          </h1>
+          <p style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 32, lineHeight: 1.6 }}>
+            {t('login_desc')}
+          </p>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-xl text-red-600 text-sm flex items-start gap-3">
-              <i className="fas fa-exclamation-circle text-lg mt-0.5"></i>
-              <span>{error}</span>
+            <div style={{
+              background: '#FFF5F3', border: '1px solid var(--danger)',
+              color: 'var(--danger)', fontSize: 12, padding: '12px 16px',
+              marginBottom: 20, lineHeight: 1.5,
+            }}>
+              {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="username" className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('auth.login.username')}
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <i className="fas fa-user text-gray-400"></i>
-                </div>
-                <input
-                  id="username"
-                  type="text"
-                  required
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border-2 border-green-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition bg-white text-gray-800"
-                  placeholder={t('auth.register.placeholder.username')}
-                />
-              </div>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div className="field">
+              <label>{t('login_username')}</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="elif.demir"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                required
+              />
             </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label htmlFor="password" className="block text-sm font-semibold text-gray-700">
-                  {t('auth.login.password')}
-                </label>
-                <Link 
-                  href="/forgot-password" 
-                  className="text-sm text-green-600 hover:text-green-700 font-medium transition-colors"
-                >
-                  {t('auth.login.forgotpassword')}
+            <div className="field">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <label>{t('login_password')}</label>
+                <Link href="/forgot-password" style={{ fontSize: 10, color: 'var(--ink-3)', textDecoration: 'none' }}>
+                  {t('login_forgot')}
                 </Link>
               </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <i className="fas fa-lock text-gray-400"></i>
-                </div>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border-2 border-green-100 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition bg-white text-gray-800"
-                  placeholder="••••••••"
-                />
-              </div>
+              <input
+                className="input"
+                type="password"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+              />
             </div>
 
+            <label style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer',
+              margin: '4px 0 8px',
+            }}>
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                style={{ width: 14, height: 14, accentColor: 'var(--olive-deep)' }}
+              />
+              {lang === 'tr' ? 'Beni hatırla' : 'Remember me on this device'}
+            </label>
+
             <button
+              className="btn btn-primary"
               type="submit"
               disabled={loading}
-              className="w-full py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:scale-105 transition-all shadow-xl shadow-green-600/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ padding: '12px 18px', fontSize: 12.5, justifyContent: 'space-between', opacity: loading ? 0.6 : 1 }}
             >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <i className="fas fa-spinner fa-spin"></i>
-                  {t('auth.login.loading')}
-                </span>
-              ) : (
-                t('auth.login.button')
-              )}
+              {loading ? (lang === 'tr' ? 'Giriş yapılıyor…' : 'Signing in…') : t('login_submit')}
+              <Icon.arrow />
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-green-100 text-center">
-            <p className="text-gray-600 text-sm">
-              {t('auth.login.noaccount')}{' '}
-              <Link href="/register" className="text-green-600 font-bold hover:text-green-700 transition-colors">
-                {t('auth.login.signup')}
-              </Link>
-            </p>
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0' }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--line)' }}></div>
+            <span style={{ fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              {lang === 'tr' ? 'veya' : 'or'}
+            </span>
+            <div style={{ flex: 1, height: 1, background: 'var(--line)' }}></div>
           </div>
 
-          <div className="mt-4 text-center">
-            <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">
-              <i className="fas fa-arrow-left"></i>
-              {t('auth.login.backhome')}
-            </Link>
-          </div>
+          <Link href="/register" style={{ textDecoration: 'none', display: 'block' }}>
+            <button className="btn btn-outline" style={{ width: '100%', padding: '12px 18px', fontSize: 12.5 }}>
+              {t('login_create')}
+            </button>
+          </Link>
         </div>
+      </main>
 
-        {/* Features */}
-        <div className="mt-6 grid grid-cols-3 gap-3">
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border-2 border-green-100 text-center hover:scale-105 transition-transform shadow-lg">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-2">
-              <i className="fas fa-shield-alt text-green-600 text-lg"></i>
-            </div>
-            <p className="text-xs text-gray-700 font-semibold">{t('auth.login.secure')}</p>
-          </div>
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border-2 border-green-100 text-center hover:scale-105 transition-transform shadow-lg">
-            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-2">
-              <i className="fas fa-bolt text-emerald-600 text-lg"></i>
-            </div>
-            <p className="text-xs text-gray-700 font-semibold">{t('auth.login.fast')}</p>
-          </div>
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border-2 border-green-100 text-center hover:scale-105 transition-transform shadow-lg">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-2">
-              <i className="fas fa-check-circle text-green-600 text-lg"></i>
-            </div>
-            <p className="text-xs text-gray-700 font-semibold">{t('auth.login.reliable')}</p>
+      {/* Footer trust strip */}
+      <footer style={{ borderTop: '1px solid var(--line)' }}>
+        <div className="wrap" style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '14px 32px',
+          fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.08em',
+          textTransform: 'uppercase', fontFamily: "'IBM Plex Sans', sans-serif",
+        }}>
+          <span>© 2026 Sustindex</span>
+          <div style={{ display: 'flex', gap: 14 }}>
+            <span>{t('login_secure')}</span><span>·</span>
+            <span>{t('login_iso')}</span><span>·</span>
+            <span>{t('login_gdpr')}</span>
           </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

@@ -1,235 +1,133 @@
 'use client';
 
 import Link from 'next/link';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
-import { useLanguage } from '@/lib/language';
+import SiteNav from '@/components/SiteNav';
+import SiteFooter from '@/components/SiteFooter';
+import { useLang } from '@/lib/i18n';
+import { Icon } from '@/components/shared';
+
+function CTABanner() {
+  const { t } = useLang();
+  return (
+    <section style={{ padding: '40px 0 96px', background: 'var(--cream-deep)' }}>
+      <div className="wrap" style={{ textAlign: 'center' }}>
+        <h2 style={{ fontSize: 32, marginBottom: 14, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
+          {t('cta_short')}
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 440, margin: '0 auto 28px' }}>
+          {t('cta_desc_short')}
+        </p>
+        <div style={{ display: 'inline-flex', gap: 10 }}>
+          <Link href="/register" style={{ textDecoration: 'none' }}>
+            <button className="btn btn-primary btn-lg">{t('hero_cta_main')} <Icon.arrow /></button>
+          </Link>
+          <Link href="/login" style={{ textDecoration: 'none' }}>
+            <button className="btn btn-outline btn-lg">{t('nav_signin')}</button>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export default function AboutPage() {
-  const { t } = useLanguage();
-  
+  const { t, lang } = useLang();
+
+  const offers = [
+    [t('about_o_1_t'), t('about_o_1_d')],
+    [t('about_o_2_t'), t('about_o_2_d')],
+    [t('about_o_3_t'), t('about_o_3_d')],
+    [t('about_o_4_t'), t('about_o_4_d')],
+  ] as [string, string][];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-emerald-50">
-      <Navbar />
-      
-      {/* Background Effects */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-green-200/20 rounded-full blur-[150px]"></div>
-        <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px]"></div>
-      </div>
-      
-      <main className="relative pt-20 pb-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-full border border-green-200 mb-4">
-              <i className="fas fa-leaf text-green-600 text-sm"></i>
-              <span className="text-xs font-bold text-green-700">{t('about.title')}</span>
-            </div>
-            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-3">
-              Sustindex
-            </h1>
-            <p className="text-base text-gray-600">
-              {t('about.subtitle')}
-            </p>
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <SiteNav />
+
+      {/* Hero section */}
+      <section style={{ padding: '72px 0 56px', borderBottom: '1px solid var(--ink)' }}>
+        <div className="wrap-narrow">
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>·</span>
+            <span className="eyebrow">{t('about_eye')}</span>
           </div>
+          <h1 style={{ fontSize: 48, marginBottom: 24, maxWidth: 760, lineHeight: 1.05 }}>
+            {t('about_title_1')}{' '}
+            <em style={{ fontWeight: 500, color: 'var(--olive-deep)' }}>{t('about_title_2')}</em>{' '}
+            {t('about_title_3')}
+          </h1>
+          <p style={{ fontSize: 15, color: 'var(--ink-2)', maxWidth: 600, lineHeight: 1.6 }}>
+            {t('about_desc')}
+          </p>
+        </div>
+      </section>
 
-          {/* Academia Company Info */}
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-lg border border-green-100 p-5 mb-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
-                <i className="fas fa-building text-white text-base"></i>
-              </div>
-              <h2 className="text-xl font-bold text-gray-800">{t('about.company.title')}</h2>
-            </div>
-            <p className="text-gray-700 leading-relaxed text-sm mb-4">
-              {t('about.company.desc')}
-            </p>
-            <a
-              href="https://www.academiadanismanlik.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-bold hover:scale-105 transition-all shadow-md text-sm"
-            >
-              <i className="fas fa-external-link-alt text-xs"></i>
-              {t('about.company.visit')}
-            </a>
+      {/* Mission */}
+      <section style={{ padding: '72px 0' }}>
+        <div className="wrap" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 64 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>01</span>
+            <span className="eyebrow">{t('about_mission')}</span>
           </div>
-
-          {/* Contact Info */}
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-lg border border-green-100 p-5 mb-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-600 to-green-600 rounded-lg flex items-center justify-center">
-                <i className="fas fa-map-marker-alt text-white text-base"></i>
-              </div>
-              <h2 className="text-xl font-bold text-gray-800">{t('about.contact.title')}</h2>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-map-marker-alt text-green-600 text-sm"></i>
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-1 text-sm">{t('about.contact.address')}</h3>
-                  <p className="text-gray-600 text-xs">
-                    Bilişim Vadisi - İstinye Üniversitesi<br />
-                    Ayazağa Mah. Kemerburgaz Cad. Vadi İstanbul Park<br />
-                    7A Blok No:7 B İç Kapı No:4<br />
-                    Sarıyer / İstanbul
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-phone text-green-600 text-sm"></i>
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-1 text-sm">{t('about.contact.phone')}</h3>
-                  <p className="text-gray-600 text-xs">212-613 58 80</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-fax text-green-600 text-sm"></i>
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-1 text-sm">{t('about.contact.fax')}</h3>
-                  <p className="text-gray-600 text-xs">212-322 04 11</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Mission */}
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-lg border border-green-100 p-5 mb-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
-                <i className="fas fa-bullseye text-white text-base"></i>
-              </div>
-              <h2 className="text-xl font-bold text-gray-800">{t('about.mission.title')}</h2>
-            </div>
-            <p className="text-gray-700 leading-relaxed text-sm">
-              {t('about.mission.desc')}
-            </p>
-          </div>
-
-          {/* Features */}
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-lg border border-green-100 p-5 mb-5">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">{t('about.offer.title')}</h2>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-chart-line text-green-600 text-base"></i>
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-800 mb-1">{t('about.offer.assessment.title')}</h3>
-                  <p className="text-gray-600 text-sm">
-                    {t('about.offer.assessment.desc')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-file-pdf text-emerald-600 text-base"></i>
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-800 mb-1">{t('about.offer.reports.title')}</h3>
-                  <p className="text-gray-600 text-sm">
-                    {t('about.offer.reports.desc')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-shield-alt text-green-600 text-base"></i>
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-800 mb-1">{t('about.offer.standards.title')}</h3>
-                  <p className="text-gray-600 text-sm">
-                    {t('about.offer.standards.desc')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-lightbulb text-emerald-600 text-base"></i>
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-800 mb-1">{t('about.offer.insights.title')}</h3>
-                  <p className="text-gray-600 text-sm">
-                    {t('about.offer.insights.desc')}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Methodology */}
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-lg border border-green-100 p-5 mb-5">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">{t('about.methodology.title')}</h2>
-            <div className="space-y-3">
-              <div className="border-l-2 border-green-600 pl-3 py-1">
-                <h3 className="text-sm font-bold text-gray-800 mb-1">
-                  <span className="text-green-600">1.</span> {t('about.methodology.env')}
-                </h3>
-                <p className="text-gray-600 text-xs">
-                  {t('about.methodology.env.desc')}
-                </p>
-              </div>
-
-              <div className="border-l-2 border-emerald-600 pl-3 py-1">
-                <h3 className="text-sm font-bold text-gray-800 mb-1">
-                  <span className="text-emerald-600">2.</span> {t('about.methodology.social')}
-                </h3>
-                <p className="text-gray-600 text-xs">
-                  {t('about.methodology.social.desc')}
-                </p>
-              </div>
-
-              <div className="border-l-2 border-green-600 pl-3 py-1">
-                <h3 className="text-sm font-bold text-gray-800 mb-1">
-                  <span className="text-green-600">3.</span> {t('about.methodology.gov')}
-                </h3>
-                <p className="text-gray-600 text-xs">
-                  {t('about.methodology.gov.desc')}
-                </p>
-              </div>
-
-              <div className="border-l-2 border-emerald-600 pl-3 py-1">
-                <h3 className="text-sm font-bold text-gray-800 mb-1">
-                  <span className="text-emerald-600">4.</span> {t('about.methodology.scoring')}
-                </h3>
-                <p className="text-gray-600 text-xs">
-                  {t('about.methodology.scoring.desc')}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* CTA */}
-          <div className="bg-gradient-to-br from-green-600 to-emerald-600 rounded-2xl shadow-lg p-6 text-white text-center">
-            <div className="mb-3">
-              <i className="fas fa-rocket text-3xl opacity-90"></i>
-            </div>
-            <h2 className="text-xl font-bold mb-3">{t('about.cta.title')}</h2>
-            <p className="text-sm mb-4 opacity-90">
-              {t('about.cta.desc')}
-            </p>
-            <Link
-              href="/register"
-              className="inline-block px-6 py-2.5 bg-white text-green-600 rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-lg"
-            >
-              <i className="fas fa-user-plus mr-2 text-xs"></i>
-              {t('about.cta.button')}
-            </Link>
+          <div>
+            <h2 style={{ fontSize: 28, marginBottom: 18, lineHeight: 1.2 }}>{t('about_mission_h')}</h2>
+            <p style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.7 }}>{t('about_mission_d')}</p>
           </div>
         </div>
-      </main>
+      </section>
 
-      <Footer />
+      {/* What we offer */}
+      <section style={{ padding: '0 0 72px' }}>
+        <div className="wrap" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 64 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>02</span>
+            <span className="eyebrow">{t('about_offer')}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--ink)' }}>
+            {offers.map(([h, d], i) => (
+              <div key={i} style={{ padding: '24px 0', borderBottom: '1px solid var(--line)', display: 'grid', gridTemplateColumns: '36px 1fr', gap: 20 }}>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>0{i + 1}</span>
+                <div>
+                  <h3 style={{ fontSize: 18, marginBottom: 6 }}>{h}</h3>
+                  <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, maxWidth: 600 }}>{d}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Contact */}
+      <section style={{ padding: '0 0 72px' }}>
+        <div className="wrap" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 64 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>03</span>
+            <span className="eyebrow">{t('about_contact')}</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 28, borderTop: '1px solid var(--ink)', paddingTop: 24 }}>
+            <div>
+              <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_address')}</span>
+              <p style={{ fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{t('about_address_v')}</p>
+            </div>
+            <div>
+              <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_phone')}</span>
+              <p style={{ fontSize: 12.5, marginBottom: 14 }}>+90 212 613 58 80</p>
+              <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_fax')}</span>
+              <p style={{ fontSize: 12.5 }}>+90 212 322 04 11</p>
+            </div>
+            <div>
+              <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_parent')}</span>
+              <p style={{ fontSize: 12.5, marginBottom: 14 }}>Academia Danışmanlık</p>
+              <a href="https://academiadanismanlik.com" target="_blank" rel="noopener" className="ulink" style={{ fontSize: 12 }}>
+                academiadanismanlik.com <Icon.external />
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <CTABanner />
+      <SiteFooter />
     </div>
   );
 }

@@ -77,8 +77,8 @@ class SurveySession(models.Model):
         else:
             return 'open'
     
-    def get_status_display(self):
-        """Get human-readable status"""
+    def get_status_label(self):
+        """Get human-readable status (Fix BUG-21: renamed to avoid Django's auto-generated name)"""
         status = self.get_status()
         status_map = {
             'inactive': _('Inactive'),
@@ -188,21 +188,25 @@ class Question(models.Model):
             self.survey = self.category.survey
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        # Fix 9: guard full_clean so it doesn't break bulk_create, data migrations,
+        # or partial update() calls (where update_fields is passed).
+        # Callers that truly want to bypass validation pass skip_validation=True.
+        if 'update_fields' not in kwargs and not kwargs.pop('skip_validation', False):
+            self.full_clean()
         return super().save(*args, **kwargs)
 
     def get_max_possible_score(self):
-        """Calculate max possible score based on question type"""
-        choices = self.choices.all()
-        if not choices.exists():
+        """Calculate max possible score based on question type.
+
+        Fix BUG-05: use list() so the prefetch_related cache is used instead of
+        issuing .exists() + extra queryset evaluation (N+1 in scoring hot path).
+        """
+        choices = list(self.choices.all())  # hits prefetch cache, not DB
+        if not choices:
             return 0
-        
         if self.allow_multiple:
-            # Multi-select: sum of all positive scores
-            return sum(choice.score for choice in choices if choice.score > 0)
-        
-        # Single choice: highest score
-        return choices.aggregate(models.Max('score'))['score__max'] or 0
+            return sum(c.score for c in choices if c.score > 0)
+        return max((c.score for c in choices), default=0)
 
 
 class Choice(models.Model):
@@ -270,9 +274,45 @@ class QuestionnaireAttempt(models.Model):
         ).distinct().order_by('order')
 
     def get_category_breakdown(self):
-        """Build dynamic category breakdown for the current attempt."""
-        categories = self.get_survey_categories()
+        """Build dynamic category breakdown for the current attempt.
 
+        Fix BB: previously issued 2 DB queries per category (filter + prefetch).
+        Now uses a single bulk query for all questions, grouped in Python.
+        """
+        from collections import defaultdict
+
+        categories = list(self.get_survey_categories())  # 1-2 queries max
+
+        # ── Fix BB: one query for ALL questions in this survey ────────────────
+        if self.survey:
+            all_questions = list(
+                Question.objects
+                .filter(is_active=True, survey=self.survey)
+                .prefetch_related('choices')
+                .select_related('category')
+            )
+        else:
+            # Fix BUG-12: no survey FK — restrict to answered questions only to
+            # avoid mixing questions from completely unrelated surveys.
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                'QuestionnaireAttempt(pk=%s) has no survey FK; '
+                'breakdown restricted to answered questions.', self.pk
+            )
+            answered_qids = list(self.answers.values_list('question_id', flat=True))
+            all_questions = list(
+                Question.objects
+                .filter(is_active=True, id__in=answered_qids)
+                .prefetch_related('choices')
+                .select_related('category')
+            )
+
+        # Group questions by category id (no extra queries)
+        questions_by_cat: dict = defaultdict(list)
+        for q in all_questions:
+            questions_by_cat[q.category_id].append(q)
+
+        # Fetch all answers for this attempt in one query
         all_answers = self.answers.select_related(
             'choice', 'question'
         ).prefetch_related('choices')
@@ -283,19 +323,12 @@ class QuestionnaireAttempt(models.Model):
         total_possible_sum = 0
 
         for category in categories:
-            if self.survey:
-                questions = category.questions.filter(
-                    is_active=True, survey=self.survey
-                ).prefetch_related('choices')
-            else:
-                questions = category.questions.filter(
-                    is_active=True
-                ).prefetch_related('choices')
+            cat_questions = questions_by_cat.get(category.id, [])
 
             cat_score = 0
             cat_possible = 0
 
-            for question in questions:
+            for question in cat_questions:
                 answer = answers_by_qid.get(question.id)
                 if answer:
                     cat_score += answer.get_total_score()
@@ -312,6 +345,11 @@ class QuestionnaireAttempt(models.Model):
                 'score': cat_score,
                 'max_score': cat_possible,
                 'percentage': percentage,
+                # Fix BUG-02: include weights so calculate_scores() can derive
+                # pillar scores without a second DB query.
+                'environmental_weight': category.environmental_weight,
+                'social_weight':        category.social_weight,
+                'governance_weight':    category.governance_weight,
             })
 
             total_score_sum += cat_score
@@ -332,11 +370,24 @@ class QuestionnaireAttempt(models.Model):
         """Calculate scores per category dynamically."""
         results = self.get_category_breakdown()
 
-        # Legacy fields for backward compatibility
         cat_list = results['categories']
-        self.environmental_score = cat_list[0]['percentage'] if len(cat_list) > 0 else 0
-        self.social_score = cat_list[1]['percentage'] if len(cat_list) > 1 else 0
-        self.governance_score = cat_list[2]['percentage'] if len(cat_list) > 2 else 0
+
+        # Fix BUG-02: compute weighted ESG pillar scores from category weights.
+        # Falls back to an equal average of all categories when no weights are set,
+        # avoiding the old hard-coded positional [0]/[1]/[2] mapping.
+        env_n = env_d = soc_n = soc_d = gov_n = gov_d = 0.0
+        for c in cat_list:
+            pct = c['percentage']
+            e_w = c.get('environmental_weight', 0.0)
+            s_w = c.get('social_weight', 0.0)
+            g_w = c.get('governance_weight', 0.0)
+            env_n += e_w * pct;  env_d += e_w
+            soc_n += s_w * pct;  soc_d += s_w
+            gov_n += g_w * pct;  gov_d += g_w
+        avg = round(sum(c['percentage'] for c in cat_list) / len(cat_list), 2) if cat_list else 0.0
+        self.environmental_score = round(env_n / env_d, 2) if env_d else avg
+        self.social_score        = round(soc_n / soc_d, 2) if soc_d else avg
+        self.governance_score    = round(gov_n / gov_d, 2) if gov_d else avg
 
         self.total_score = round(results['total_percentage'])
         self.overall_grade = self.get_overall_grade()
@@ -371,25 +422,31 @@ class QuestionnaireAttempt(models.Model):
             return 'D'
     
     def get_recommendations(self):
-        """Provide dynamic recommendations based on category scores"""
+        """Provide dynamic recommendations based on category scores.
+
+        Fix BUG-25: previously called get_category_score() per category,
+        issuing 2 DB queries per category (N+1). Now reuses get_category_breakdown()
+        which executes a single bulk question query for the whole attempt.
+        """
+        if not self.is_completed:
+            return []
+        breakdown = self.get_category_breakdown()
         recommendations = []
-        categories = self.get_survey_categories()
-
-        for category in categories:
-            cat_score = category.get_category_score(self)
-            if cat_score < 50:
+        for cat in breakdown['categories']:
+            pct  = cat['percentage']
+            name = cat['name']
+            if pct < 50:
                 recommendations.append({
-                    'category': category.name,
-                    'priority': 'High',
-                    'suggestion': f'Improve your performance in {category.name}. Current score is below 50%.'
+                    'category':   name,
+                    'priority':   'High',
+                    'suggestion': f'Improve your performance in {name}. Current score is below 50%.',
                 })
-            elif cat_score < 70:
+            elif pct < 70:
                 recommendations.append({
-                    'category': category.name,
-                    'priority': 'Medium',
-                    'suggestion': f'Good progress in {category.name}, but there is room for improvement.'
+                    'category':   name,
+                    'priority':   'Medium',
+                    'suggestion': f'Good progress in {name}, but there is room for improvement.',
                 })
-
         return recommendations
 
 

@@ -22,9 +22,15 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         fields = ['username', 'email', 'password', 'password_confirm', 
                   'first_name', 'last_name', 'company_name', 'phone']
     
+    def validate_email(self, value):
+        # Fix F: Django's AbstractUser doesn't enforce unique emails — do it here.
+        if value and User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
     def validate(self, data):
         if data['password'] != data['password_confirm']:
-            raise serializers.ValidationError("Passwords do not match")
+            raise serializers.ValidationError("Passwords do not match.")
         return data
     
     def create(self, validated_data):

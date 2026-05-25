@@ -39,33 +39,30 @@ class QuestionSerializer(serializers.ModelSerializer):
                   'question_type', 'order', 'is_active', 'allow_multiple', 'attachment', 'choices']
     
     def to_representation(self, instance):
+        # Fix P: super() already serializes `choices` via the field definition AND
+        # DRF automatically propagates context to nested serializers — the explicit
+        # re-instantiation of ChoiceSerializer issued a new DB query every time,
+        # bypassing any prefetch cache.  Removed.
         representation = super().to_representation(instance)
         request = self.context.get('request')
-        
-        # Get language from request header or query param
+
         language = None
         if request:
-            language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-        
-        # Return appropriate language text
+            language = (
+                request.query_params.get('lang')
+                or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
+            )
+
         if language == 'tr' and instance.text_tr:
             representation['text'] = instance.text_tr
         elif language == 'en' and instance.text_en:
             representation['text'] = instance.text_en
-        
-        # Return appropriate category name
+
         if language == 'tr' and instance.category.name_tr:
             representation['category_name'] = instance.category.name_tr
         elif language == 'en' and instance.category.name_en:
             representation['category_name'] = instance.category.name_en
-        
-        # Pass context to nested serializers
-        representation['choices'] = ChoiceSerializer(
-            instance.choices.all(), 
-            many=True, 
-            context=self.context
-        ).data
-        
+
         return representation
 
 
@@ -144,13 +141,10 @@ class SurveySerializer(serializers.ModelSerializer):
             if instance.description_en:
                 representation['description'] = instance.description_en
         
-        # Pass context to nested serializers
-        representation['questions'] = QuestionSerializer(
-            instance.questions.filter(is_active=True), 
-            many=True, 
-            context=self.context
-        ).data
-        
+        # Fix P: removed the re-instantiation of QuestionSerializer — it issued a
+        # fresh DB query that bypassed the prefetch cache on `questions__choices`.
+        # DRF already serializes `questions` via the field definition with full
+        # context propagation, so the override was only causing N+1.
         return representation
 
 
@@ -182,14 +176,18 @@ class AnswerSerializer(serializers.ModelSerializer):
 
 class AnswerCreateSerializer(serializers.ModelSerializer):
     choices_ids = serializers.ListField(
-        child=serializers.IntegerField(), 
-        write_only=True, 
+        child=serializers.IntegerField(),
+        write_only=True,
         required=False
     )
-    
+
     class Meta:
         model = Answer
-        fields = ['question', 'choice', 'choices_ids', 'text_answer', 'notes']
+        # Fix Q: added 'id' so the response includes the answer PK.
+        # The frontend needs this to upload supporting documents via
+        # UserDocumentViewSet (which requires an answer FK).
+        fields = ['id', 'question', 'choice', 'choices_ids', 'text_answer', 'notes']
+        read_only_fields = ['id']
     
     def create(self, validated_data):
         choices_ids = validated_data.pop('choices_ids', [])
@@ -271,28 +269,29 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
         categories = breakdown.get('categories', [])
         language = self._get_language()
 
+        # Single bulk query instead of one per category (fixes N+1)
+        cat_map: dict = {}
+        if language in ('tr', 'en') and categories:
+            from .models import Category as CatModel
+            ids = [item['id'] for item in categories]
+            cat_map = {c.id: c for c in CatModel.objects.filter(pk__in=ids)}
+
         localized = []
         for item in categories:
             name = item['name']
-            # Localize if possible
-            if language in ('tr', 'en'):
-                from .models import Category as CatModel
-                try:
-                    cat_obj = CatModel.objects.get(pk=item['id'])
-                    if language == 'tr' and cat_obj.name_tr:
-                        name = cat_obj.name_tr
-                    elif language == 'en' and cat_obj.name_en:
-                        name = cat_obj.name_en
-                except CatModel.DoesNotExist:
-                    pass
+            cat_obj = cat_map.get(item['id'])
+            if cat_obj and language == 'tr' and cat_obj.name_tr:
+                name = cat_obj.name_tr
+            elif cat_obj and language == 'en' and cat_obj.name_en:
+                name = cat_obj.name_en
 
             localized.append({
-                'id': item['id'],
-                'key': item['key'],
-                'name': name,
-                'score': item['score'],
+                'id':        item['id'],
+                'key':       item['key'],
+                'name':      name,
+                'score':     item['score'],
                 'max_score': item['max_score'],
-                'percentage': item['percentage'],
+                'percentage':item['percentage'],
             })
 
         return localized

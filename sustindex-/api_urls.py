@@ -3,6 +3,13 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from accounts.api_views import UserViewSet, CompanyProfileViewSet, MembershipHistoryViewSet
+from accounts.throttles import LoginRateThrottle
+
+
+# Subclass so we can attach our strict login-rate throttle without modifying
+# simplejwt's built-in view directly.
+class ThrottledTokenObtainPairView(TokenObtainPairView):
+    throttle_classes = [LoginRateThrottle]
 from questionnaire.api_views import (
     SurveyViewSet, SurveySessionViewSet, CategoryViewSet,
     QuestionViewSet, QuestionnaireAttemptViewSet, AnswerViewSet, UserDocumentViewSet
@@ -28,11 +35,11 @@ router.register(r'lessons', LessonViewSet, basename='lesson')
 router.register(r'lesson-progress', LessonProgressViewSet, basename='lessonprogress')
 
 urlpatterns = [
-    path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    
+
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
     path('docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    
+
     path('', include(router.urls)),
 ]

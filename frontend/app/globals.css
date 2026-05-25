@@ -2,152 +2,197 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap');
+
+/* ============================================================
+   Design Tokens
+   ============================================================ */
+:root {
+  --cream:       #FFFFFF;
+  --cream-deep:  #F6F4EE;
+  --paper:       #FAFAF7;
+  --ink:         #1A1A14;
+  --ink-2:       #3F3D34;
+  --ink-3:       #6B6759;
+  --ink-4:       #B5B2A6;
+  --line:        #ECE9E0;
+  --line-soft:   #F2EFE6;
+  --olive:       #9CAB60;
+  --olive-deep:  #5F6E2F;
+  --olive-pale:  #D8DFC0;
+  --olive-wash:  #F0F3E6;
+  --cream-pill:  #F5EFE3;
+  --danger:      #B0492B;
+  --amber:       #B58A2E;
 }
 
+/* ============================================================
+   Reset & Base
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--cream); color: var(--ink); }
 body {
-  font-family: 'IBM Plex Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.5;
-  color: #000000;
-  overflow-x: hidden;
-  background: #F9FEF5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Roboto', system-ui, sans-serif;
+  font-weight: 400;
   font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.005em;
 }
 
-/* کوچک‌تر کردن تمام عناصر */
-h1 { font-size: 1.75rem; margin-bottom: 0.75rem; }
-h2 { font-size: 1.35rem; margin-bottom: 0.6rem; }
-h3 { font-size: 1.15rem; margin-bottom: 0.5rem; }
-h4 { font-size: 1rem; margin-bottom: 0.4rem; }
-h5 { font-size: 0.95rem; margin-bottom: 0.3rem; }
-h6 { font-size: 0.85rem; margin-bottom: 0.3rem; }
-
-button, .btn {
-  font-size: 0.85rem;
-  padding: 0.4rem 0.9rem;
+h1, h2, h3, h4, h5, .display {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
-input, textarea, select {
-  font-size: 0.85rem;
-  padding: 0.4rem 0.7rem;
+.eyebrow {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
 }
 
-/* کم کردن فاصله‌ها */
-section {
-  padding-top: 2rem !important;
-  padding-bottom: 2rem !important;
-}
+.mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: 0; }
 
-.container {
-  padding-left: 1rem !important;
-  padding-right: 1rem !important;
-}
+/* ============================================================
+   Layout
+   ============================================================ */
+.wrap        { max-width: 1280px; margin: 0 auto; padding: 0 32px; }
+.wrap-narrow { max-width: 920px;  margin: 0 auto; padding: 0 32px; }
+.muted       { color: var(--ink-3); }
 
-/* کارت‌ها و باکس‌ها */
-.card, [class*="card"], [class*="box"] {
-  padding: 1rem !important;
-  margin-bottom: 1rem !important;
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; cursor: pointer; border: none;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 500; font-size: 12px;
+  padding: 9px 16px; border-radius: 999px;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+  letter-spacing: 0.005em; white-space: nowrap;
 }
+.btn-primary  { background: var(--ink);   color: var(--cream); }
+.btn-primary:hover { background: var(--olive-deep); }
+.btn-outline  { background: var(--cream); color: var(--ink); border: 1px solid var(--line); }
+.btn-outline:hover { border-color: var(--ink); }
+.btn-ghost    { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+.btn-ghost:hover { background: var(--ink); color: var(--cream); }
+.btn-olive    { background: var(--olive); color: var(--ink); }
+.btn-olive:hover { background: var(--olive-deep); color: var(--cream); }
+.btn-lg { padding: 13px 22px; font-size: 13px; }
+.btn-sm { padding: 7px 12px;  font-size: 11px; }
 
-/* فاصله بین المان‌ها */
-* + * {
-  margin-top: 0.75rem;
+/* ============================================================
+   Forms
+   ============================================================ */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 500; font-size: 11px;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink-3);
 }
-
-p {
-  margin-bottom: 0.75rem;
+.input, .select, .textarea {
+  background: transparent; border: none;
+  border-bottom: 1px solid var(--ink);
+  padding: 8px 0; font-family: inherit; font-size: 13px;
+  color: var(--ink); outline: none; border-radius: 0;
+  width: 100%;
 }
+.input::placeholder { color: var(--ink-4); }
+.input:focus { border-color: var(--olive-deep); }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+/* ============================================================
+   Marks & Pills
+   ============================================================ */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px;
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-3); font-family: 'IBM Plex Sans', sans-serif; font-weight: 500;
 }
+.pill-olive { border-color: var(--olive-deep); color: var(--olive-deep); }
 
-/* Premium Animations */
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+/* ============================================================
+   Progress Bars
+   ============================================================ */
+.bar { width: 100%; height: 4px; background: var(--line-soft); border-radius: 999px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--ink); border-radius: 999px; }
+.bar-olive > span { background: var(--olive-deep); }
+
+/* ============================================================
+   Typography helpers
+   ============================================================ */
+.num {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
+.num-tabular { font-variant-numeric: tabular-nums; }
 
-@keyframes gradient {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
+.ulink {
+  color: var(--ink);
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 1px;
+  text-decoration: none;
+  cursor: pointer;
 }
+.ulink:hover { color: var(--olive-deep); border-color: var(--olive-deep); }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
+/* ============================================================
+   Table
+   ============================================================ */
+table.t { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.t th, table.t td {
+  text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line);
 }
-
-@keyframes glow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(22, 163, 74, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(22, 163, 74, 0.6);
-  }
+table.t th {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 500; font-size: 10px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-3); border-bottom: 1px solid var(--ink);
 }
+table.t tbody tr:hover { background: var(--cream-deep); }
 
-.animate-shimmer {
-  animation: shimmer 2s infinite;
-}
+/* ============================================================
+   Scrollbar
+   ============================================================ */
+::-webkit-scrollbar       { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--cream); }
+::-webkit-scrollbar-thumb { background: var(--ink-4); }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
 
-.animate-gradient {
-  animation: gradient 3s ease infinite;
-}
+/* ============================================================
+   Rich text content (CKEditor / RichTextField output)
+   ============================================================ */
+.prose { font-size: 15px; line-height: 1.65; color: var(--ink); }
+.prose p  { margin-bottom: 0.7em; }
+.prose p:last-child { margin-bottom: 0; }
+.prose ul, .prose ol { padding-left: 1.4em; margin-bottom: 0.7em; }
+.prose li { margin-bottom: 0.2em; }
+.prose strong { font-weight: 600; }
+.prose em    { font-style: italic; }
+.prose h2, .prose h3 { font-family: 'IBM Plex Sans', sans-serif; margin-bottom: 0.4em; font-weight: 600; }
 
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-.animate-glow {
-  animation: glow 2s ease-in-out infinite;
-}
-
-/* Smooth Scrolling */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Premium Scrollbar */
-::-webkit-scrollbar {
-  width: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: #F9FEF5;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #7F8790, #8F92A1);
-  border-radius: 5px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #6F7780, #7F8291);
-}
-
-/* Glass Effect */
-.glass {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+/* ============================================================
+   Print / PDF Export
+   ============================================================ */
+@media print {
+  @page { size: A4; margin: 18mm 16mm; }
+  html, body { background: white !important; color: black !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .no-print { display: none !important; }
+  .wrap, .wrap-narrow { max-width: 100% !important; padding: 0 !important; }
+  main { padding: 0 !important; }
+  .print-section { page-break-inside: avoid; break-inside: avoid; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }

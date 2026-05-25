@@ -809,19 +809,20 @@ const translations = {
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('tr'); // Default: Turkish
+  // Fix T (Round 4): use the same localStorage key as i18n.tsx ('sx_lang') and
+  // default to English so both language systems stay in sync.
+  const [language, setLanguageState] = useState<Language>('en');
 
   useEffect(() => {
-    // Load language from localStorage
-    const savedLanguage = localStorage.getItem('language') as Language;
-    if (savedLanguage && (savedLanguage === 'tr' || savedLanguage === 'en')) {
+    const savedLanguage = localStorage.getItem('sx_lang') as Language;
+    if (savedLanguage === 'tr' || savedLanguage === 'en') {
       setLanguageState(savedLanguage);
     }
   }, []);
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('language', lang);
+    localStorage.setItem('sx_lang', lang);  // Fix T: was 'language'
   };
 
   const t = (key: string): string => {

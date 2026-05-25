@@ -1,181 +1,277 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import AppNav from '@/components/AppNav';
+import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
-import { surveyAPI } from '@/lib/api';
-import DashboardNavbar from '@/components/DashboardNavbar';
+import { Icon } from '@/components/shared';
+import { surveyAPI, attemptAPI } from '@/lib/api';
 
 interface Survey {
   id: number;
   name: string;
-  description: string;
-  total_questions: number;
-  is_active: boolean;
+  description?: string;
+  question_count?: number;
+  questions?: { id: number }[];
+  estimated_time?: string;
+  category?: string;   // env | soc | gov — may not come from API
+  tag?: string;
 }
 
+function SkeletonCard() {
+  return (
+    <div style={{
+      background: 'var(--paper)', border: '1px solid var(--line)',
+      padding: 28, minHeight: 200,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 22 }}>
+        <div style={{ height: 10, width: 60, background: 'var(--cream-deep)', borderRadius: 2 }} />
+        <div style={{ height: 20, width: 56, background: 'var(--cream-deep)', borderRadius: 999 }} />
+      </div>
+      <div style={{ height: 18, width: '65%', background: 'var(--cream-deep)', borderRadius: 2, marginBottom: 10 }} />
+      <div style={{ height: 12, width: '90%', background: 'var(--cream-deep)', borderRadius: 2, marginBottom: 6 }} />
+      <div style={{ height: 12, width: '75%', background: 'var(--cream-deep)', borderRadius: 2, marginBottom: 28 }} />
+      <div style={{ height: 1, background: 'var(--line)', marginBottom: 18 }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ height: 20, width: 120, background: 'var(--cream-deep)', borderRadius: 2 }} />
+        <div style={{ height: 32, width: 72, background: 'var(--cream-deep)', borderRadius: 999 }} />
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Surveys Page
+   ═══════════════════════════════════════════════════════════════ */
 export default function SurveysPage() {
-  const router = useRouter();
+  const { lang } = useLang();
   const { user, isLoading: authLoading } = useAuth();
-  const [surveys, setSurveys] = useState<Survey[]>([]);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  const [filter,   setFilter]   = useState('all');
+  const [surveys,  setSurveys]  = useState<Survey[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [starting, setStarting] = useState<number | null>(null);
+  const [startErr, setStartErr] = useState('');
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
+    if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
   useEffect(() => {
     if (user) {
-      loadSurveys();
+      surveyAPI
+        .getSurveys()
+        .then((data: any) => {
+          const list = Array.isArray(data) ? data : (data?.results ?? []);
+          setSurveys(list);
+        })
+        .catch(() => setSurveys([]))
+        .finally(() => setLoading(false));
     }
   }, [user]);
 
-  const loadSurveys = async () => {
+  /* Start a new attempt for a given survey */
+  const handleStart = async (surveyId: number) => {
+    if (starting !== null) return;   // fix: truthy check fails for id=0
+    setStarting(surveyId);
+    setStartErr('');
     try {
-      const data = await surveyAPI.getSurveys();
-      if (Array.isArray(data)) {
-        setSurveys(data);
-      } else if (data && Array.isArray(data.results)) {
-        setSurveys(data.results);
-      } else {
-        setSurveys([]);
-      }
-    } catch (error) {
-      console.error('Failed to load surveys:', error);
-      setSurveys([]);
-    } finally {
-      setLoading(false);
+      const attempt = await attemptAPI.startAttempt(surveyId);
+      router.push(`/questionnaire/${attempt.id}`);
+    } catch (err: any) {
+      console.error('Failed to start attempt:', err);
+      setStartErr(lang === 'tr' ? 'Başlatılamadı, tekrar dene.' : 'Could not start. Please try again.');
+      setStarting(null);
     }
   };
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-green-50 to-emerald-50">
-        <div className="text-center">
-          <div className="relative inline-block mb-6">
-            <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
-            <div className="relative w-20 h-20 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-          <p className="text-gray-700 font-semibold text-lg">Loading surveys...</p>
-        </div>
-      </div>
-    );
-  }
+  const qCount = (s: Survey) =>
+    s.question_count ?? s.questions?.length ?? 0;
 
-  if (!user) {
-    return null;
-  }
+  // Category filter — only shown if surveys have a category field
+  const hasCats = surveys.some((s) => s.category);
+  const filters: [string, string][] = hasCats
+    ? [
+        ['all', lang === 'tr' ? 'Tümü'          : 'All'],
+        ['env', lang === 'tr' ? 'Çevre'         : 'Environmental'],
+        ['soc', lang === 'tr' ? 'Sosyal'        : 'Social'],
+        ['gov', lang === 'tr' ? 'Yönetişim'     : 'Governance'],
+      ]
+    : [['all', lang === 'tr' ? 'Tümü' : 'All']];
+
+  const visible = surveys.filter((s) => filter === 'all' || s.category === filter);
+
+  if (authLoading) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-emerald-50">
-      <DashboardNavbar />
-      
-      {/* Background Effects */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-green-200/20 rounded-full blur-[150px] animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
-      </div>
-      
-      <main className="relative pt-20 pb-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="mb-6">
-            <Link 
-              href="/dashboard" 
-              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-4 group text-sm"
-            >
-              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform text-xs"></i>
-              <span>Back to Dashboard</span>
-            </Link>
-            
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl blur-xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-green-100 p-5">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg blur-md opacity-40"></div>
-                    <div className="relative w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
-                      <i className="fas fa-clipboard-list text-xl text-white"></i>
-                    </div>
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-800">
-                      Available Surveys
-                    </h1>
-                    <p className="text-gray-600 text-sm font-medium">
-                      Choose a sustainability assessment to begin
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <AppNav />
 
-          {/* Surveys Grid */}
-          {surveys.length === 0 ? (
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 rounded-xl blur-xl opacity-10"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-gray-200 p-10 text-center">
-                <div className="relative inline-block mb-4">
-                  <div className="absolute inset-0 bg-gray-300 rounded-xl blur-lg opacity-30"></div>
-                  <div className="relative w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center">
-                    <i className="fas fa-clipboard-list text-3xl text-gray-400"></i>
-                  </div>
-                </div>
-                <h3 className="text-xl font-bold text-gray-800 mb-2">No Surveys Available</h3>
-                <p className="text-gray-600 text-sm">Please contact administrator to add surveys.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {surveys.map((survey) => (
-                <div key={survey.id} className="group relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl blur-lg opacity-0 group-hover:opacity-20 transition-opacity"></div>
-                  <div className="relative bg-white/95 backdrop-blur-xl rounded-xl shadow-md border border-green-100 group-hover:border-green-300 p-4 group-hover:scale-105 transition-all">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg blur-md opacity-30 group-hover:opacity-40 transition-opacity"></div>
-                        <div className="relative w-10 h-10 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
-                          <i className="fas fa-clipboard-check text-green-600 text-base"></i>
-                        </div>
-                      </div>
-                      <span className="px-2 py-1 bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 text-xs font-bold rounded-full border border-green-200">
-                        Active
-                      </span>
-                    </div>
+      <main className="wrap" style={{ padding: '36px 32px 80px' }}>
 
-                    <h3 className="text-base font-bold text-gray-800 mb-2">
-                      {survey.name}
-                    </h3>
-                    
-                    <p className="text-gray-600 text-sm mb-3 line-clamp-3 leading-relaxed">
-                      {survey.description}
-                    </p>
-
-                    <div className="flex items-center gap-2 text-xs text-gray-600 font-semibold mb-4 px-2 py-1.5 bg-gray-50 rounded-lg">
-                      <i className="fas fa-question-circle text-green-600"></i>
-                      <span>{survey.total_questions} questions</span>
-                    </div>
-
-                    <Link
-                      href={`/questionnaire/${survey.id}`}
-                      className="group/btn relative block w-full py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white text-center rounded-lg font-bold text-sm hover:scale-105 transition-all shadow-md overflow-hidden"
-                    >
-                      <span className="relative z-10 flex items-center justify-center gap-2">
-                        Start Assessment
-                        <i className="fas fa-arrow-right group-hover/btn:translate-x-1 transition-transform text-xs"></i>
-                      </span>
-                      <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 opacity-0 group-hover/btn:opacity-100 transition-opacity"></div>
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* ── Header ── */}
+        <div style={{ marginBottom: 40 }}>
+          <span style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 11, color: 'var(--ink-4)',
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            display: 'block', marginBottom: 10,
+          }}>
+            {loading
+              ? '…'
+              : `${lang === 'tr' ? 'Kütüphane · ' : 'Library · '}${surveys.length} ${lang === 'tr' ? 'anket' : 'surveys'}`}
+          </span>
+          <h1 style={{ fontSize: 36, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 8 }}>
+            {lang === 'tr'
+              ? <>Bir{' '}<em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>değerlendirme</em>{' '}seçin.</>
+              : <>Choose an{' '}<em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>assessment</em>.</>}
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 520, lineHeight: 1.6 }}>
+            {lang === 'tr'
+              ? 'Her anket farklı bir kapsama ayarlanmıştır. Temel değerlendirmeden başlayın ya da odaklanmış bir gözden geçirmeye atlayın.'
+              : 'Each survey is calibrated to a different scope. Start with the core baseline, or jump straight to a focused review.'}
+          </p>
         </div>
+
+        {/* ── Filter chips ── */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 18, paddingBottom: 14, borderBottom: '1px solid var(--line)',
+        }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {filters.map(([k, l]) => (
+              <button
+                key={k}
+                onClick={() => setFilter(k)}
+                style={{
+                  padding: '6px 14px', borderRadius: 999,
+                  background: filter === k ? 'var(--ink)' : 'transparent',
+                  color:      filter === k ? 'var(--cream)' : 'var(--ink-3)',
+                  border: 'none', cursor: 'pointer',
+                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 11.5,
+                }}
+              >{l}</button>
+            ))}
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+            {loading ? '…' : `${visible.length} ${lang === 'tr' ? 'sonuç' : 'results'}`}
+          </span>
+        </div>
+
+        {/* ── Error banner ── */}
+        {startErr && (
+          <div style={{
+            background: '#FEF2F0', border: '1px solid #F5C6BB',
+            padding: '12px 18px', marginBottom: 18,
+            fontSize: 12, color: 'var(--danger)',
+            fontFamily: "'IBM Plex Mono', monospace",
+          }}>
+            {startErr}
+          </div>
+        )}
+
+        {/* ── Survey cards ── */}
+        {loading ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : visible.length === 0 ? (
+          <div style={{
+            background: 'var(--paper)', border: '1px solid var(--line)',
+            padding: '64px 40px', textAlign: 'center',
+          }}>
+            <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 8 }}>
+              {lang === 'tr' ? 'Henüz hiç anket yok.' : 'No surveys available yet.'}
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+              {lang === 'tr' ? 'Yönetici tarafından eklendikten sonra burada görünecek.' : 'They will appear here once added by an admin.'}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            {visible.map((s, idx) => (
+              <div
+                key={s.id}
+                style={{
+                  background: 'var(--paper)', border: '1px solid var(--line)',
+                  padding: 28, display: 'flex', flexDirection: 'column',
+                  cursor: 'default', transition: 'border-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
+              >
+                {/* Top row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
+                  <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 11,
+                    color: 'var(--ink-4)', letterSpacing: '0.08em',
+                  }}>
+                    SX · {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  {(s.tag || s.category) && (
+                    <span className="pill pill-olive">
+                      {s.tag ?? s.category?.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+
+                {/* Title + description */}
+                <h3 style={{ fontSize: 18, marginBottom: 10, fontWeight: 500, letterSpacing: '-0.01em' }}>
+                  {s.name}
+                </h3>
+                {s.description && (
+                  <p style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 24, lineHeight: 1.65 }}>
+                    {s.description}
+                  </p>
+                )}
+
+                {/* Footer */}
+                <div style={{
+                  marginTop: 'auto',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  paddingTop: 18, borderTop: '1px solid var(--line)',
+                }}>
+                  <div style={{ display: 'flex', gap: 22, alignItems: 'baseline' }}>
+                    {qCount(s) > 0 && (
+                      <div>
+                        <span style={{
+                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                          fontSize: 20, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums',
+                        }}>{qCount(s)}</span>
+                        <span style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 4 }}>
+                          {lang === 'tr' ? 'soru' : 'questions'}
+                        </span>
+                      </div>
+                    )}
+                    {s.estimated_time && (
+                      <div>
+                        <span style={{
+                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                          fontSize: 20, letterSpacing: '-0.03em',
+                        }}>{s.estimated_time}</span>
+                        <span style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 4 }}>min</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleStart(s.id)}
+                    disabled={starting !== null}
+                    style={{ opacity: starting === s.id ? 0.6 : 1, minWidth: 80 }}
+                  >
+                    {starting === s.id
+                      ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…')
+                      : (lang === 'tr' ? 'Başla' : 'Start')}
+                    {starting !== s.id && <Icon.arrow />}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );

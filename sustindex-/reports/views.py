@@ -14,9 +14,19 @@ def generate_report(request, attempt_id):
     
     if not attempt.is_completed:
         return JsonResponse({'error': 'Questionnaire not completed'}, status=400)
-    
-    esg_scores = attempt.calculate_esg_scores()
-    
+
+    # Fix BC: was attempt.calculate_esg_scores() — method does not exist.
+    # calculate_scores() is the correct name; it saves sub-scores and returns the dict.
+    scores = attempt.calculate_scores()
+    esg_scores = {
+        'total':         scores['total_percentage'],
+        'grade':         scores['grade'],
+        'environmental': attempt.environmental_score or 0,
+        'social':        attempt.social_score or 0,
+        'governance':    attempt.governance_score or 0,
+        'categories':    scores['categories'],
+    }
+
     report, created = Report.objects.get_or_create(
         attempt=attempt,
         defaults={'generated_at': timezone.now()}
@@ -41,7 +51,7 @@ def view_report(request, report_id):
             'social': report.attempt.social_score,
             'governance': report.attempt.governance_score,
             'total': report.attempt.total_score,
-            'grade': report.attempt.esg_grade
+            'grade': report.attempt.overall_grade
         },
         'recommendations': report.attempt.get_recommendations(),
         'sections': report.sections.all()
@@ -80,7 +90,7 @@ def download_report_pdf(request, report_id):
         company_info = [
             ['Company:', report.attempt.user.company_name or 'N/A'],
             ['Assessment Date:', report.attempt.completed_at.strftime('%Y-%m-%d') if report.attempt.completed_at else 'N/A'],
-            ['ESG Grade:', report.attempt.esg_grade],
+            ['ESG Grade:', report.attempt.overall_grade],
             ['Total Score:', f"{report.attempt.total_score:.1f}/100"]
         ]
         
@@ -102,7 +112,7 @@ def download_report_pdf(request, report_id):
             ['Environmental', f"{report.attempt.environmental_score:.1f}", get_component_grade(report.attempt.environmental_score)],
             ['Social', f"{report.attempt.social_score:.1f}", get_component_grade(report.attempt.social_score)],
             ['Governance', f"{report.attempt.governance_score:.1f}", get_component_grade(report.attempt.governance_score)],
-            ['Overall ESG', f"{report.attempt.total_score:.1f}", report.attempt.esg_grade]
+            ['Overall ESG', f"{report.attempt.total_score:.1f}", report.attempt.overall_grade]
         ]
         
         esg_table = Table(esg_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
@@ -170,8 +180,17 @@ def create_report_sections(report, attempt, esg_scores):
     )
     
     from questionnaire.models import Category
-    categories = Category.objects.all()
-    
+    # Fix BE: was Category.objects.all() — loaded ALL categories from every survey.
+    # Now scoped to the attempt's survey (or falls back to questions' implied survey).
+    if attempt.survey:
+        categories = Category.objects.filter(
+            survey=attempt.survey
+        ).order_by('order')
+    else:
+        categories = Category.objects.filter(
+            questions__is_active=True
+        ).distinct().order_by('order')
+
     for i, category in enumerate(categories, 2):
         category_score = category.get_category_score(attempt)
         documents_count = get_category_documents_count(attempt, category)

@@ -1,170 +1,343 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import AppNav from '@/components/AppNav';
+import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
+import { Icon } from '@/components/shared';
 import { elearningAPI } from '@/lib/api';
-import DashboardNavbar from '@/components/DashboardNavbar';
 
-interface Course {
+/* ─── Types ────────────────────────────────────────────────────── */
+interface ApiCourse {
   id: number;
-  title: string;
-  description: string;
-  thumbnail: string;
+  title_display: string;
+  description_display: string;
+  tag: string;
+  level: string;
+  level_display: string;
+  icon_emoji: string;
+  duration_hours: string;
   total_lessons: number;
-  completed_lessons: number;
   progress_percentage: number;
+  order: number;
 }
 
+/* ─── Helpers ──────────────────────────────────────────────────── */
+function getStatus(c: ApiCourse): 'done' | 'active' | 'new' {
+  if (c.progress_percentage >= 100) return 'done';
+  if (c.progress_percentage > 0)    return 'active';
+  return 'new';
+}
+
+/* ─── Skeleton card ────────────────────────────────────────────── */
+function SkeletonCard() {
+  return (
+    <div style={{
+      background: 'var(--paper)', border: '1px solid var(--line)',
+      padding: 26, minHeight: 260,
+    }}>
+      {[44, 18, 12, 12, 8].map((h, i) => (
+        <div key={i} style={{
+          height: h, marginBottom: i < 2 ? 22 : 10,
+          background: 'var(--cream-deep)', borderRadius: 2,
+          width: i === 0 ? 44 : i === 1 ? '70%' : '90%',
+          animation: 'pulse 1.4s ease-in-out infinite',
+        }} />
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Courses Page
+   ═══════════════════════════════════════════════════════════════ */
 export default function CoursesPage() {
+  const { t, lang } = useLang();
+  const { user, isLoading: authLoading } = useAuth();  // Fix C
   const router = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [filter, setFilter] = useState('all');
+  const [courses, setCourses] = useState<ApiCourse[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fix C: redirect unauthenticated users instead of showing empty page
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
+    if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (user) {
-      loadCourses();
-    }
+    if (!user) return;   // wait for auth before fetching
+    elearningAPI
+      .getCourses()
+      .then((data: any) => {
+        const list: ApiCourse[] = Array.isArray(data) ? data : (data?.results ?? []);
+        setCourses(list);
+      })
+      .catch(() => setCourses([]))
+      .finally(() => setLoading(false));
   }, [user]);
 
-  const loadCourses = async () => {
-    try {
-      const data = await elearningAPI.getCourses();
-      setCourses(Array.isArray(data) ? data : data.results || []);
-    } catch (error) {
-      console.error('Failed to load courses:', error);
-      setCourses([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (authLoading) return null;
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-green-50 to-emerald-50">
-        <div className="text-center">
-          <div className="relative inline-block mb-6">
-            <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
-            <div className="relative w-20 h-20 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-          <p className="text-gray-700 font-semibold text-lg">Loading courses...</p>
-        </div>
-      </div>
-    );
-  }
+  const levelLabel = (l: string) =>
+    l === 'beg'
+      ? t('courses_level_beg')
+      : l === 'int'
+        ? t('courses_level_int')
+        : t('courses_level_adv');
 
-  if (!user) return null;
+  const filters = [
+    ['all',    t('courses_filter_all'),    courses.length],
+    ['active', t('courses_filter_active'), courses.filter((c) => getStatus(c) === 'active').length],
+    ['done',   t('courses_filter_done'),   courses.filter((c) => getStatus(c) === 'done').length],
+    ['new',    t('courses_filter_new'),    courses.filter((c) => getStatus(c) === 'new').length],
+  ] as [string, string, number][];
+
+  const visible  = courses.filter((c) => filter === 'all' || getStatus(c) === filter);
+  const activeCourse = courses.find((c) => getStatus(c) === 'active') ?? null;
+
+  const num = (n: number) => String(n).padStart(2, '0');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-emerald-50">
-      <DashboardNavbar />
-      
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-green-200/20 rounded-full blur-[150px] animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
-      </div>
-      
-      <main className="relative pt-20 pb-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-5">
-            <Link 
-              href="/dashboard" 
-              className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-semibold mb-4 group text-sm"
-            >
-              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform text-xs"></i>
-              <span>Back to Dashboard</span>
-            </Link>
-            
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl blur-xl opacity-10 group-hover:opacity-20 transition-opacity"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-green-100 p-5">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg blur-md opacity-40"></div>
-                    <div className="relative w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
-                      <i className="fas fa-graduation-cap text-xl text-white"></i>
-                    </div>
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-800">E-Learning Courses</h1>
-                    <p className="text-gray-600 text-sm font-medium">Enhance your sustainability knowledge</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <AppNav />
+
+      <main className="wrap" style={{ padding: '36px 32px 80px' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 40 }}>
+          <div>
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 11, color: 'var(--ink-4)',
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              display: 'block', marginBottom: 10,
+            }}>
+              {t('courses_eyebrow')}
+            </span>
+            <h1 style={{ fontSize: 36, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 8 }}>
+              {t('courses_h_1')}{' '}
+              <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>{t('courses_h_2')}</em>{' '}
+              {t('courses_h_3')}
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 560, lineHeight: 1.6 }}>{t('courses_desc')}</p>
           </div>
+        </div>
 
-          {courses.length === 0 ? (
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 rounded-xl blur-xl opacity-10"></div>
-              <div className="relative bg-white/95 backdrop-blur-2xl rounded-xl shadow-lg border border-gray-200 p-10 text-center">
-                <div className="relative inline-block mb-4">
-                  <div className="absolute inset-0 bg-gray-300 rounded-xl blur-lg opacity-30"></div>
-                  <div className="relative w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center">
-                    <i className="fas fa-book-open text-3xl text-gray-400"></i>
-                  </div>
+        {/* Continue learning highlight — shown if an active course exists */}
+        {!loading && activeCourse && (
+          <div style={{
+            background: 'var(--ink)', color: 'var(--cream)',
+            padding: 28, marginBottom: 32,
+            display: 'grid', gridTemplateColumns: '1fr auto', gap: 32, alignItems: 'center',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            <Image src="/assets/logo-leaf.png" alt="" width={200} height={200} style={{
+              position: 'absolute', right: -60, top: -40,
+              width: 200, opacity: 0.06, pointerEvents: 'none',
+            }} />
+            <div style={{ position: 'relative' }}>
+              <span className="eyebrow" style={{ color: 'rgba(249,239,229,0.55)', display: 'block', marginBottom: 6 }}>
+                {lang === 'tr' ? 'Öğrenmeye Devam Et' : 'Continue Learning'}
+              </span>
+              <h3 style={{ fontSize: 20, fontWeight: 500, marginBottom: 8, color: 'var(--cream)', letterSpacing: '-0.01em' }}>
+                {activeCourse.title_display}
+              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontSize: 11.5, color: 'rgba(249,239,229,0.65)', marginBottom: 14 }}>
+                <span>
+                  {Math.round(activeCourse.total_lessons * activeCourse.progress_percentage / 100)} / {activeCourse.total_lessons}{' '}
+                  {lang === 'tr' ? 'modül' : 'modules'}
+                </span>
+                <span>·</span>
+                <span>{activeCourse.duration_hours}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, maxWidth: 480 }}>
+                <div style={{ flex: 1, height: 3, background: 'rgba(249,239,229,0.15)' }}>
+                  <div style={{ width: `${activeCourse.progress_percentage}%`, height: '100%', background: 'var(--olive)' }} />
                 </div>
-                <h3 className="text-xl font-bold text-gray-800 mb-2">No Courses Available</h3>
-                <p className="text-gray-600 text-sm">Check back later for new courses.</p>
+                <span style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                  fontSize: 22, color: 'var(--cream)', letterSpacing: '-0.03em',
+                }}>
+                  {activeCourse.progress_percentage}<span style={{ fontSize: 11, color: 'rgba(249,239,229,0.5)' }}>%</span>
+                </span>
               </div>
             </div>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {courses.map((course) => (
-                <Link key={course.id} href={`/courses/${course.id}`} className="group relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl blur-lg opacity-0 group-hover:opacity-20 transition-opacity"></div>
-                  <div className="relative bg-white/95 backdrop-blur-xl rounded-xl shadow-md border border-green-100 group-hover:border-green-300 overflow-hidden group-hover:scale-105 transition-all">
-                    {course.thumbnail && (
-                      <img src={course.thumbnail} alt={course.title} className="w-full h-32 object-cover" />
-                    )}
-                    <div className="p-4">
-                      <h3 className="text-base font-bold text-gray-800 mb-2">{course.title}</h3>
-                      <div 
-                        className="text-gray-600 text-sm mb-3 line-clamp-3"
-                        dangerouslySetInnerHTML={{ __html: course.description }}
-                      />
-                      
-                      <div className="flex items-center gap-1.5 text-xs text-gray-600 font-semibold mb-3">
-                        <i className="fas fa-book text-green-600"></i>
-                        <span>{course.total_lessons} lessons</span>
-                      </div>
+            {/* Fix U: resume button now navigates to the course */}
+            <button
+              onClick={() => router.push(`/courses/${activeCourse.id}`)}
+              style={{
+                padding: '12px 22px', borderRadius: 999,
+                background: 'var(--cream)', color: 'var(--ink)',
+                border: 'none', cursor: 'pointer',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 12,
+                display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, position: 'relative',
+              }}>
+              {t('courses_resume')} <Icon.arrow />
+            </button>
+          </div>
+        )}
 
-                      {course.progress_percentage > 0 && (
-                        <div className="mb-3">
-                          <div className="flex justify-between text-xs mb-1.5">
-                            <span className="text-gray-600 font-semibold">Progress</span>
-                            <span className="text-green-600 font-bold">{course.progress_percentage}%</span>
-                          </div>
-                          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-green-600 to-emerald-600 transition-all"
-                              style={{ width: `${course.progress_percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
+        {/* Filter chips */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 18, paddingBottom: 14, borderBottom: '1px solid var(--line)',
+        }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {filters.map(([k, l, count]) => (
+              <button key={k} onClick={() => setFilter(k)} style={{
+                padding: '6px 14px', borderRadius: 999,
+                background: filter === k ? 'var(--ink)' : 'transparent',
+                color: filter === k ? 'var(--cream)' : 'var(--ink-3)',
+                border: 'none', cursor: 'pointer',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 11.5,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}>
+                {l}
+                <span style={{ fontSize: 10, opacity: 0.6, fontFamily: "'IBM Plex Mono', monospace" }}>{count}</span>
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+            {loading ? '…' : `${visible.length} ${lang === 'tr' ? 'sonuç' : 'results'}`}
+          </span>
+        </div>
 
-                      <div className="flex items-center justify-between pt-3 border-t border-green-100">
-                        <span className="text-xs text-gray-600 font-semibold">
-                          {course.completed_lessons} / {course.total_lessons} completed
+        {/* Course grid */}
+        {loading ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : visible.length === 0 ? (
+          <div style={{
+            background: 'var(--paper)', border: '1px solid var(--line)',
+            padding: '64px 40px', textAlign: 'center',
+          }}>
+            <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+              {lang === 'tr' ? 'Bu kategoride kurs bulunamadı.' : 'No courses found in this category.'}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            {visible.map((c, idx) => {
+              const status = getStatus(c);
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => router.push(`/courses/${c.id}`)}  // Fix U: was not navigating
+                  style={{
+                    background: 'var(--paper)', border: '1px solid var(--line)',
+                    padding: 26, display: 'flex', flexDirection: 'column',
+                    cursor: 'pointer', transition: 'border-color 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
+                >
+                  {/* Top row: icon + number + status */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <div style={{
+                        width: 44, height: 44,
+                        background: 'var(--cream-deep)', border: '1px solid var(--line)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 20,
+                      }}>{c.icon_emoji || '📚'}</div>
+                      <div>
+                        <span style={{
+                          fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+                          color: 'var(--ink-4)', letterSpacing: '0.08em', display: 'block', marginBottom: 2,
+                        }}>
+                          SX-EDU · {num(c.order || idx + 1)}
                         </span>
-                        <i className="fas fa-arrow-right text-green-600 text-xs group-hover:translate-x-1 transition-transform"></i>
+                        <span style={{
+                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500,
+                          fontSize: 11, color: 'var(--olive-deep)', letterSpacing: '0.04em',
+                        }}>
+                          {c.tag} · {levelLabel(c.level)}
+                        </span>
                       </div>
                     </div>
+
+                    {status === 'done' && (
+                      <span style={{
+                        fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 10,
+                        fontWeight: 600, color: 'var(--olive-deep)', letterSpacing: '0.1em',
+                        textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5,
+                      }}>
+                        <Icon.check /> {t('courses_certificate')}
+                      </span>
+                    )}
+                    {status === 'new' && (
+                      <span style={{
+                        fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 10,
+                        fontWeight: 600, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
+                      }}>
+                        {lang === 'tr' ? 'YENİ' : 'NEW'}
+                      </span>
+                    )}
                   </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+
+                  <h3 style={{ fontSize: 18, marginBottom: 10, fontWeight: 500, letterSpacing: '-0.01em' }}>
+                    {c.title_display}
+                  </h3>
+                  <p style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 22, lineHeight: 1.65 }}>
+                    {c.description_display}
+                  </p>
+
+                  {/* Progress bar — active courses only */}
+                  {c.progress_percentage > 0 && c.progress_percentage < 100 && (
+                    <div style={{ marginBottom: 18 }}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'baseline', marginBottom: 6,
+                      }}>
+                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)' }}>
+                          {Math.round(c.total_lessons * c.progress_percentage / 100)} / {c.total_lessons}
+                        </span>
+                        <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 11, color: 'var(--olive-deep)' }}>
+                          {c.progress_percentage}%
+                        </span>
+                      </div>
+                      <div className="bar bar-olive">
+                        <span style={{ width: `${c.progress_percentage}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div style={{
+                    marginTop: 'auto',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    paddingTop: 18, borderTop: '1px solid var(--line)',
+                  }}>
+                    <div style={{ display: 'flex', gap: 22, alignItems: 'baseline' }}>
+                      <div>
+                        <span style={{
+                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                          fontSize: 20, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums',
+                        }}>{c.total_lessons}</span>
+                        <span style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 4 }}>{t('courses_modules')}</span>
+                      </div>
+                      <span style={{
+                        fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                        fontSize: 20, letterSpacing: '-0.03em',
+                      }}>{c.duration_hours}</span>
+                    </div>
+                    <button className={status === 'done' ? 'btn btn-outline btn-sm' : 'btn btn-primary btn-sm'}>
+                      {status === 'done'
+                        ? t('courses_review')
+                        : status === 'active'
+                          ? t('courses_resume')
+                          : t('courses_start')}
+                      <Icon.arrow />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </main>
     </div>
   );

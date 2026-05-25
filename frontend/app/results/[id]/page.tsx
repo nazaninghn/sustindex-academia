@@ -1,389 +1,487 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import AppNav from '@/components/AppNav';
+import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
-import { useLanguage } from '@/lib/language';
+import { Icon } from '@/components/shared';
 import { attemptAPI } from '@/lib/api';
-import DashboardNavbar from '@/components/DashboardNavbar';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { gradeColor, priorityColor, sanitizeHtml } from '@/lib/utils';
 
-import { AttemptResponse, getScoreTone, toneTailwind } from '@/lib/types';
+function priorityDot(p: string) {
+  return (
+    <span style={{
+      display: 'inline-block', width: 6, height: 6,
+      borderRadius: '50%', background: priorityColor(p), flexShrink: 0,
+    }} />
+  );
+}
 
-type Attempt = AttemptResponse;
+/* ─── Score ring ─────────────────────────────────────────── */
+function ScoreRing({ score, grade }: { score: number; grade: string }) {
+  const r = 52, cx = 64, cy = 64, stroke = 5;
+  const circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
+  return (
+    <svg width={128} height={128} viewBox="0 0 128 128">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
+      <circle
+        cx={cx} cy={cy} r={r} fill="none"
+        stroke={gradeColor(grade)} strokeWidth={stroke}
+        strokeDasharray={`${dash} ${circ - dash}`}
+        strokeLinecap="round"
+        transform="rotate(-90 64 64)"
+        style={{ transition: 'stroke-dasharray 1s ease' }}
+      />
+      <text x={cx} y={cy - 6} textAnchor="middle"
+        fontFamily="'IBM Plex Sans', sans-serif" fontWeight="300" fontSize="28"
+        letterSpacing="-2" fill="var(--ink)">{score}</text>
+      <text x={cx} y={cy + 14} textAnchor="middle"
+        fontFamily="'IBM Plex Sans', sans-serif" fontWeight="600" fontSize="13"
+        fill={gradeColor(grade)}>{grade}</text>
+    </svg>
+  );
+}
 
+/* ═══════════════════════════════════════════════════════════
+   Results Page
+   ═══════════════════════════════════════════════════════════ */
 export default function ResultsPage() {
-  const router = useRouter();
-  const params = useParams();
-  const attemptId = parseInt(params.id as string);
+  const { id }   = useParams<{ id: string }>();
+  const router   = useRouter();
+  const { lang } = useLang();
   const { user, isLoading: authLoading } = useAuth();
-  const { t } = useLanguage();
-  
-  const [attempt, setAttempt] = useState<Attempt | null>(null);
+
+  const [attempt, setAttempt] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const [tab,     setTab]     = useState<'overview' | 'evidence'>('overview');
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
+    if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (user && attemptId) {
-      loadResults();
+    if (user && id) {
+      attemptAPI.getAttempt(Number(id))
+        .then((data) => setAttempt(data))
+        .catch(console.error)
+        .finally(() => setLoading(false));
     }
-  }, [user, attemptId]);
+  }, [user, id]);
 
-  const loadResults = async () => {
-    try {
-      const data = await attemptAPI.getAttempt(attemptId);
-      setAttempt(data);
-    } catch (error) {
-      console.error('Failed to load results:', error);
-      alert(t('error.results.load'));
-      router.push('/dashboard');
-    } finally {
-      setLoading(false);
+  // Redirect incomplete attempts — must be in effect, NOT during render
+  useEffect(() => {
+    if (!loading && attempt && !attempt.is_completed) {
+      router.replace(`/questionnaire/${id}`);
     }
-  };
+  }, [loading, attempt, id, router]);
 
-  const getGradeColor = (grade: string) => {
-    if (grade.startsWith('A')) return 'text-green-600';
-    if (grade.startsWith('B')) return 'text-emerald-600';
-    if (grade.startsWith('C')) return 'text-yellow-600';
-    return 'text-red-500';
-  };
-
-  const getGradeBg = (grade: string) => {
-    if (grade.startsWith('A')) return 'bg-green-600';
-    if (grade.startsWith('B')) return 'bg-emerald-600';
-    if (grade.startsWith('C')) return 'bg-yellow-600';
-    return 'bg-red-500';
-  };
-
-  const handleExport = async () => {
-    if (!contentRef.current || !attempt) return;
-    
-    setExporting(true);
-    try {
-      // Create canvas from the content
-      const canvas = await html2canvas(contentRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
-      const imgY = 10;
-      
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
-      
-      // Download the PDF
-      const fileName = `${attempt.survey_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-    } catch (error) {
-      console.error('Failed to export PDF:', error);
-      alert(t('results.exporterror'));
-    } finally {
-      setExporting(false);
-    }
-  };
-
+  /* ── Loading ── */
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl text-primary">{t('results.loading')}</div>
+      <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
+          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
+        </span>
       </div>
     );
   }
 
-  if (!user || !attempt) {
-    return null;
+  /* ── Not found ── */
+  if (!attempt) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+        <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+          {lang === 'tr' ? 'Değerlendirme bulunamadı.' : 'Assessment not found.'}
+        </p>
+        <Link href="/history" style={{ textDecoration: 'none' }}>
+          <button className="btn btn-outline">{lang === 'tr' ? '← Geçmişe Dön' : '← Back to History'}</button>
+        </Link>
+      </div>
+    );
   }
 
+  /* ── Incomplete — redirect handled in useEffect above ── */
+  if (!attempt.is_completed) return null;
+
+  const score       = Math.round(attempt.total_score ?? 0);
+  const grade       = attempt.overall_grade ?? '—';
+  const categories  = attempt.category_scores ?? [];
+  const recs        = attempt.recommendations ?? [];
+  const answersArr: any[] = attempt.answers ?? [];
+  const companyName = user?.company_name || user?.username || '';
+  const completedAt = attempt.completed_at
+    ? new Date(attempt.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '—';
+
+  // Answers that have notes or documents
+  const evidenceAnswers = answersArr.filter((a) => a.notes || a.documents?.length > 0);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-emerald-50">
-      <DashboardNavbar />
-      
-      {/* Background Effects */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-green-200/20 rounded-full blur-[150px] animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
-      </div>
-      
-      <main className="relative pt-24 pb-12">
-        <div ref={contentRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="text-center mb-12">
-            <div className={`inline-block px-8 py-4 ${getGradeBg(attempt.overall_grade)} text-white rounded-2xl text-6xl font-bold mb-4`}>
-              {attempt.overall_grade}
-            </div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">
-              {t('results.complete')}
-            </h1>
-            <p className="text-gray-600 text-lg">
-              {attempt.survey_name}
-            </p>
-            <p className="text-gray-500 text-sm mt-2">
-              {t('results.completedon')} {new Date(attempt.completed_at).toLocaleDateString()}
-            </p>
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <div className="no-print"><AppNav /></div>
+
+      <main className="wrap" style={{ padding: '32px 32px 80px' }}>
+
+        {/* ── Toolbar ── */}
+        <div className="no-print" style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32,
+        }}>
+          <Link href="/dashboard" style={{ textDecoration: 'none', fontSize: 11, color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 6, letterSpacing: '0.02em' }}>
+            ← {lang === 'tr' ? 'Panele Dön' : 'Back to Dashboard'}
+          </Link>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link href="/surveys" style={{ textDecoration: 'none' }}>
+              <button className="btn btn-outline btn-sm">
+                {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'} <Icon.plus />
+              </button>
+            </Link>
+            <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
+              <Icon.download /> {lang === 'tr' ? 'PDF İndir' : 'Export PDF'}
+            </button>
           </div>
+        </div>
 
-          {/* Overall Score */}
-          <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border-2 border-green-100 p-8 mb-8 text-center">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('results.overall')}</h2>
-            <div className="text-6xl font-bold text-green-600 mb-2">
-              {Math.round(attempt.total_score)}%
-            </div>
-            {attempt.category_scores && attempt.category_scores.length > 0 && (
-              <p className="text-gray-500 text-lg mb-1">
-                {attempt.category_scores.reduce((sum, c) => sum + c.score, 0)} / {attempt.category_scores.reduce((sum, c) => sum + c.max_score, 0)} pts
-              </p>
-            )}
-            <p className="text-gray-600">{t('results.outof')}</p>
-          </div>
-
-          {/* Dynamic Category Scores */}
-          {attempt.category_scores && attempt.category_scores.length > 0 && (
-          <div className={`grid gap-6 mb-8 ${attempt.category_scores.length === 1 ? 'md:grid-cols-1' : attempt.category_scores.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
-            {attempt.category_scores.map((cat, index) => {
-              const icons = ['fa-leaf', 'fa-users', 'fa-balance-scale', 'fa-laptop', 'fa-globe', 'fa-chart-bar'];
-              const tone = getScoreTone(cat.percentage);
-              return (
-                <ScoreCard
-                  key={cat.id}
-                  title={cat.name}
-                  score={cat.percentage}
-                  earned={cat.score}
-                  maxScore={cat.max_score}
-                  icon={icons[index % icons.length]}
-                  tone={tone}
-                />
-              );
-            })}
-          </div>
-          )}
-
-          {/* Recommendations */}
-          {attempt.recommendations && attempt.recommendations.length > 0 && (
-            <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border-2 border-green-100 p-8 mb-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                <i className="fas fa-lightbulb text-yellow-500 mr-2"></i>
-                {t('results.recommendations')}
-              </h2>
-              <div className="space-y-4">
-                {attempt.recommendations.map((rec, index) => (
-                  <div
-                    key={index}
-                    className="border-l-4 border-green-600 bg-green-50 p-4 rounded-r-lg"
-                  >
-                    <div className="flex items-center mb-2">
-                      <span className="px-3 py-1 bg-green-100 text-green-700 text-sm font-semibold rounded-full mr-3 border-2 border-green-200">
-                        {rec.category}
-                      </span>
-                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
-                        rec.priority === 'High' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'
-                      }`}>
-                        {rec.priority === 'High' ? t('results.high') : rec.priority === 'Medium' ? t('results.medium') : t('results.low')} {t('results.priority')}
-                      </span>
-                    </div>
-                    <p className="text-gray-700">{rec.suggestion}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Detailed Answers */}
-          {attempt.answers && attempt.answers.length > 0 && (
-            <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border-2 border-green-100 p-8 mb-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                <i className="fas fa-list-check mr-2"></i>
-                {t('results.answers')}
-              </h2>
-              <div className="space-y-6">
-                {attempt.answers.map((answer, index) => (
-                  <div key={answer.id} className="border-b border-gray-200 pb-6 last:border-b-0">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <span className="text-sm text-gray-500 font-semibold">{t('results.question')} {index + 1}</span>
-                        <div 
-                          className="text-gray-800 font-medium mt-1"
-                          dangerouslySetInnerHTML={{ __html: answer.question_text }}
-                        />
-                      </div>
-                      <div className="ml-4 px-3 py-1 bg-green-100 text-green-700 text-sm font-bold rounded-full border-2 border-green-200">
-                        {answer.total_score} pts
-                      </div>
-                    </div>
-                    
-                    <div className="ml-4 pl-4 border-l-2 border-green-300">
-                      {/* Choice-based answer */}
-                      {answer.choice_text && (
-                      <p className="text-gray-700">
-                        <i className="fas fa-check-circle text-green-600 mr-2"></i>
-                        {answer.choice_text}
-                      </p>
-                      )}
-                      
-                      {/* Multiple choices display (only show if there are actual choices, not text answer) */}
-                      {!answer.choice_text && answer.choices_display && 
-                       answer.choices_display !== 'No answer provided' && 
-                       answer.choices_display !== '-' &&
-                       answer.choices_display !== answer.text_answer && 
-                       !answer.choices_display.endsWith(`| ${answer.text_answer}`) && (
-                      <p className="text-gray-700">
-                        <i className="fas fa-check-circle text-green-600 mr-2"></i>
-                        {answer.choices_display}
-                      </p>
-                      )}
-                      
-                      {/* Text Answer - show separately */}
-                      {answer.text_answer && answer.text_answer.trim() && (
-                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <p className="text-sm text-gray-600 font-semibold mb-1">
-                            <i className="fas fa-pen text-blue-600 mr-1"></i>
-                            {t('results.textAnswer') || 'Written Answer'}:
-                          </p>
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                            {answer.text_answer}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {/* No answer provided */}
-                      {!answer.choice_text && !answer.text_answer && (!answer.choices_display || answer.choices_display === 'No answer provided' || answer.choices_display === '-') && (
-                        <p className="text-gray-400 italic">
-                          <i className="fas fa-minus-circle text-gray-400 mr-2"></i>
-                          {t('results.noAnswer') || 'No answer provided'}
-                        </p>
-                      )}
-                      
-                      {/* Uploaded Documents */}
-                      {answer.documents && answer.documents.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          <p className="text-sm text-gray-600 font-semibold">
-                            <i className="fas fa-paperclip mr-1"></i>
-                            Uploaded Documents:
-                          </p>
-                          {answer.documents.map((doc) => (
-                            <a
-                              key={doc.id}
-                              href={doc.file}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group"
-                            >
-                              <i className="fas fa-file-alt text-blue-600 mr-3"></i>
-                              <div className="flex-1">
-                                <p className="text-sm text-blue-700 font-medium group-hover:underline">
-                                  {doc.title}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  {doc.file_size_display} • {new Date(doc.uploaded_at).toLocaleDateString()}
-                                </p>
-                              </div>
-                              <i className="fas fa-external-link-alt text-blue-600 text-sm"></i>
-                            </a>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Notes/Comments */}
-                      {answer.notes && answer.notes.trim() && (
-                        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                          <p className="text-sm text-gray-600 font-semibold mb-1">
-                            <i className="fas fa-comment-dots text-amber-600 mr-1"></i>
-                            {t('results.notes')}:
-                          </p>
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                            {answer.notes}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center print:hidden">
-            <button
-              onClick={handleExport}
-              disabled={exporting}
-              className="px-8 py-3 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-all text-center shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {exporting ? (
+        {/* ══════════════════════════════════════
+            REPORT HEADER
+            ══════════════════════════════════════ */}
+        <div className="print-section" style={{
+          borderTop: '2px solid var(--ink)',
+          paddingTop: 28, paddingBottom: 32,
+          marginBottom: 32, borderBottom: '1px solid var(--line)',
+          display: 'grid', gridTemplateColumns: '1fr auto', gap: 48, alignItems: 'center',
+        }}>
+          <div>
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)',
+              letterSpacing: '0.12em', textTransform: 'uppercase', display: 'block', marginBottom: 14,
+            }}>
+              REF-{String(attempt.id).padStart(4, '0')} · {completedAt} · sustindex
+            </span>
+            <h1 style={{ fontSize: 28, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 14 }}>
+              {lang === 'tr' ? 'ESG Değerlendirme Raporu' : 'ESG Assessment Report'}
+              {companyName && (
                 <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  {t('results.exporting')}
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-download mr-2"></i>
-                  {t('results.export')}
+                  <br />
+                  <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500, fontSize: 20 }}>
+                    {companyName}
+                  </em>
                 </>
               )}
-            </button>
-            <Link
-              href="/dashboard"
-              className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all text-center shadow-lg"
-            >
-              {t('results.back')}
-            </Link>
-            <Link
-              href="/surveys"
-              className="px-8 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all text-center shadow-lg"
-            >
-              {t('nav.surveys')}
-            </Link>
+            </h1>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                <strong style={{ fontWeight: 600, color: 'var(--ink)' }}>{lang === 'tr' ? 'Anket:' : 'Survey:'}</strong>
+                {' '}{attempt.survey_name}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>·</span>
+              <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                <strong style={{ fontWeight: 600, color: 'var(--ink)' }}>{lang === 'tr' ? 'Çerçeve:' : 'Framework:'}</strong>
+                {' '}GRI · SASB · ISO 26000
+              </span>
+            </div>
+          </div>
+
+          {/* Score ring */}
+          <div style={{ textAlign: 'center' }}>
+            <ScoreRing score={score} grade={grade} />
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.08em', display: 'block', marginTop: 4 }}>
+              {lang === 'tr' ? 'genel skor' : 'overall score'}
+            </span>
           </div>
         </div>
-      </main>
-    </div>
-  );
-}
 
-function ScoreCard({ title, score, earned, maxScore, icon, tone }: { title: string; score: number; earned?: number; maxScore?: number; icon: string; tone: import('@/lib/types').ScoreTone }) {
-  const tw = toneTailwind[tone];
-
-  return (
-    <div className="bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border-2 border-green-100 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${tw.bar}/10`}>
-          <i className={`fas ${icon} ${tw.text} text-lg`}></i>
+        {/* ══════════════════════════════════════
+            TABS (Overview / Evidence)
+            ══════════════════════════════════════ */}
+        <div className="no-print" style={{
+          display: 'flex', gap: 0, marginBottom: 28, borderBottom: '1px solid var(--line)',
+        }}>
+          {(['overview', 'evidence'] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer',
+              borderBottom: tab === t ? '2px solid var(--ink)' : '2px solid transparent',
+              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: tab === t ? 600 : 400,
+              fontSize: 12, color: tab === t ? 'var(--ink)' : 'var(--ink-3)',
+              marginBottom: -1, transition: 'color 0.15s',
+              letterSpacing: '0.02em',
+            }}>
+              {t === 'overview'
+                ? (lang === 'tr' ? 'Genel Bakış' : 'Overview')
+                : (lang === 'tr' ? `Notlar & Kanıtlar${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}` : `Notes & Evidence${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}`)}
+            </button>
+          ))}
         </div>
-      </div>
-      <div className={`text-4xl font-bold ${tw.text} mb-1`}>
-        {Math.round(score)}%
-      </div>
-      {earned !== undefined && maxScore !== undefined && (
-        <p className="text-sm text-gray-500 mb-3">
-          {earned} / {maxScore} pts
-        </p>
-      )}
-      <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-        <div
-          className={`h-full ${tw.bar} transition-all duration-1000`}
-          style={{ width: `${Math.min(score, 100)}%` }}
-        />
-      </div>
+
+        {/* ══════════════════════════════════════
+            TAB: OVERVIEW
+            ══════════════════════════════════════ */}
+        {tab === 'overview' && (
+          <>
+            {/* Category breakdown */}
+            {categories.length > 0 && (
+              <div className="print-section" style={{ marginBottom: 32 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+                  <div>
+                    <span className="eyebrow" style={{ display: 'block', marginBottom: 3 }}>
+                      {lang === 'tr' ? 'Kategori Dağılımı' : 'Category Breakdown'}
+                    </span>
+                    <h2 style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' }}>
+                      {lang === 'tr'
+                        ? <>ESG <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>boyutları</em></>
+                        : <>ESG <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>dimensions</em></>}
+                    </h2>
+                  </div>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)' }}>
+                    {categories.length} {lang === 'tr' ? 'kategori' : 'categories'}
+                  </span>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${Math.min(categories.length, 3)}, 1fr)`,
+                  border: '1px solid var(--line)',
+                }}>
+                  {categories.map((cat: any, i: number) => (
+                    <div key={cat.id} style={{
+                      padding: '28px 28px 24px', background: 'var(--paper)',
+                      borderRight: i < categories.length - 1 ? '1px solid var(--line)' : 'none',
+                    }}>
+                      {/* Category key letter */}
+                      <div style={{
+                        fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 700,
+                        fontSize: 36, color: 'var(--olive-deep)', letterSpacing: '-0.04em',
+                        lineHeight: 1, marginBottom: 12,
+                      }}>
+                        {cat.key?.[0] || cat.name?.[0] || String(i + 1)}
+                      </div>
+                      <h3 style={{ fontSize: 11.5, marginBottom: 16, fontWeight: 600, color: 'var(--ink-2)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        {cat.name}
+                      </h3>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
+                        <span style={{
+                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                          fontSize: 48, letterSpacing: '-0.04em', lineHeight: 0.9,
+                          fontVariantNumeric: 'tabular-nums', color: 'var(--ink)',
+                        }}>{Math.round(cat.percentage ?? 0)}</span>
+                        <span style={{ fontSize: 11, color: 'var(--ink-3)', paddingBottom: 2 }}>/ 100</span>
+                      </div>
+                      <div className="bar bar-olive" style={{ marginBottom: 10, height: 3 }}>
+                        <span style={{ width: `${cat.percentage ?? 0}%` }} />
+                      </div>
+                      <div style={{ fontSize: 10.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                        {cat.score} / {cat.max_score} {lang === 'tr' ? 'puan' : 'pts'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recommendations */}
+            {recs.length > 0 && (
+              <div className="print-section">
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
+                  borderBottom: '2px solid var(--ink)', paddingBottom: 14, marginBottom: 20,
+                }}>
+                  <div>
+                    <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>
+                      {lang === 'tr' ? 'Öncelikli Aksiyon Planı' : 'Priority Action Plan'}
+                    </span>
+                    <h2 style={{ fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em' }}>
+                      {lang === 'tr'
+                        ? <>Sırada <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>ne</em> yapılmalı.</>
+                        : <>What to do <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>next</em>.</>}
+                    </h2>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+                    {recs.length} {lang === 'tr' ? 'öneri' : 'recommendations'}
+                  </span>
+                </div>
+
+                <div style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
+                  {recs.map((r: any, i: number) => {
+                    const priority = r.priority || r.priority_level || '';
+                    const pColor   = priorityColor(priority);
+                    return (
+                      <div key={i} style={{
+                        display: 'grid', gridTemplateColumns: '28px 116px 1fr',
+                        gap: 20, alignItems: 'flex-start',
+                        padding: '18px 24px',
+                        borderBottom: i < recs.length - 1 ? '1px solid var(--line)' : 'none',
+                        transition: 'background 0.1s',
+                      }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--cream-deep)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', paddingTop: 2 }}>
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <span style={{
+                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 10,
+                          letterSpacing: '0.1em', textTransform: 'uppercase', color: pColor,
+                          display: 'inline-flex', alignItems: 'center', gap: 6, paddingTop: 2,
+                        }}>
+                          {priorityDot(priority)}
+                          {priority || (lang === 'tr' ? 'Öneri' : 'Action')}
+                        </span>
+                        <div>
+                          <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 13, marginBottom: 4 }}>
+                            {r.title || r.text || r.recommendation || r.category || JSON.stringify(r)}
+                          </div>
+                          {(r.description || r.detail || r.suggestion) && (
+                            <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6, maxWidth: 640 }}>
+                              {r.description || r.detail || r.suggestion}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Export CTA */}
+            <div className="no-print" style={{
+              marginTop: 40, padding: '24px 28px',
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24,
+            }}>
+              <div>
+                <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>
+                  {lang === 'tr' ? 'Raporu Dışa Aktar' : 'Export Report'}
+                </span>
+                <h3 style={{ fontSize: 15, fontWeight: 500, marginBottom: 4, letterSpacing: '-0.01em' }}>
+                  {lang === 'tr' ? 'Yönetici sunumu için PDF indirin' : 'Download a board-ready PDF report'}
+                </h3>
+                <p style={{ fontSize: 12, color: 'var(--ink-3)', maxWidth: 480, lineHeight: 1.55 }}>
+                  {lang === 'tr'
+                    ? 'Tüm değerlendirme verileri, kategori dağılımı ve öneriler dahil profesyonel formatta.'
+                    : 'Professional format including the full breakdown, category scores, and prioritized recommendations.'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button className="btn btn-primary" onClick={() => window.print()}>
+                  <Icon.download /> {lang === 'tr' ? 'PDF İndir' : 'Export PDF'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ══════════════════════════════════════
+            TAB: EVIDENCE & NOTES
+            ══════════════════════════════════════ */}
+        {tab === 'evidence' && (
+          <div>
+            {evidenceAnswers.length === 0 ? (
+              <div style={{
+                background: 'var(--paper)', border: '1px solid var(--line)',
+                padding: '56px 40px', textAlign: 'center',
+              }}>
+                <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 8 }}>
+                  {lang === 'tr' ? 'Bu değerlendirmede not veya belge eklenmemiş.' : 'No notes or documents were added to this assessment.'}
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                  {lang === 'tr' ? 'Değerlendirme sırasında soru başına not veya kanıt dosyası ekleyebilirsiniz.' : 'You can add per-question notes and evidence files while completing assessments.'}
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {evidenceAnswers.map((ans: any, i: number) => (
+                  <div key={ans.id} style={{
+                    background: 'var(--paper)', border: '1px solid var(--line)', padding: '20px 24px',
+                  }}>
+                    {/* Question text */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+                      <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
+                        color: 'var(--ink-4)', letterSpacing: '0.06em', flexShrink: 0, paddingTop: 2,
+                      }}>Q{String(i + 1).padStart(2, '0')}</span>
+                      <div
+                        className="prose"
+                        style={{ fontSize: 13, color: 'var(--ink-2)', flex: 1 }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(ans.question_text || '') }}
+                      />
+                    </div>
+
+                    {/* Answer */}
+                    {ans.choices_display && ans.choices_display !== 'No answer provided' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                        <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.08em' }}>
+                          {lang === 'tr' ? 'YANIT:' : 'ANSWER:'}
+                        </span>
+                        <span style={{
+                          background: 'var(--olive-wash)', padding: '3px 10px',
+                          fontSize: 12, color: 'var(--olive-deep)', fontWeight: 500,
+                        }}>{ans.choices_display}</span>
+                      </div>
+                    )}
+
+                    {/* Notes */}
+                    {ans.notes && (
+                      <div style={{
+                        background: 'var(--cream-deep)', padding: '12px 16px',
+                        borderLeft: '3px solid var(--olive-deep)', marginBottom: 10,
+                      }}>
+                        <span style={{
+                          fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)',
+                          letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 6,
+                        }}>
+                          {lang === 'tr' ? 'Not' : 'Note'}
+                        </span>
+                        <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.6 }}>{ans.notes}</p>
+                      </div>
+                    )}
+
+                    {/* Documents */}
+                    {ans.documents?.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <span style={{
+                          fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)',
+                          letterSpacing: '0.1em', textTransform: 'uppercase',
+                        }}>
+                          {lang === 'tr' ? 'Belgeler' : 'Documents'} ({ans.documents.length})
+                        </span>
+                        {ans.documents.map((doc: any) => (
+                          <a key={doc.id} href={doc.file} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '8px 12px', background: 'var(--cream)',
+                              border: '1px solid var(--line)',
+                              transition: 'border-color 0.15s',
+                            }}
+                              onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
+                            >
+                              <span style={{ fontSize: 16 }}>📎</span>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>{doc.title}</div>
+                                {doc.file_size_display && (
+                                  <div style={{ fontSize: 10.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                                    {doc.file_size_display}
+                                  </div>
+                                )}
+                              </div>
+                              <span style={{ fontSize: 10, color: 'var(--olive-deep)' }}>
+                                {lang === 'tr' ? 'İndir' : 'Download'} ↓
+                              </span>
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
