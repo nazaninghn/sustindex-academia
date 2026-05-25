@@ -32,14 +32,14 @@ export default function AppNav() {
       background: 'var(--cream)',
       position: 'sticky', top: 0, zIndex: 50,
     }}>
-      <div className="wrap" style={{
+      <div className="wrap app-nav-row" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '14px 32px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+        <div className="app-nav-primary" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           <Link href="/" style={{ textDecoration: 'none' }}><Logo size={22} /></Link>
           <span style={{ width: 1, height: 22, background: 'var(--line)' }}></span>
-          <nav style={{ display: 'flex', gap: 2 }}>
+          <nav className="app-nav-links" style={{ display: 'flex', gap: 2 }}>
             {items.map(([label, href]) => (
               <Link
                 key={href}
@@ -59,7 +59,7 @@ export default function AppNav() {
           </nav>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="app-nav-user" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <LangToggle />
           <div style={{ width: 1, height: 22, background: 'var(--line)' }}></div>
           <Link href="/profile" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>

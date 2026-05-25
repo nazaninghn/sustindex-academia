@@ -16,7 +16,7 @@ export default function SiteFooter() {
     }}>
       <div className="wrap">
         {/* Main row */}
-        <div style={{
+        <div className="site-footer-grid" style={{
           display: 'grid',
           gridTemplateColumns: '1.4fr 1fr 1fr',
           gap: 56,
@@ -93,7 +93,7 @@ export default function SiteFooter() {
         </div>
 
         {/* Bottom strip */}
-        <div style={{
+        <div className="site-footer-bottom" style={{
           borderTop: '1px solid var(--line)', paddingTop: 18,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           fontSize: 11, color: 'var(--ink-3)',

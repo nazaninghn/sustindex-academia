@@ -23,7 +23,7 @@ export default function SiteNav() {
         Left and right columns each take 1fr so they're equal width,
         which pushes the nav to the exact visual centre.
       */}
-      <div className="wrap" style={{
+      <div className="wrap site-nav-row" style={{
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
@@ -37,7 +37,7 @@ export default function SiteNav() {
         </div>
 
         {/* CENTRE — Nav links */}
-        <nav style={{ display: 'flex', gap: 28, justifyContent: 'center' }}>
+        <nav className="site-nav-links" style={{ display: 'flex', gap: 28, justifyContent: 'center' }}>
           {links.map(({ label, href }) => (
             <Link
               key={href}
@@ -59,7 +59,7 @@ export default function SiteNav() {
         </nav>
 
         {/* RIGHT — Lang + Auth buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'flex-end' }}>
+        <div className="site-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'flex-end' }}>
           <LangToggle />
           <Link
             href="/login"
