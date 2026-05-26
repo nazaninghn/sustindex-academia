@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import DOMPurify from 'dompurify';
+import { sanitizeHtml } from '@/lib/utils';
 import Logo from '@/components/Logo';
 import { useAuth } from '@/lib/auth';
 import { useLang } from '@/lib/i18n';
@@ -84,7 +84,8 @@ export default function CourseDetailPage() {
     } finally {
       setLoadingCourse(false);
     }
-  }, [courseId, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -341,7 +342,7 @@ export default function CourseDetailPage() {
                         {lesson.content && (
                           <div
                             style={{ fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.7, paddingTop: lesson.video_url ? 0 : 16 }}
-                            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(lesson.content) }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(lesson.content) }}
                           />
                         )}
 

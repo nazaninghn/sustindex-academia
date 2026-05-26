@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
 from ckeditor.fields import RichTextField
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -99,9 +100,22 @@ class Category(models.Model):
     description_tr = models.TextField(blank=True, verbose_name=_('Description (Turkish)'))
     description_en = models.TextField(blank=True, verbose_name=_('Description (English)'))
     order = models.IntegerField(default=0, verbose_name=_('Display Order'))
-    environmental_weight = models.FloatField(default=0.0, verbose_name=_('Environmental Weight'))
-    social_weight = models.FloatField(default=0.0, verbose_name=_('Social Weight'))
-    governance_weight = models.FloatField(default=0.0, verbose_name=_('Governance Weight'))
+    # Fix #40: enforce 0–1 range per weight field at the DB/model level.
+    environmental_weight = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        verbose_name=_('Environmental Weight'),
+    )
+    social_weight = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        verbose_name=_('Social Weight'),
+    )
+    governance_weight = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        verbose_name=_('Governance Weight'),
+    )
     max_score = models.IntegerField(default=100, verbose_name=_('Maximum Score'))
     
     class Meta:
@@ -109,10 +123,25 @@ class Category(models.Model):
         verbose_name_plural = _('Categories')
         ordering = ['order', 'name']
     
+    def clean(self):
+        super().clean()
+        # Fix #40: when at least one weight is non-zero the three must sum to 1.0
+        # (allowing 0/0/0 for un-weighted categories that don't participate in pillar scoring).
+        total = (
+            (self.environmental_weight or 0.0)
+            + (self.social_weight or 0.0)
+            + (self.governance_weight or 0.0)
+        )
+        if total > 0 and not (0.99 <= total <= 1.01):
+            raise ValidationError(
+                _('The sum of environmental, social and governance weights must equal 1.0 (currently %(total).2f).'),
+                params={'total': total},
+            )
+
     def __str__(self):
         survey_name = self.survey.name if self.survey else 'Global'
         return f"{survey_name} - {self.name}"
-    
+
     def get_category_score(self, attempt):
         """Calculate category percentage score for an attempt."""
         if attempt.survey:
@@ -366,10 +395,25 @@ class QuestionnaireAttempt(models.Model):
             'total_percentage': total_percentage,
         }
 
-    def calculate_scores(self):
-        """Calculate scores per category dynamically."""
-        results = self.get_category_breakdown()
+    @staticmethod
+    def _grade_for_score(score: int) -> str:
+        """Map a numeric score (0-100) to a letter grade."""
+        if score >= 80: return 'A+'
+        if score >= 70: return 'A'
+        if score >= 60: return 'B+'
+        if score >= 50: return 'B'
+        if score >= 40: return 'C+'
+        if score >= 30: return 'C'
+        return 'D'
 
+    def calculate_scores(self, save: bool = True):
+        """Calculate scores per category dynamically.
+
+        Fix #28: dirty check — skip the DB write when nothing changed.
+        Fix #29 (called from complete action): accepts save=False so the
+        caller can batch the completion fields into a single save.
+        """
+        results = self.get_category_breakdown()
         cat_list = results['categories']
 
         # Fix BUG-02: compute weighted ESG pillar scores from category weights.
@@ -385,41 +429,45 @@ class QuestionnaireAttempt(models.Model):
             soc_n += s_w * pct;  soc_d += s_w
             gov_n += g_w * pct;  gov_d += g_w
         avg = round(sum(c['percentage'] for c in cat_list) / len(cat_list), 2) if cat_list else 0.0
-        self.environmental_score = round(env_n / env_d, 2) if env_d else avg
-        self.social_score        = round(soc_n / soc_d, 2) if soc_d else avg
-        self.governance_score    = round(gov_n / gov_d, 2) if gov_d else avg
 
-        self.total_score = round(results['total_percentage'])
-        self.overall_grade = self.get_overall_grade()
-        self.save(update_fields=[
-            'environmental_score',
-            'social_score',
-            'governance_score',
-            'total_score',
-            'overall_grade',
-        ])
+        new_env   = round(env_n / env_d, 2) if env_d else avg
+        new_soc   = round(soc_n / soc_d, 2) if soc_d else avg
+        new_gov   = round(gov_n / gov_d, 2) if gov_d else avg
+        new_total = round(results['total_percentage'])
+        new_grade = self._grade_for_score(new_total)
+
+        # Fix #28: only write to DB when at least one field has changed.
+        dirty = (
+            self.environmental_score != new_env
+            or self.social_score     != new_soc
+            or self.governance_score != new_gov
+            or self.total_score      != new_total
+            or self.overall_grade    != new_grade
+        )
+
+        self.environmental_score = new_env
+        self.social_score        = new_soc
+        self.governance_score    = new_gov
+        self.total_score         = new_total
+        self.overall_grade       = new_grade
+
+        if save and dirty:
+            self.save(update_fields=[
+                'environmental_score',
+                'social_score',
+                'governance_score',
+                'total_score',
+                'overall_grade',
+            ])
 
         return {
             **results,
             'grade': self.overall_grade,
         }
-    
+
     def get_overall_grade(self):
-        """Determine grade based on total score"""
-        if self.total_score >= 80:
-            return 'A+'
-        elif self.total_score >= 70:
-            return 'A'
-        elif self.total_score >= 60:
-            return 'B+'
-        elif self.total_score >= 50:
-            return 'B'
-        elif self.total_score >= 40:
-            return 'C+'
-        elif self.total_score >= 30:
-            return 'C'
-        else:
-            return 'D'
+        """Determine grade based on total score."""
+        return self._grade_for_score(self.total_score)
     
     def get_recommendations(self):
         """Provide dynamic recommendations based on category scores.
@@ -469,9 +517,13 @@ class Answer(models.Model):
         return f"{self.attempt.user.username} - {self.question}"
     
     def get_total_score(self):
-        """Calculate total score for this answer."""
+        """Calculate total score for this answer.
+
+        Fix #32: use list() so the prefetch_related cache is hit instead of
+        issuing a fresh queryset on every call (avoids N+1 in scoring hot path).
+        """
         if self.question.allow_multiple:
-            return sum(choice.score for choice in self.choices.all())
+            return sum(c.score for c in list(self.choices.all()))
         return self.choice.score if self.choice else 0
     
     def is_cannot_answer(self):

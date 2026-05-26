@@ -171,9 +171,9 @@ export default function RegisterPage() {
           }}>
             <p style={{ fontSize: 11, color: 'var(--ink-3)', maxWidth: 400, lineHeight: 1.5 }}>
               {t('reg_legal')}{' '}
-              <a href="#" className="ulink">{t('reg_legal_terms')}</a>{' '}
+              <a href="/terms" className="ulink">{t('reg_legal_terms')}</a>{' '}
               {t('reg_legal_and')}{' '}
-              <a href="#" className="ulink">{t('reg_legal_priv')}</a>.
+              <a href="/privacy" className="ulink">{t('reg_legal_priv')}</a>.
             </p>
             <button
               type="submit"

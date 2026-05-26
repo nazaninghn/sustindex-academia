@@ -17,9 +17,13 @@ function HeroIllustration() {
 
   return (
     <>
-      {/* Thumbnail — hover scales up, click opens lightbox */}
+      {/* Thumbnail — floats gently, hover scales up, click opens lightbox */}
       <div
-        style={{ display: 'flex', justifyContent: 'center', cursor: 'zoom-in' }}
+        style={{
+          display: 'flex', justifyContent: 'center', cursor: 'zoom-in',
+          animation: 'heroFloat 5s ease-in-out infinite',
+          animationPlayState: hovering ? 'paused' : 'running',
+        }}
         onClick={() => setExpanded(true)}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
@@ -93,7 +97,12 @@ function HeroIllustration() {
       )}
 
       <style>{`
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes heroFloat {
+          0%,  100% { transform: translateY(0px)   rotate(0deg);    }
+          25%        { transform: translateY(-9px)  rotate(0.4deg);  }
+          75%        { transform: translateY(5px)   rotate(-0.3deg); }
+        }
       `}</style>
     </>
   );

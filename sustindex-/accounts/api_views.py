@@ -1,3 +1,4 @@
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,6 +13,12 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
+
+logger = logging.getLogger(__name__)
+
+# Fields a user is allowed to edit through update_me — explicit whitelist prevents
+# membership_type, is_staff, is_superuser and other sensitive fields from being changed.
+_USER_EDITABLE_FIELDS = {'first_name', 'last_name', 'email', 'company_name', 'phone'}
 from .models import CompanyProfile, MembershipHistory
 from .serializers import (
     UserSerializer, UserRegistrationSerializer,
@@ -40,7 +47,11 @@ class UserViewSet(viewsets.ModelViewSet):
         # Fix R: block direct POST /api/users/ for non-staff.
         if not request.user.is_staff:
             raise PermissionDenied('Use /api/users/register/ to create an account.')
-        return super().create(request, *args, **kwargs)
+        # Fix #30: use UserRegistrationSerializer for proper validation + password hashing.
+        serializer = UserRegistrationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request, *args, **kwargs):
         # Fix R: disallow account self-deletion via the API.
@@ -56,9 +67,12 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['patch'], permission_classes=[IsAuthenticated],
             url_path='update_me')
     def update_me(self, request):
-        """Partially update the authenticated user's own profile."""
-        # Prevent username changes through this endpoint
-        data = {k: v for k, v in request.data.items() if k != 'username'}
+        """Partially update the authenticated user's own profile.
+
+        Only fields in _USER_EDITABLE_FIELDS are accepted — this prevents a user from
+        elevating their membership_type, is_staff, or is_superuser via this endpoint.
+        """
+        data = {k: v for k, v in request.data.items() if k in _USER_EDITABLE_FIELDS}
         serializer = self.get_serializer(request.user, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -117,19 +131,26 @@ class UserViewSet(viewsets.ModelViewSet):
                 frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
                 reset_link   = f'{frontend_url}/reset-password?uid={uid}&token={token}'
 
-                send_mail(
-                    subject='Reset your Sustindex password',
-                    message=(
-                        f'Hello {user.username},\n\n'
-                        f'Click the link below to set a new password.\n'
-                        f'This link is valid for 3 days.\n\n'
-                        f'{reset_link}\n\n'
-                        f'If you did not request this, you can safely ignore this email.'
-                    ),
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[user.email],
-                    fail_silently=True,   # Do not crash if email sending fails
-                )
+                try:
+                    send_mail(
+                        subject='Reset your Sustindex password',
+                        message=(
+                            f'Hello {user.username},\n\n'
+                            f'Click the link below to set a new password.\n'
+                            f'This link is valid for 3 days.\n\n'
+                            f'{reset_link}\n\n'
+                            f'If you did not request this, you can safely ignore this email.'
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[user.email],
+                        fail_silently=False,
+                    )
+                except Exception:
+                    # Log the failure but keep HTTP 200 to prevent user enumeration.
+                    logger.warning(
+                        'forgot_password: failed to send reset email to uid=%s', user.pk,
+                        exc_info=True,
+                    )
 
         return Response({'detail': 'If that email is registered, a reset link has been sent.'})
 

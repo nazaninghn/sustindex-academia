@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import Logo from './Logo';
 import LangToggle from './LangToggle';
@@ -8,9 +8,15 @@ import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 
 export default function AppNav() {
-  const { t }    = useLang();
-  const path     = usePathname();
-  const { user } = useAuth();
+  const { t }              = useLang();
+  const path               = usePathname();
+  const router             = useRouter();
+  const { user, logout }   = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
   const [open, setOpen] = useState(false);
 
   // Close menu on route change
@@ -91,6 +97,39 @@ export default function AppNav() {
               )}
             </div>
           </Link>
+          <div style={{ width: 1, height: 22, background: 'var(--line)', flexShrink: 0 }} />
+          {/* Logout button — desktop */}
+          <button
+            onClick={handleLogout}
+            title={t('nav_logout')}
+            style={{
+              background: 'none', border: '1px solid var(--line)',
+              cursor: 'pointer', borderRadius: 6,
+              padding: '5px 10px',
+              display: 'flex', alignItems: 'center', gap: 5,
+              fontFamily: "'IBM Plex Sans', sans-serif",
+              fontSize: 11, fontWeight: 500,
+              color: 'var(--ink-3)',
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--danger)';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--ink-3)';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line)';
+            }}
+          >
+            {/* logout icon */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            {t('nav_logout')}
+          </button>
         </div>
 
         {/* Mobile controls: lang + hamburger */}
@@ -179,6 +218,28 @@ export default function AppNav() {
               <span style={{ marginLeft: 'auto', color: 'var(--ink-4)', fontSize: 14 }}>→</span>
             </div>
           </Link>
+
+          {/* Logout — mobile drawer */}
+          <button
+            onClick={handleLogout}
+            style={{
+              marginTop: 8,
+              display: 'flex', alignItems: 'center', gap: 10,
+              width: '100%', background: 'none',
+              border: '1px solid var(--line)', borderRadius: 8,
+              padding: '14px 16px', cursor: 'pointer',
+              fontFamily: "'IBM Plex Sans', sans-serif",
+              fontSize: 15, fontWeight: 500, color: 'var(--danger)',
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            {t('nav_logout')}
+          </button>
         </div>
       )}
 

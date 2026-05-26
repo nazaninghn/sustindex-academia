@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django.utils import timezone
 from .models import Course, Lesson, LessonProgress
 from .serializers import CourseSerializer, LessonSerializer, LessonProgressSerializer
@@ -40,18 +41,23 @@ class LessonViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
-        """Mark a lesson as completed."""
+        """Mark a lesson as completed.
+
+        Uses update_or_create inside transaction.atomic() to eliminate the TOCTOU race
+        condition where two concurrent requests could both pass get_or_create and hit a
+        unique_together IntegrityError.
+        """
         lesson = self.get_object()
 
-        progress, created = LessonProgress.objects.get_or_create(
-            user=request.user,
-            lesson=lesson
-        )
-
-        if not progress.is_completed:
-            progress.is_completed = True
-            progress.completed_at = timezone.now()
-            progress.save()
+        with transaction.atomic():
+            progress, _ = LessonProgress.objects.update_or_create(
+                user=request.user,
+                lesson=lesson,
+                defaults={
+                    'is_completed': True,
+                    'completed_at': timezone.now(),
+                },
+            )
 
         serializer = LessonProgressSerializer(progress)
         return Response(serializer.data)

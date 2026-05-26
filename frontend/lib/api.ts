@@ -27,10 +27,16 @@ api.interceptors.request.use((config) => {
 
 // ── Response interceptor: silent JWT refresh on 401 ───────
 let isRefreshing  = false;
-let failedQueue: { resolve: (t: string) => void; reject: (e: any) => void }[] = [];
+// Fix CRITICAL: reject(unknown) instead of any; null-guard before resolve() so a
+// null token doesn't propagate as a Bearer header through the non-null assertion.
+let failedQueue: { resolve: (t: string) => void; reject: (e: unknown) => void }[] = [];
 
-const flushQueue = (error: any, token: string | null) => {
-  failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token!)));
+const flushQueue = (error: unknown, token: string | null) => {
+  failedQueue.forEach((p) => {
+    if (error)         p.reject(error);
+    else if (token !== null) p.resolve(token);
+    else p.reject(new Error('Token refresh produced a null access token'));
+  });
   failedQueue = [];
 };
 

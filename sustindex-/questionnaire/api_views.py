@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.exceptions import PermissionDenied, ValidationError as DRFValidationError
+from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -175,10 +176,18 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
                 {'error': 'Attempt already completed'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        attempt.is_completed = True
-        attempt.completed_at = timezone.now()
-        attempt.save()
-        scores = attempt.calculate_scores()
+        # Fix #29: combine completion + score fields into a single DB write.
+        # calculate_scores(save=False) sets all score attrs on the instance
+        # without touching the DB; we then save everything at once.
+        with transaction.atomic():
+            attempt.is_completed = True
+            attempt.completed_at = timezone.now()
+            scores = attempt.calculate_scores(save=False)
+            attempt.save(update_fields=[
+                'is_completed', 'completed_at',
+                'environmental_score', 'social_score', 'governance_score',
+                'total_score', 'overall_grade',
+            ])
         serializer = self.get_serializer(attempt)
         return Response({
             'attempt': serializer.data,
@@ -245,38 +254,51 @@ class AnswerViewSet(viewsets.ModelViewSet):
             raise DRFValidationError({'detail': 'Cannot modify a completed attempt.'})
 
         question_id = self.request.data.get('question')
-        existing = Answer.objects.filter(attempt=attempt, question_id=question_id).first()
-        if existing:
-            choice = self.request.data.get('choice')
-            text_answer = self.request.data.get('text_answer', '')
-            notes = self.request.data.get('notes', '')
-            choices_ids = self.request.data.get('choices_ids', [])
 
-            # Fix BUG-04: validate choice belongs to this question before assigning
-            if choice is not None:
-                if not Choice.objects.filter(id=choice, question=existing.question).exists():
-                    raise DRFValidationError({'choice': 'Choice does not belong to this question.'})
-
-            existing.choice_id = choice
-            existing.text_answer = text_answer
-            existing.notes = notes
-            existing.save()
-
-            # Fix D (Round 2): always sync M2M — empty list clears stale multi-select choices.
-            # Fix BUG-29: filter by question so IDs from other questions are rejected.
-            existing.choices.set(
-                Choice.objects.filter(id__in=choices_ids, question=existing.question)
-                if choices_ids else []
+        # Fix CRITICAL: wrap in transaction.atomic + select_for_update to eliminate
+        # the TOCTOU race where two concurrent requests for the same (attempt, question)
+        # could both pass the .first() check and create duplicate Answer rows.
+        with transaction.atomic():
+            existing = (
+                Answer.objects
+                .select_for_update()
+                .filter(attempt=attempt, question_id=question_id)
+                .first()
             )
 
-            serializer.instance = existing
-            return
+            if existing:
+                choice = self.request.data.get('choice')
+                text_answer = self.request.data.get('text_answer', '')
+                notes = self.request.data.get('notes', '')
+                choices_ids = self.request.data.get('choices_ids', [])
 
-        serializer.save(attempt=attempt)
+                # Fix BUG-04: validate choice belongs to this question before assigning
+                if choice is not None:
+                    if not Choice.objects.filter(id=choice, question=existing.question).exists():
+                        raise DRFValidationError({'choice': 'Choice does not belong to this question.'})
+
+                existing.choice_id = choice
+                existing.text_answer = text_answer
+                existing.notes = notes
+                existing.save()
+
+                # Fix D (Round 2): always sync M2M — empty list clears stale multi-select choices.
+                # Fix BUG-29: filter by question so IDs from other questions are rejected.
+                existing.choices.set(
+                    Choice.objects.filter(id__in=choices_ids, question=existing.question)
+                    if choices_ids else []
+                )
+
+                serializer.instance = existing
+                return
+
+            serializer.save(attempt=attempt)
 
 
 class UserDocumentViewSet(viewsets.ModelViewSet):
-    queryset = UserDocument.objects.all()
+    # Fix HIGH: .none() prevents full data exposure during schema generation /
+    # router introspection — same pattern as QuestionnaireAttemptViewSet & AnswerViewSet.
+    queryset = UserDocument.objects.none()
     serializer_class = UserDocumentSerializer
     permission_classes = [IsAuthenticated]
 

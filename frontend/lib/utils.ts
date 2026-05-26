@@ -3,26 +3,17 @@
  */
 
 /* ─── HTML Sanitizer (XSS protection for CKEditor content) ── */
-let _purify: any = null;
+// Fix MEDIUM: import DOMPurify at module level. The SSR guard (typeof window)
+// prevents it from running on Node.js — consistent with courses/[id]/page.tsx.
+import DOMPurify from 'dompurify';
 
 export function sanitizeHtml(dirty: string): string {
   if (!dirty) return '';
-
-  // Server-side: strip tags entirely (safe fallback)
+  // Server-side: DOMPurify requires a DOM; return plain text stripped of tags.
   if (typeof window === 'undefined') {
     return dirty.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   }
-
-  // Client-side: use DOMPurify
-  if (!_purify) {
-    try {
-      _purify = require('dompurify');
-    } catch {
-      return dirty.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    }
-  }
-
-  return _purify.sanitize(dirty, {
+  return DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'h2', 'h3', 'h4', 'a', 'code', 'pre', 'blockquote'],
     ALLOWED_ATTR: ['href', 'target', 'rel'],
     FORCE_BODY: false,

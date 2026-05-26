@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import AppNav from '@/components/AppNav';
 import { useLang } from '@/lib/i18n';
@@ -45,9 +45,11 @@ function SkeletonCard() {
    Surveys Page
    ═══════════════════════════════════════════════════════════════ */
 export default function SurveysPage() {
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  // Fix HIGH #19 pattern: ref-based lock prevents double-submit on rapid re-renders
+  const submitLockRef = useRef(false);
 
   const [filter,   setFilter]   = useState('all');
   const [surveys,  setSurveys]  = useState<Survey[]>([]);
@@ -74,16 +76,19 @@ export default function SurveysPage() {
 
   /* Start a new attempt for a given survey */
   const handleStart = async (surveyId: number) => {
-    if (starting !== null) return;   // fix: truthy check fails for id=0
+    if (starting !== null || submitLockRef.current) return;
+    submitLockRef.current = true;
     setStarting(surveyId);
     setStartErr('');
     try {
       const attempt = await attemptAPI.startAttempt(surveyId);
       router.push(`/questionnaire/${attempt.id}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to start attempt:', err);
-      setStartErr(lang === 'tr' ? 'Başlatılamadı, tekrar dene.' : 'Could not start. Please try again.');
+      setStartErr(t('surv_start_err'));  // Fix HIGH #23: use i18n key
       setStarting(null);
+    } finally {
+      submitLockRef.current = false;
     }
   };
 
@@ -263,9 +268,9 @@ export default function SurveysPage() {
                     style={{ opacity: starting === s.id ? 0.6 : 1, minWidth: 80 }}
                   >
                     {starting === s.id
-                      ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…')
-                      : (lang === 'tr' ? 'Başla' : 'Start')}
-                    {starting !== s.id && <Icon.arrow />}
+                      ? t('surv_opening')
+                      : t('surv_start')}
+                    {starting !== s.id && <Icon.arrow aria-hidden="true" />}
                   </button>
                 </div>
               </div>

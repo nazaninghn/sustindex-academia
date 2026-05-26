@@ -41,10 +41,15 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class CompanyProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
-    
+
     class Meta:
         model = CompanyProfile
-        fields = '__all__'
+        # Fix HIGH: explicit field list instead of '__all__' so new model fields
+        # (e.g. additional_data, logo) are not accidentally exposed without review.
+        fields = [
+            'id', 'user', 'company_name', 'registration_number',
+            'address', 'website', 'industry', 'employee_count',
+        ]
 
 
 class MembershipHistorySerializer(serializers.ModelSerializer):

@@ -35,20 +35,23 @@ export default function ProfilePage() {
   const [pwError,   setPwError]   = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
 
+  // Fix HIGH #24: split into two effects — auth guard and form hydration are independent concerns.
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
+    if (!authLoading && !user) router.push('/login');
+  }, [authLoading, user, router]);
+
+  // Hydrate form whenever the user object changes (e.g. after refreshUser())
+  useEffect(() => {
     if (user) {
       setFormData({
-        first_name: user.first_name || '',
-        last_name: user.last_name || '',
-        email: user.email || '',
+        first_name:   user.first_name   || '',
+        last_name:    user.last_name    || '',
+        email:        user.email        || '',
         company_name: user.company_name || '',
-        phone: user.phone || '',
+        phone:        user.phone        || '',
       });
     }
-  }, [user, authLoading, router]);
+  }, [user]);
 
   if (authLoading) {
     return (
@@ -64,7 +67,7 @@ export default function ProfilePage() {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/';
+    router.push('/login');  // Fix HIGH: use Next.js router, not hard navigation
   };
 
   const handlePasswordChange = async () => {

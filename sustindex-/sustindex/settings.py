@@ -33,7 +33,8 @@ if not _secret:
 SECRET_KEY = _secret
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'  # Default True for development
+# Fix CRITICAL: default is now 'False'. Set DEBUG=True in your .env for local development.
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 # Fix BA: scope hosts instead of wildcard.
 # Set ALLOWED_HOSTS env var as comma-separated list in production,

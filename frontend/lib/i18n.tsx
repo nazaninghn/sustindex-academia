@@ -18,9 +18,12 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   nav_history:     { en: 'History',     tr: 'Geçmiş' },
   nav_back_home:   { en: 'Back to home', tr: 'Ana sayfaya dön' },
   nav_courses:     { en: 'Courses',      tr: 'Kurslar' },
+  nav_logout:      { en: 'Log out',      tr: 'Çıkış yap' },
 
   /* Courses */
-  courses_eyebrow: { en: 'E-Learning · 8 courses', tr: 'E-Öğrenme · 8 kurs' },
+  // Fix MEDIUM: removed hardcoded "8 courses" — count comes from the API dynamically.
+  courses_eyebrow: { en: 'E-Learning',   tr: 'E-Öğrenme' },
+  courses_count:   { en: 'courses',      tr: 'kurs' },
   courses_h_1:     { en: 'Sustainability',          tr: 'Sürdürülebilirlik' },
   courses_h_2:     { en: 'mastery,',                tr: 'uzmanlığı,' },
   courses_h_3:     { en: 'self-paced.',             tr: 'kendi hızınızda.' },
@@ -169,7 +172,9 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   row_4: { en: 'Annual ESG Baseline', tr: 'Yıllık ESG Temel Değerlendirmesi' },
 
   /* Surveys */
-  surv_desc: { en: 'Each survey is calibrated to a different scope. Start with the core baseline, or jump straight to a focused review.', tr: 'Her anket farklı bir kapsama göre kalibre edilmiştir. Temel değerlendirme ile başlayın veya doğrudan odaklı bir incelemeye geçin.' },
+  surv_desc:      { en: 'Each survey is calibrated to a different scope. Start with the core baseline, or jump straight to a focused review.', tr: 'Her anket farklı bir kapsama göre kalibre edilmiştir. Temel değerlendirme ile başlayın veya doğrudan odaklı bir incelemeye geçin.' },
+  surv_start_err: { en: 'Could not start. Please try again.',   tr: 'Başlatılamadı, tekrar dene.' },
+  surv_opening:   { en: 'Opening…',                             tr: 'Açılıyor…' },
   surv_questions: { en: 'questions', tr: 'soru' },
   surv_start:     { en: 'Start',     tr: 'Başla' },
   surv_1_t:  { en: 'Sustainability Assessment 2026', tr: 'Sürdürülebilirlik Değerlendirmesi 2026' },

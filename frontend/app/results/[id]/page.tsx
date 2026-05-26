@@ -48,15 +48,39 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
 /* ═══════════════════════════════════════════════════════════
    Results Page
    ═══════════════════════════════════════════════════════════ */
+/* ─── Types ────────────────────────────────────────────────── */
+interface CategoryScore { id: number; key: string; name: string; score: number; max_score: number; percentage: number }
+interface Recommendation {
+  category: string;
+  priority?: string;
+  priority_level?: string;   // alternate field name from some API versions
+  suggestion?: string;
+  title?: string;
+  text?: string;             // alternate title field
+  recommendation?: string;   // alternate title field
+  description?: string;
+  detail?: string;           // alternate description field
+}
+interface AnswerDoc { id: number; title: string; file: string; file_size_display?: string }
+interface AttemptAnswer { id: number; question: number; question_text: string; choice_text?: string; choices_display?: string; notes?: string; documents?: AnswerDoc[] }
+interface Attempt {
+  id: number; is_completed: boolean; completed_at: string | null;
+  total_score: number; overall_grade: string;
+  survey_name: string; user_name: string; session_name?: string;
+  category_scores: CategoryScore[]; recommendations: Recommendation[];
+  answers: AttemptAnswer[];
+}
+
 export default function ResultsPage() {
   const { id }   = useParams<{ id: string }>();
   const router   = useRouter();
   const { lang } = useLang();
   const { user, isLoading: authLoading } = useAuth();
 
-  const [attempt, setAttempt] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [tab,     setTab]     = useState<'overview' | 'evidence'>('overview');
+  const [attempt,    setAttempt]    = useState<Attempt | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [fetchError, setFetchError] = useState('');   // Fix CRITICAL #6
+  const [tab,        setTab]        = useState<'overview' | 'evidence'>('overview');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -65,11 +89,14 @@ export default function ResultsPage() {
   useEffect(() => {
     if (user && id) {
       attemptAPI.getAttempt(Number(id))
-        .then((data) => setAttempt(data))
-        .catch(console.error)
+        .then((data: Attempt) => setAttempt(data))
+        .catch((err: unknown) => {
+          console.error('Failed to load attempt:', err);
+          setFetchError(lang === 'tr' ? 'Değerlendirme yüklenemedi.' : 'Failed to load assessment.');
+        })
         .finally(() => setLoading(false));
     }
-  }, [user, id]);
+  }, [user, id, lang]);
 
   // Redirect incomplete attempts — must be in effect, NOT during render
   useEffect(() => {
@@ -89,12 +116,12 @@ export default function ResultsPage() {
     );
   }
 
-  /* ── Not found ── */
+  /* ── Fetch error / not found ── */
   if (!attempt) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-        <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>
-          {lang === 'tr' ? 'Değerlendirme bulunamadı.' : 'Assessment not found.'}
+        <p style={{ fontSize: 13, color: fetchError ? 'var(--danger)' : 'var(--ink-3)' }}>
+          {fetchError || (lang === 'tr' ? 'Değerlendirme bulunamadı.' : 'Assessment not found.')}
         </p>
         <Link href="/history" style={{ textDecoration: 'none' }}>
           <button className="btn btn-outline">{lang === 'tr' ? '← Geçmişe Dön' : '← Back to History'}</button>
@@ -110,7 +137,7 @@ export default function ResultsPage() {
   const grade       = attempt.overall_grade ?? '—';
   const categories  = attempt.category_scores ?? [];
   const recs        = attempt.recommendations ?? [];
-  const answersArr: any[] = attempt.answers ?? [];
+  const answersArr  = attempt.answers ?? [];
   const companyName = user?.company_name || user?.username || '';
   const surveyName  = attempt.survey_name || (lang === 'tr' ? 'ESG Degerlendirmesi' : 'ESG Assessment');
   const completedAt = attempt.completed_at
@@ -118,7 +145,7 @@ export default function ResultsPage() {
     : '—';
 
   // Answers that have notes or documents
-  const evidenceAnswers = answersArr.filter((a) => a.notes || a.documents?.length > 0);
+  const evidenceAnswers = answersArr.filter((a) => a.notes || (a.documents?.length ?? 0) > 0);
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
@@ -200,16 +227,17 @@ export default function ResultsPage() {
         <div className="no-print" style={{
           display: 'flex', gap: 0, marginBottom: 28, borderBottom: '1px solid var(--line)',
         }}>
-          {(['overview', 'evidence'] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)} style={{
+          {/* Fix LOW #45: renamed map param from `t` to `tabKey` to avoid shadowing the i18n t() function */}
+          {(['overview', 'evidence'] as const).map((tabKey) => (
+            <button key={tabKey} onClick={() => setTab(tabKey)} style={{
               padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer',
-              borderBottom: tab === t ? '2px solid var(--ink)' : '2px solid transparent',
-              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: tab === t ? 600 : 400,
-              fontSize: 12, color: tab === t ? 'var(--ink)' : 'var(--ink-3)',
+              borderBottom: tab === tabKey ? '2px solid var(--ink)' : '2px solid transparent',
+              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: tab === tabKey ? 600 : 400,
+              fontSize: 12, color: tab === tabKey ? 'var(--ink)' : 'var(--ink-3)',
               marginBottom: -1, transition: 'color 0.15s',
               letterSpacing: '0.02em',
             }}>
-              {t === 'overview'
+              {tabKey === 'overview'
                 ? (lang === 'tr' ? 'Genel Bakış' : 'Overview')
                 : (lang === 'tr' ? `Notlar & Kanıtlar${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}` : `Notes & Evidence${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}`)}
             </button>
@@ -245,7 +273,7 @@ export default function ResultsPage() {
                   gridTemplateColumns: `repeat(${Math.min(categories.length, 3)}, 1fr)`,
                   border: '1px solid var(--line)',
                 }}>
-                  {categories.map((cat: any, i: number) => (
+                  {categories.map((cat, i) => (
                     <div key={cat.id} style={{
                       padding: '28px 28px 24px', background: 'var(--paper)',
                       borderRight: i < categories.length - 1 ? '1px solid var(--line)' : 'none',
@@ -304,7 +332,7 @@ export default function ResultsPage() {
                 </div>
 
                 <div style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
-                  {recs.map((r: any, i: number) => {
+                  {recs.map((r, i) => {
                     const priority = r.priority || r.priority_level || '';
                     const pColor   = priorityColor(priority);
                     return (
@@ -393,7 +421,7 @@ export default function ResultsPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {evidenceAnswers.map((ans: any, i: number) => (
+                {evidenceAnswers.map((ans, i) => (
                   <div key={ans.id} style={{
                     background: 'var(--paper)', border: '1px solid var(--line)', padding: '20px 24px',
                   }}>
@@ -440,15 +468,15 @@ export default function ResultsPage() {
                     )}
 
                     {/* Documents */}
-                    {ans.documents?.length > 0 && (
+                    {(ans.documents?.length ?? 0) > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <span style={{
                           fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)',
                           letterSpacing: '0.1em', textTransform: 'uppercase',
                         }}>
-                          {lang === 'tr' ? 'Belgeler' : 'Documents'} ({ans.documents.length})
+                          {lang === 'tr' ? 'Belgeler' : 'Documents'} ({ans.documents!.length})
                         </span>
-                        {ans.documents.map((doc: any) => (
+                        {ans.documents?.map((doc) => (
                           <a key={doc.id} href={doc.file} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                             <div style={{
                               display: 'flex', alignItems: 'center', gap: 10,

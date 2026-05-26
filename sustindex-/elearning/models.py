@@ -64,6 +64,8 @@ class Lesson(models.Model):
         verbose_name = _('Lesson')
         verbose_name_plural = _('Lessons')
         ordering = ['order']
+        # Fix #42: enforce uniqueness so duplicate order values within a course are rejected at DB level.
+        unique_together = [('course', 'order')]
 
     def __str__(self):
         return f'{self.course.title} — {self.title}'

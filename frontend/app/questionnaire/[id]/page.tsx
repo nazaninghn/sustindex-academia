@@ -39,8 +39,10 @@ export default function QuestionnairePage() {
   const router   = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const { lang } = useLang();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const langRef      = useRef(lang);
+  const fileInputRef  = useRef<HTMLInputElement>(null);
+  const langRef       = useRef(lang);
+  // Fix HIGH #19: ref-based submit lock — prevents double-complete race on rapid re-renders
+  const submitLockRef = useRef(false);
   useEffect(() => { langRef.current = lang; }, [lang]);
 
   /* ── Data state ── */
@@ -167,7 +169,8 @@ export default function QuestionnairePage() {
   };
 
   const handleNext = async () => {
-    if (!q || saving) return;
+    if (!q || saving || submitLockRef.current) return;
+    submitLockRef.current = true;
     setSaving(true);
     setError('');
     try {
@@ -203,10 +206,27 @@ export default function QuestionnairePage() {
       setError(lang === 'tr' ? 'Kaydedilemedi, tekrar dene.' : 'Could not save — please retry.');
     } finally {
       setSaving(false);
+      submitLockRef.current = false;
     }
   };
 
   const handlePrev = () => { if (!isFirst) setCurrentIdx((i) => i - 1); };
+
+  /* Fix HIGH #20: auto-save current answer before jumping via progress dot */
+  const handleJumpTo = async (targetIdx: number) => {
+    if (targetIdx === currentIdx) return;
+    if (q && (selection.length > 0 || note.trim() || textAns.trim())) {
+      try {
+        if (hasChoices && q.allow_multiple && selection.length > 0)
+          await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
+        else if (hasChoices && selection.length > 0)
+          await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
+        else if (textAns.trim() || note.trim())
+          await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
+      } catch { /* non-fatal — user still navigates */ }
+    }
+    setCurrentIdx(targetIdx);
+  };
 
   /* Fix 4 + Fix 7: upload files & show loading before navigating away */
   const handleSaveAndExit = async () => {
@@ -607,12 +627,17 @@ export default function QuestionnairePage() {
             {lang === 'tr' ? '← Önceki' : '← Previous'}
           </button>
 
-          {/* Dot progress */}
+          {/* Dot progress — Fix HIGH #20 + LOW #44: save on jump, keyboard accessible */}
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', maxWidth: 400, justifyContent: 'center' }}>
             {questions.map((qItem, i) => (
               <span
                 key={qItem.id}
-                onClick={() => setCurrentIdx(i)}
+                role="button"
+                tabIndex={0}
+                aria-label={`Question ${i + 1}${answers[qItem.id] ? ' (answered)' : ''}`}
+                aria-current={i === currentIdx ? 'step' : undefined}
+                onClick={() => handleJumpTo(i)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleJumpTo(i); } }}
                 title={`${i + 1}`}
                 style={{
                   width:  i === currentIdx ? 18 : 5, height: 5,
@@ -620,7 +645,10 @@ export default function QuestionnairePage() {
                     ? 'var(--olive-deep)'
                     : i === currentIdx ? 'var(--ink)' : 'var(--line)',
                   borderRadius: 3, transition: 'all 0.2s ease', cursor: 'pointer',
+                  outline: 'none',
                 }}
+                onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--olive)'; }}
+                onBlur={(e)  => { e.currentTarget.style.boxShadow = 'none'; }}
               />
             ))}
           </div>

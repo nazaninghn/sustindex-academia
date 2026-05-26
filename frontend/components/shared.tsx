@@ -5,33 +5,35 @@ import React from 'react';
    Icons
    ============================================================ */
 export const Icon = {
+  // Fix #43: aria-hidden="true" on all decorative icons so screen readers skip them.
+  // Callers that use icons as meaningful content can pass aria-hidden={false} + aria-label.
   arrow:    (props?: React.SVGProps<SVGSVGElement>) => (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
       <path d="M5 12h14M13 5l7 7-7 7"/>
     </svg>
   ),
   arrowDown:(props?: React.SVGProps<SVGSVGElement>) => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
+    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
       <path d="M12 5v14M19 13l-7 7-7-7"/>
     </svg>
   ),
   check:    (props?: React.SVGProps<SVGSVGElement>) => (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
       <path d="M4 12l5 5 11-11"/>
     </svg>
   ),
   plus:     (props?: React.SVGProps<SVGSVGElement>) => (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
       <path d="M12 5v14M5 12h14"/>
     </svg>
   ),
   download: (props?: React.SVGProps<SVGSVGElement>) => (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
       <path d="M12 4v12M6 12l6 6 6-6M4 20h16"/>
     </svg>
   ),
   external: (props?: React.SVGProps<SVGSVGElement>) => (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
+    <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
       <path d="M14 4h6v6M20 4l-9 9M9 5H5a1 1 0 00-1 1v13a1 1 0 001 1h13a1 1 0 001-1v-4"/>
     </svg>
   ),

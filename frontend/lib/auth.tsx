@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import axios from 'axios';
-import { API_URL } from '@/lib/api';  // single source of truth
+import api, { API_URL } from '@/lib/api';  // Fix CRITICAL: use singleton so the 401-refresh interceptor fires
 import { getToken, storeTokens, clearTokens } from '@/lib/token-storage';
 
 /* ─── Types ───────────────────────────────────────────────── */
@@ -41,10 +41,9 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 /* ─── Helper ──────────────────────────────────────────────── */
-const me = (token: string) =>
-  axios.get<User>(`${API_URL}/api/v1/users/me/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+// Fix CRITICAL: use the shared api singleton (not bare axios) so the response
+// interceptor's automatic JWT refresh is active even during session restore on mount.
+const me = () => api.get<User>('/api/v1/users/me/');
 
 /* ═══════════════════════════════════════════════════════════
    Provider
@@ -57,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = getToken('access_token');
     if (!token) { setIsLoading(false); return; }
-    me(token)
+    me()
       .then(({ data }) => setUser(data))
       .catch(() => clearTokens())
       .finally(() => setIsLoading(false));
@@ -65,10 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /* Re-fetch user from server (call after profile update) */
   const refreshUser = useCallback(async () => {
-    const token = getToken('access_token');
-    if (!token) return;
+    if (!getToken('access_token')) return;
     try {
-      const { data } = await me(token);
+      const { data } = await me();
       setUser(data);
     } catch {
       // Silently ignore; api interceptor will handle 401
@@ -82,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string, remember = true) => {
     const { data: tokens } = await axios.post(`${API_URL}/api/v1/auth/token/`, { username, password });
     storeTokens(tokens.access, tokens.refresh, remember);
-    const { data: userData } = await me(tokens.access);
+    const { data: userData } = await me();
     setUser(userData);
   };
 
@@ -90,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: res } = await axios.post(`${API_URL}/api/v1/users/register/`, data);
     // Registration always remembers (user explicitly created an account)
     storeTokens(res.access, res.refresh, true);
-    const { data: userData } = await me(res.access);
+    const { data: userData } = await me();
     setUser(userData);
   };
 

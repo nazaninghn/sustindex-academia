@@ -13,6 +13,16 @@ import { gradeColor } from '@/lib/utils';
 import { onDataChange } from '@/lib/events';
 
 /* ─── Types ─────────────────────────────────────────────────── */
+interface DashAttempt {
+  id: number;
+  survey_name: string;
+  is_completed: boolean;
+  completed_at: string | null;
+  total_score: number | null;
+  overall_grade: string;
+  category_scores?: { id: number; key: string; name: string; percentage: number }[];
+}
+
 interface StripCourse {
   id: number;
   title_display: string;
@@ -52,10 +62,13 @@ function SparkLine({ data }: { data: number[] }) {
 /* ─── Courses Strip ──────────────────────────────────────────── */
 function CoursesStrip() {
   const { lang } = useLang();
+  // Fix #33: gate the API call on user being authenticated to avoid 401s on mount
+  const { user } = useAuth();
   const [courses, setCourses]         = useState<StripCourse[]>([]);
   const [stripLoading, setStripLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
     elearningAPI
       .getCourses()
       .then((data: any) => {
@@ -64,7 +77,7 @@ function CoursesStrip() {
       })
       .catch(() => setCourses([]))
       .finally(() => setStripLoading(false));
-  }, []);
+  }, [user]);
 
   return (
     <section style={{ marginTop: 48 }}>
@@ -202,7 +215,7 @@ export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router                      = useRouter();
 
-  const [attempts, setAttempts] = useState<any[]>([]);
+  const [attempts, setAttempts] = useState<DashAttempt[]>([]);
   const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
@@ -347,7 +360,7 @@ export default function DashboardPage() {
                 {[
                   [lang === 'tr' ? 'Kapsamlı ESG analizi' : 'Comprehensive ESG analysis', lang === 'tr' ? 'Çevre, sosyal ve yönetişim boyutlarını değerlendirin.' : 'Evaluate environmental, social and governance dimensions.'],
                   [lang === 'tr' ? 'Anlık sonuçlar' : 'Instant results', lang === 'tr' ? 'Tamamlar tamamlamaz puanınızı ve notunuzu görün.' : 'See your score and grade as soon as you finish.'],
-                  [lang === 'tr' ? 'Öneriler' : 'Actionable recommendations', lang === 'tr' ? 'Prioriteli iyileştirme tavsiyeleri alın.' : 'Receive prioritized improvement recommendations.'],
+                  [lang === 'tr' ? 'Öneriler' : 'Actionable recommendations', lang === 'tr' ? 'Öncelikli iyileştirme tavsiyeleri alın.' : 'Receive prioritized improvement recommendations.'],
                 ].map(([title, body], i) => (
                   <div key={i} style={{ display: 'flex', gap: 14, marginBottom: 20 }}>
                     <div style={{
@@ -463,9 +476,9 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Category breakdown */}
-                    {latest.category_scores?.length > 0 && (
+                    {(latest.category_scores?.length ?? 0) > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        {latest.category_scores.map((cat: any) => (
+                        {latest.category_scores!.map((cat) => (
                           <div key={cat.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 44px', alignItems: 'center', gap: 14 }}>
                             <span style={{
                               fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 700,
