@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -10,8 +10,13 @@ import { Icon } from '@/components/shared';
 
 export default function LoginPage() {
   const router   = useRouter();
-  const { login } = useAuth();
+  const { login, user, isLoading: authLoading } = useAuth();
   const { t } = useLang();
+
+  // M4: redirect already-authenticated users away from the login page.
+  useEffect(() => {
+    if (!authLoading && user) router.push('/dashboard');
+  }, [authLoading, user, router]);
 
   const [formData, setFormData] = useState({ username: '', password: '' });
   const [remember, setRemember] = useState(true);
@@ -25,8 +30,10 @@ export default function LoginPage() {
     try {
       await login(formData.username, formData.password, remember);
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('login_fail'));
+    } catch (err: unknown) {
+      // L1: narrow err from unknown before property access.
+      const e = err as { response?: { data?: { detail?: string } } };
+      setError(e.response?.data?.detail || t('login_fail'));
     } finally {
       setLoading(false);
     }

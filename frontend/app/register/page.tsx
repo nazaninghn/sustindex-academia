@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -37,8 +37,13 @@ function Section({ num, title, subtitle, children }: { num: string; title: strin
 
 export default function RegisterPage() {
   const router     = useRouter();
-  const { register } = useAuth();
+  const { register, user, isLoading: authLoading } = useAuth();
   const { t } = useLang();
+
+  // M4: redirect already-authenticated users away from the register page.
+  useEffect(() => {
+    if (!authLoading && user) router.push('/dashboard');
+  }, [authLoading, user, router]);
 
   const [formData, setFormData] = useState({
     username: '', email: '', password: '', password_confirm: '',
@@ -62,11 +67,13 @@ export default function RegisterPage() {
       const { password_confirm: _pc, ...payload } = formData;
       await register(payload);
       router.push('/dashboard');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      // L1: narrow err from unknown before property access.
+      const e = err as { response?: { data?: { username?: string[]; email?: string[]; detail?: string } } };
       setError(
-        err.response?.data?.username?.[0] ||
-        err.response?.data?.email?.[0] ||
-        err.response?.data?.detail ||
+        e.response?.data?.username?.[0] ||
+        e.response?.data?.email?.[0] ||
+        e.response?.data?.detail ||
         t('reg_fail')
       );
     } finally {

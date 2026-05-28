@@ -91,8 +91,10 @@ export default function ProfilePage() {
       setPwForm({ old_password: '', new_password: '', confirm: '' });
       setPwSuccess(true);
       setTimeout(() => setPwSuccess(false), 4000);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
+    } catch (err: unknown) {
+      // L1: narrow err from unknown before property access.
+      const e = err as { response?: { data?: { detail?: string | string[] } } };
+      const detail = e.response?.data?.detail;
       setPwError(
         (Array.isArray(detail) ? detail.join(' ') : detail) ||
         (lang === 'tr' ? 'Şifre değiştirilemedi. Mevcut şifrenizi kontrol edin.' : 'Could not change password. Check your current password.')

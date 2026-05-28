@@ -98,6 +98,23 @@ class CategorySerializer(serializers.ModelSerializer):
         
         return representation
 
+    def validate(self, data):
+        # H2: mirror Category.clean() so the weight-sum rule is enforced when
+        # the API creates/updates a category (DRF does not call model.clean()).
+        e_w = data.get('environmental_weight',
+                       getattr(self.instance, 'environmental_weight', 0.0) or 0.0)
+        s_w = data.get('social_weight',
+                       getattr(self.instance, 'social_weight', 0.0) or 0.0)
+        g_w = data.get('governance_weight',
+                       getattr(self.instance, 'governance_weight', 0.0) or 0.0)
+        total = e_w + s_w + g_w
+        if total > 0 and not (0.99 <= total <= 1.01):
+            raise serializers.ValidationError(
+                f'The sum of environmental, social and governance weights must equal 1.0 '
+                f'(got {total:.2f}).'
+            )
+        return data
+
 
 class SurveySessionSerializer(serializers.ModelSerializer):
     status  = serializers.CharField(source='get_status_label', read_only=True)  # Fix BUG-21
@@ -263,15 +280,9 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
     def get_overall_grade(self, obj):
         if not obj.is_completed:
             return None
-        # Use the score we just computed, not the DB field
+        # H1: delegate to model's single source of truth for grade thresholds.
         score = self._breakdown(obj)['total_percentage']
-        if score >= 80: return 'A+'
-        elif score >= 70: return 'A'
-        elif score >= 60: return 'B+'
-        elif score >= 50: return 'B'
-        elif score >= 40: return 'C+'
-        elif score >= 30: return 'C'
-        else: return 'D'
+        return QuestionnaireAttempt._grade_for_score(score)
 
     def get_recommendations(self, obj):
         return obj.get_recommendations() if obj.is_completed else []
@@ -347,14 +358,9 @@ class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
     def get_overall_grade(self, obj):
         if not obj.is_completed:
             return None
+        # H1: delegate to model's single source of truth for grade thresholds.
         score = self._breakdown(obj)['total_percentage']
-        if score >= 80: return 'A+'
-        elif score >= 70: return 'A'
-        elif score >= 60: return 'B+'
-        elif score >= 50: return 'B'
-        elif score >= 40: return 'C+'
-        elif score >= 30: return 'C'
-        else: return 'D'
+        return QuestionnaireAttempt._grade_for_score(score)
 
     def get_category_scores(self, obj):
         return self._breakdown(obj)['categories']

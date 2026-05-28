@@ -24,6 +24,9 @@ from django.http import JsonResponse
 
 def api_root(request):
     """API root endpoint"""
+    # L3: read FRONTEND_URL from settings so staging/production URLs are
+    # reflected without a code change (was hardcoded 'http://localhost:3000').
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
     return JsonResponse({
         'message': 'Sustindex API Server',
         'version': '1.0',
@@ -33,7 +36,7 @@ def api_root(request):
             'api': '/api/v1/',
             'api_docs': '/api/v1/docs/',
         },
-        'frontend': 'http://localhost:3000'
+        'frontend': frontend_url,
     })
 
 try:

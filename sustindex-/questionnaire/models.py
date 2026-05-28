@@ -527,29 +527,37 @@ class Answer(models.Model):
         return self.choice.score if self.choice else 0
     
     def is_cannot_answer(self):
-        """Check if user selected 'cannot answer'"""
-        return not self.choice and not self.choices.exists() and not self.text_answer
-    
+        """Check if user selected 'cannot answer'.
+
+        M1: use list() so the prefetch_related cache is hit instead of
+        issuing a fresh .exists() query (avoids N+1 in display hot path).
+        """
+        return not self.choice and not list(self.choices.all()) and not self.text_answer
+
     def get_selected_choices_display(self):
-        """Display selected choices or text answer"""
+        """Display selected choices or text answer.
+
+        M1: evaluate choices once with list() so the prefetch cache is used
+        for all subsequent accesses — avoids multiple .exists()/.all() calls.
+        """
+        selected = list(self.choices.all())   # single hit on prefetch cache
+
         if self.text_answer and self.text_answer.strip():
-            if self.choice or self.choices.exists():
-                # Mixed: show both
-                choice_text = ""
+            if self.choice or selected:
+                # Mixed: show both choices and text
                 if self.question.allow_multiple:
-                    choice_text = ", ".join([choice.text for choice in self.choices.all()])
+                    choice_text = ", ".join([c.text for c in selected])
                 else:
                     choice_text = self.choice.text if self.choice else ""
                 return f"{choice_text} | {self.text_answer}" if choice_text else self.text_answer
             return self.text_answer
-        
-        if self.is_cannot_answer():
+
+        if not self.choice and not selected and not self.text_answer:
             return "No answer provided"
-        
+
         if self.question.allow_multiple:
-            return ", ".join([choice.text for choice in self.choices.all()])
-        else:
-            return self.choice.text if self.choice else "-"
+            return ", ".join([c.text for c in selected])
+        return self.choice.text if self.choice else "-"
 
 
 

@@ -189,7 +189,7 @@ LANGUAGE_CODE = 'en'
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
-USE_L10N = True
+# L4: USE_L10N was deprecated in Django 4.0 and defaults to True — removed.
 USE_TZ = True
 
 LANGUAGES = [

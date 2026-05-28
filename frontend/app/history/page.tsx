@@ -14,7 +14,7 @@ import { CategoryScore } from '@/lib/types';
 interface Attempt {
   id: number;
   survey_name: string;
-  completed_at: string;
+  completed_at: string | null;  // M3: nullable — not set until the attempt is completed
   started_at: string;
   is_completed: boolean;
   total_score: number;
@@ -213,13 +213,13 @@ export default function HistoryPage() {
                     </div>
                     <div style={{ display: 'flex', gap: 20, fontSize: 11.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
                       <span>{lang === 'tr' ? 'Başl:' : 'Started:'} {new Date(attempt.started_at).toLocaleDateString()}</span>
-                      {attempt.is_completed && (
+                      {attempt.is_completed && attempt.completed_at && (
                         <span>{lang === 'tr' ? 'Bitiş:' : 'Finished:'} {new Date(attempt.completed_at).toLocaleDateString()}</span>
                       )}
                     </div>
 
                     {/* Category scores */}
-                    {attempt.is_completed && attempt.category_scores?.length > 0 && (
+                    {attempt.is_completed && (attempt.category_scores?.length ?? 0) > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
                         {attempt.category_scores.map((cat) => (
                           <div key={cat.id} style={{ minWidth: 120 }}>

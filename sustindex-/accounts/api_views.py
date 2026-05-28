@@ -30,7 +30,9 @@ User = get_user_model()
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
+    # M2: .none() prevents full-table exposure during schema generation /
+    # router introspection — actual data is served by get_queryset().
+    queryset = User.objects.none()
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
@@ -216,7 +218,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class CompanyProfileViewSet(viewsets.ModelViewSet):
-    queryset = CompanyProfile.objects.all()
+    # M2: .none() prevents full-table exposure during schema generation.
+    queryset = CompanyProfile.objects.none()
     serializer_class = CompanyProfileSerializer
     permission_classes = [IsAuthenticated]
 
@@ -230,7 +233,8 @@ class CompanyProfileViewSet(viewsets.ModelViewSet):
 
 
 class MembershipHistoryViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = MembershipHistory.objects.all()
+    # M2: .none() prevents full-table exposure during schema generation.
+    queryset = MembershipHistory.objects.none()
     serializer_class = MembershipHistorySerializer
     permission_classes = [IsAuthenticated]
 

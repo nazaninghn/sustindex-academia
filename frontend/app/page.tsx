@@ -9,24 +9,18 @@ import { useLang } from '@/lib/i18n';
 import { Icon } from '@/components/shared';
 
 /* ============================================================
-   Hero Illustration — hover scale + click lightbox
+   Hero Illustration — click-only zoom (lightbox)
+   No hover scale, no continuous floating animation.
    ============================================================ */
 function HeroIllustration() {
   const [expanded, setExpanded] = useState(false);
-  const [hovering, setHovering] = useState(false);
 
   return (
     <>
-      {/* Thumbnail — floats gently, hover scales up, click opens lightbox */}
+      {/* Thumbnail — static, click opens lightbox */}
       <div
-        style={{
-          display: 'flex', justifyContent: 'center', cursor: 'zoom-in',
-          animation: 'heroFloat 5s ease-in-out infinite',
-          animationPlayState: hovering ? 'paused' : 'running',
-        }}
+        style={{ display: 'flex', justifyContent: 'center', cursor: 'zoom-in' }}
         onClick={() => setExpanded(true)}
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
       >
         <Image
           src="/assets/hero-s.png"
@@ -35,15 +29,13 @@ function HeroIllustration() {
           height={400}
           style={{
             width: '100%', maxWidth: 720, height: 'auto', display: 'block',
-            transform: hovering ? 'scale(1.03)' : 'scale(1)',
-            transition: 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1)',
             borderRadius: 4,
           }}
           priority
         />
       </div>
 
-      {/* Lightbox overlay */}
+      {/* Lightbox overlay — opens on click, zooms image in */}
       {expanded && (
         <div
           role="dialog"
@@ -69,8 +61,7 @@ function HeroIllustration() {
               width: 'auto', height: 'auto', display: 'block',
               boxShadow: '0 40px 100px rgba(0,0,0,0.5)',
               borderRadius: 4,
-              transform: 'scale(1)',
-              transition: 'transform 0.3s ease',
+              animation: 'zoomIn 0.25s cubic-bezier(0.34,1.56,0.64,1)',
             }}
             onClick={(e) => e.stopPropagation()}
           />
@@ -98,11 +89,7 @@ function HeroIllustration() {
 
       <style>{`
         @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes heroFloat {
-          0%,  100% { transform: translateY(0px)   rotate(0deg);    }
-          25%        { transform: translateY(-9px)  rotate(0.4deg);  }
-          75%        { transform: translateY(5px)   rotate(-0.3deg); }
-        }
+        @keyframes zoomIn  { from { transform: scale(0.88); opacity: 0; } to { transform: scale(1); opacity: 1; } }
       `}</style>
     </>
   );

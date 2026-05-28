@@ -55,4 +55,7 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
 class MembershipHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MembershipHistory
-        fields = '__all__'
+        # L2: explicit field list — prevents accidental exposure if new
+        # sensitive fields are added to the model in the future.
+        fields = ['id', 'user', 'membership_type', 'start_date', 'end_date', 'is_active']
+        read_only_fields = ['id', 'start_date']
