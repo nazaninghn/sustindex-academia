@@ -187,10 +187,17 @@ export default function QuestionnairePage() {
         answerId = res?.id ?? null;
       }
 
-      // Upload pending files
+      // Upload pending files — surface failures as a non-blocking warning (#2)
       if (answerId && files.length > 0) {
+        const failedUploads: string[] = [];
         for (const file of files) {
-          try { await attemptAPI.uploadDocument(answerId, file); } catch { /* non-fatal */ }
+          try { await attemptAPI.uploadDocument(answerId, file); }
+          catch { failedUploads.push(file.name); }
+        }
+        if (failedUploads.length > 0) {
+          setError(lang === 'tr'
+            ? `Bazı belgeler yüklenemedi: ${failedUploads.join(', ')}`
+            : `Some documents failed to upload: ${failedUploads.join(', ')}`);
         }
       }
 

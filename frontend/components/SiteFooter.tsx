@@ -56,7 +56,7 @@ export default function SiteFooter() {
                 [t('foot_overview'),    '/'],
                 [t('foot_methodology'), '/#methodology'],
                 [t('foot_assessments'), '/surveys'],
-                [t('foot_reports'),     '/results'],
+                [t('foot_reports'),     '/history'],
               ].map(([label, href]) => (
                 <li key={label}>
                   <Link href={href} style={{ color: 'var(--ink)', textDecoration: 'none', fontSize: 12.5 }}>

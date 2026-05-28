@@ -148,8 +148,9 @@ class UserViewSet(viewsets.ModelViewSet):
                         fail_silently=False,
                     )
                 except Exception:
-                    # Log the failure but keep HTTP 200 to prevent user enumeration.
-                    logger.warning(
+                    # Fix #33: escalate to error so it reaches alerting tools (Sentry etc).
+                    # HTTP response stays 200 to prevent user enumeration.
+                    logger.error(
                         'forgot_password: failed to send reset email to uid=%s', user.pk,
                         exc_info=True,
                     )

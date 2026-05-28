@@ -96,7 +96,10 @@ export default function ResultsPage() {
         })
         .finally(() => setLoading(false));
     }
-  }, [user, id, lang]);
+  // Fix #5: removed `lang` — language switch is presentational and must not
+  // trigger a full API re-fetch; error message language is fine to be stale.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, id]);
 
   // Redirect incomplete attempts — must be in effect, NOT during render
   useEffect(() => {
@@ -139,7 +142,7 @@ export default function ResultsPage() {
   const recs        = attempt.recommendations ?? [];
   const answersArr  = attempt.answers ?? [];
   const companyName = user?.company_name || user?.username || '';
-  const surveyName  = attempt.survey_name || (lang === 'tr' ? 'ESG Degerlendirmesi' : 'ESG Assessment');
+  const surveyName  = attempt.survey_name || (lang === 'tr' ? 'ESG Değerlendirmesi' : 'ESG Assessment');
   const completedAt = attempt.completed_at
     ? new Date(attempt.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : '—';

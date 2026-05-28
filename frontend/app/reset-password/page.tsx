@@ -43,10 +43,11 @@ function ResetPasswordForm() {
     try {
       await userAPI.resetPassword(uid, token, pw1);
       setSuccess(true);
-      // Auto-redirect to login after 3 s
-      setTimeout(() => router.push('/login'), 3000);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
+      // redirect is handled by the useEffect below (with cleanup)
+    } catch (err: unknown) {
+      // Fix #1: narrow err from unknown before property access.
+      const e = err as { response?: { data?: { detail?: string | string[] } } };
+      const detail = e?.response?.data?.detail;
       setError(
         (Array.isArray(detail) ? detail.join(' ') : detail) ||
         (lang === 'tr' ? 'Bağlantı geçersiz veya süresi dolmuş.' : 'Reset link is invalid or has expired.')
@@ -55,6 +56,14 @@ function ResetPasswordForm() {
       setLoading(false);
     }
   };
+
+  // Fix #11: use an effect with cleanup so the redirect timer doesn't leak
+  // if the component unmounts before the 3-second delay fires.
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => router.push('/login'), 3000);
+    return () => clearTimeout(timer);
+  }, [success, router]);
 
   /* ── Invalid link state ── */
   if (!linkValid) {

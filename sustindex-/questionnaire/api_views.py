@@ -105,7 +105,9 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Question.objects.filter(is_active=True)
+    # Fix #38: .none() prevents full exposure during schema generation;
+    # get_queryset() (with select_related + prefetch_related) is always used.
+    queryset = Question.objects.none()
     serializer_class = QuestionSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -133,6 +135,8 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
 
     def _base_queryset(self):
         # Fix N: single queryset definition with all joins — reused by every action.
+        # Fix #29: prefetch survey__categories so get_survey_categories() hits the
+        # cache instead of issuing an extra query per completed attempt.
         return (
             QuestionnaireAttempt.objects
             .select_related('user', 'survey', 'session')
@@ -141,6 +145,7 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
                 'answers__choice',
                 'answers__choices',
                 'answers__documents',
+                'survey__categories',
             )
         )
 
@@ -188,6 +193,9 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
                 'environmental_score', 'social_score', 'governance_score',
                 'total_score', 'overall_grade',
             ])
+        # Fix #43: reload the attempt through _base_queryset() so all prefetch
+        # caches are populated before serialization (avoids N+1 on the response).
+        attempt = self._base_queryset().get(pk=attempt.pk)
         serializer = self.get_serializer(attempt)
         return Response({
             'attempt': serializer.data,
@@ -267,10 +275,15 @@ class AnswerViewSet(viewsets.ModelViewSet):
             )
 
             if existing:
-                choice = self.request.data.get('choice')
-                text_answer = self.request.data.get('text_answer', '')
-                notes = self.request.data.get('notes', '')
-                choices_ids = self.request.data.get('choices_ids', [])
+                # Fix #27: use validated serializer data — not raw request.data —
+                # so the update path goes through the same validation as create.
+                # choice is a PK-related field → resolved to a model instance.
+                # choices_ids is ListField(IntegerField) → already a list of ints.
+                _choice_obj  = serializer.validated_data.get('choice')
+                choice       = _choice_obj.id if _choice_obj else None
+                text_answer  = serializer.validated_data.get('text_answer', '')
+                notes        = serializer.validated_data.get('notes', '')
+                choices_ids  = serializer.validated_data.get('choices_ids', [])
 
                 # Fix BUG-04: validate choice belongs to this question before assigning
                 if choice is not None:
@@ -334,12 +347,15 @@ class UserDocumentViewSet(viewsets.ModelViewSet):
                     {'file': f'Unsupported file type: {file.content_type}.'}
                 )
 
-        # Fix BUG-01: verify the answer's attempt belongs to the current user
-        # so one user cannot attach documents to another user's answer.
+        # Fix BUG-01 + #34 CRITICAL: require answer, verify ownership, and pass
+        # the Answer instance to serializer.save() so the non-nullable FK is set.
+        # Previously serializer.save(file_size=file.size) was called without answer,
+        # which caused an IntegrityError on every document upload.
         answer_id = self.request.data.get('answer')
-        if answer_id:
-            answer_obj = get_object_or_404(Answer, id=answer_id)
-            if answer_obj.attempt.user != self.request.user:
-                raise PermissionDenied("Cannot upload documents to another user's answer.")
+        if not answer_id:
+            raise DRFValidationError({'answer': 'This field is required.'})
+        answer_obj = get_object_or_404(Answer, id=answer_id)
+        if answer_obj.attempt.user != self.request.user:
+            raise PermissionDenied("Cannot upload documents to another user's answer.")
 
-        serializer.save(file_size=file.size)
+        serializer.save(file_size=file.size, answer=answer_obj)

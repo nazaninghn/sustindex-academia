@@ -118,7 +118,7 @@ export default function AboutPage() {
             <div>
               <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_parent')}</span>
               <p style={{ fontSize: 12.5, marginBottom: 14 }}>Academia Danışmanlık</p>
-              <a href="https://academiadanismanlik.com" target="_blank" rel="noopener" className="ulink" style={{ fontSize: 12 }}>
+              <a href="https://academiadanismanlik.com" target="_blank" rel="noopener noreferrer" className="ulink" style={{ fontSize: 12 }}>
                 academiadanismanlik.com <Icon.external />
               </a>
             </div>

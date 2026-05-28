@@ -215,8 +215,9 @@ export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router                      = useRouter();
 
-  const [attempts, setAttempts] = useState<DashAttempt[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [attempts,    setAttempts]    = useState<DashAttempt[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [hasLoadErr,  setHasLoadErr]  = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -225,12 +226,17 @@ export default function DashboardPage() {
   /** Fetch attempts — extracted so it can be called on refresh events too */
   const refreshAttempts = useCallback(() => {
     if (!user) return;
+    setHasLoadErr(false);
     attemptAPI.getMyAttempts()
-      .then((data: any) => {
+      .then((data: DashAttempt[] | { results: DashAttempt[] }) => {
         const list = Array.isArray(data) ? data : (data?.results ?? []);
         setAttempts(list);
       })
-      .catch(() => {})
+      .catch(() => {
+        // Fix #14: surface the error so users know a load failure happened.
+        // Use a boolean flag so lang is not a dependency (avoids refetch on toggle).
+        setHasLoadErr(true);
+      })
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -255,6 +261,22 @@ export default function DashboardPage() {
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
           {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
         </span>
+      </div>
+    );
+  }
+
+  /* ── Load error (#14) ── */
+  if (hasLoadErr) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
+        <AppNav />
+        <main className="wrap" style={{ padding: '64px 32px', textAlign: 'center' }}>
+          <div style={{ background: '#FFF5F3', border: '1px solid var(--danger)', padding: '18px 24px', display: 'inline-block' }}>
+            <p style={{ fontSize: 13, color: 'var(--danger)' }}>
+              {lang === 'tr' ? 'Değerlendirmeler yüklenemedi.' : 'Failed to load assessments.'}
+            </p>
+          </div>
+        </main>
       </div>
     );
   }
