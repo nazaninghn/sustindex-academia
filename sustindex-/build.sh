@@ -37,4 +37,8 @@ else:
 EOF
 
 echo ""
+echo "Importing GRI questionnaire data..."
+python manage.py import_gri_questionnaire data/GRI_Questionnaire_v3_FIXED.xlsx
+
+echo ""
 echo "Build completed successfully!"
