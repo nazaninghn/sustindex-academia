@@ -9,15 +9,16 @@ import Logo from '@/components/Logo';
 import { Icon } from '@/components/shared';
 
 function Field({
-  label, placeholder, type = 'text', required, value, onChange,
+  id, label, placeholder, type = 'text', required, value, onChange, autoComplete,
 }: {
-  label: string; placeholder: string; type?: string;
+  id: string; label: string; placeholder: string; type?: string;
   required?: boolean; value: string; onChange: (v: string) => void;
+  autoComplete?: string;
 }) {
   return (
     <div className="field">
-      <label>{label}{required && <span style={{ color: 'var(--olive-deep)', marginLeft: 4 }}>*</span>}</label>
-      <input className="input" type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} required={required} />
+      <label htmlFor={id}>{label}{required && <span style={{ color: 'var(--olive-deep)', marginLeft: 4 }}>*</span>}</label>
+      <input id={id} className="input" type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} required={required} autoComplete={autoComplete} />
     </div>
   );
 }
@@ -80,6 +81,14 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
+  // Don't flash the registration form while the auth state is still being determined.
+  // All hooks are above this point — safe to early-return here.
+  if (authLoading) return (
+    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>LOADING…</span>
+    </div>
+  );
 
   const steps = [
     [t('reg_sec_1_t'), 'active'],
@@ -146,29 +155,29 @@ export default function RegisterPage() {
 
           <Section num="01" title={t('reg_sec_1_t')} subtitle={t('reg_sec_1_s')}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-              <Field label={t('reg_username')} placeholder="elif.demir" required value={formData.username} onChange={set('username')} />
-              <Field label={t('reg_email')}    placeholder="elif@atlas.com" required value={formData.email} onChange={set('email')} />
+              <Field id="reg-username" label={t('reg_username')} placeholder="elif.demir" required value={formData.username} onChange={set('username')} autoComplete="username" />
+              <Field id="reg-email"    label={t('reg_email')}    placeholder="elif@atlas.com" required value={formData.email} onChange={set('email')} autoComplete="email" />
             </div>
           </Section>
 
           <Section num="02" title={t('reg_sec_2_t')} subtitle={t('reg_sec_2_s')}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-              <Field label={t('reg_first')} placeholder="Elif"  value={formData.first_name} onChange={set('first_name')} />
-              <Field label={t('reg_last')}  placeholder="Demir" value={formData.last_name}  onChange={set('last_name')} />
+              <Field id="reg-first" label={t('reg_first')} placeholder="Elif"  value={formData.first_name} onChange={set('first_name')} autoComplete="given-name" />
+              <Field id="reg-last"  label={t('reg_last')}  placeholder="Demir" value={formData.last_name}  onChange={set('last_name')}  autoComplete="family-name" />
             </div>
           </Section>
 
           <Section num="03" title={t('reg_sec_3_t')} subtitle={t('reg_sec_3_s')}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-              <Field label={t('reg_company')} placeholder=""  value={formData.company_name} onChange={set('company_name')} />
-              <Field label={t('reg_phone')}   placeholder="+90 555 123 4567"   value={formData.phone}        onChange={set('phone')} />
+              <Field id="reg-company" label={t('reg_company')} placeholder="Atlas Consulting Co." value={formData.company_name} onChange={set('company_name')} autoComplete="organization" />
+              <Field id="reg-phone"   label={t('reg_phone')}   placeholder="+90 555 123 4567"     value={formData.phone}        onChange={set('phone')}         autoComplete="tel" />
             </div>
           </Section>
 
           <Section num="04" title={t('reg_sec_4_t')} subtitle={t('reg_sec_4_s')}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-              <Field label={t('reg_pw')}         placeholder={t('reg_pw_hint')} type="password" required value={formData.password}         onChange={set('password')} />
-              <Field label={t('reg_pw_confirm')}  placeholder={t('reg_pw_again')} type="password" required value={formData.password_confirm} onChange={set('password_confirm')} />
+              <Field id="reg-pw"         label={t('reg_pw')}        placeholder={t('reg_pw_hint')}  type="password" required value={formData.password}         onChange={set('password')}         autoComplete="new-password" />
+              <Field id="reg-pw-confirm" label={t('reg_pw_confirm')} placeholder={t('reg_pw_again')} type="password" required value={formData.password_confirm} onChange={set('password_confirm')} autoComplete="new-password" />
             </div>
           </Section>
 

@@ -70,7 +70,7 @@ export default function CoursesPage() {
     if (!user) return;   // wait for auth before fetching
     elearningAPI
       .getCourses()
-      .then((data: any) => {
+      .then((data: ApiCourse[] | { results: ApiCourse[] }) => {
         const list: ApiCourse[] = Array.isArray(data) ? data : (data?.results ?? []);
         setCourses(list);
       })
@@ -78,7 +78,13 @@ export default function CoursesPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  if (authLoading) return null;
+  if (authLoading) return (
+    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
+        LOADING…
+      </span>
+    </div>
+  );
 
   const levelLabel = (l: string) =>
     l === 'beg'

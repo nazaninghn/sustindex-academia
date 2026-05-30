@@ -39,6 +39,14 @@ export default function LoginPage() {
     }
   };
 
+  // Don't flash the login form while the auth state is still being determined.
+  // All hooks are above this point — safe to early-return here.
+  if (authLoading) return (
+    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>LOADING…</span>
+    </div>
+  );
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
@@ -80,39 +88,44 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div className="field">
-              <label>{t('login_username')}</label>
+              <label htmlFor="login-username">{t('login_username')}</label>
               <input
+                id="login-username"
                 className="input"
                 type="text"
                 placeholder="elif.demir"
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 required
+                autoComplete="username"
               />
             </div>
             <div className="field">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <label>{t('login_password')}</label>
+                <label htmlFor="login-password">{t('login_password')}</label>
                 <Link href="/forgot-password" style={{ fontSize: 10, color: 'var(--ink-3)', textDecoration: 'none' }}>
                   {t('login_forgot')}
                 </Link>
               </div>
               <input
+                id="login-password"
                 className="input"
                 type="password"
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
+                autoComplete="current-password"
               />
             </div>
 
-            <label style={{
+            <label htmlFor="login-remember" style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer',
               margin: '4px 0 8px',
             }}>
               <input
+                id="login-remember"
                 type="checkbox"
                 checked={remember}
                 onChange={(e) => setRemember(e.target.checked)}

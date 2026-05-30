@@ -71,7 +71,7 @@ function CoursesStrip() {
     if (!user) return;
     elearningAPI
       .getCourses()
-      .then((data: any) => {
+      .then((data: StripCourse[] | { results: StripCourse[] }) => {
         const list: StripCourse[] = Array.isArray(data) ? data : (data?.results ?? []);
         setCourses(list.slice(0, 4));
       })

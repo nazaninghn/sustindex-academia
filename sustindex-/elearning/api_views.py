@@ -12,6 +12,10 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
     """API endpoint for courses."""
     serializer_class = CourseSerializer
     permission_classes = [IsAuthenticated]
+    # Required so drf-spectacular can generate the schema without an authenticated
+    # request context, and so Django's admin-browsable API doesn't accidentally
+    # expose all courses when the permission check is bypassed.
+    queryset = Course.objects.none()
 
     def get_queryset(self):
         # Fix N (Round 4): prefetch lessons and their attachments so the
@@ -27,6 +31,7 @@ class LessonViewSet(viewsets.ReadOnlyModelViewSet):
     """API endpoint for lessons."""
     serializer_class = LessonSerializer
     permission_classes = [IsAuthenticated]
+    queryset = Lesson.objects.none()  # schema-safe default; real qs in get_queryset()
 
     def get_queryset(self):
         course_id = self.request.query_params.get('course')
@@ -67,6 +72,7 @@ class LessonProgressViewSet(viewsets.ReadOnlyModelViewSet):
     """API endpoint for lesson progress."""
     serializer_class = LessonProgressSerializer
     permission_classes = [IsAuthenticated]
+    queryset = LessonProgress.objects.none()  # schema-safe default; real qs in get_queryset()
 
     def get_queryset(self):
         return (

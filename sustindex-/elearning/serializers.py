@@ -2,27 +2,16 @@ from rest_framework import serializers
 from .models import Course, Lesson, LessonAttachment, LessonProgress
 
 
-class LessonAttachmentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = LessonAttachment
-        fields = ['id', 'title', 'file', 'uploaded_at']
+# ── Shared mixin ────────────────────────────────────────────────────────────
+class ElearningMixin:
+    """
+    Language detection + completed-lesson-ID cache shared by LessonSerializer
+    and CourseSerializer.  Extracted to avoid the duplicate _lang() and
+    _completed_lesson_ids() methods that previously existed in both classes.
+    """
 
-
-class LessonSerializer(serializers.ModelSerializer):
-    attachments  = LessonAttachmentSerializer(many=True, read_only=True)
-    is_completed = serializers.SerializerMethodField()
-    title_display = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Lesson
-        fields = [
-            'id', 'title', 'title_tr', 'title_en', 'title_display',
-            'content', 'video_url', 'order',
-            'duration_minutes', 'attachments', 'is_completed',
-        ]
-
-    def _lang(self):
-        request = self.context.get('request')
+    def _lang(self) -> 'str | None':
+        request = self.context.get('request')  # type: ignore[attr-defined]
         if request:
             return (
                 request.query_params.get('lang')
@@ -30,29 +19,14 @@ class LessonSerializer(serializers.ModelSerializer):
             )
         return None
 
-    def get_title_display(self, obj):
-        lang = self._lang()
-        if lang == 'tr' and obj.title_tr:
-            return obj.title_tr
-        if lang == 'en' and obj.title_en:
-            return obj.title_en
-        return obj.title
-
-    def get_is_completed(self, obj):
-        # Fix I: use a pre-fetched set from context instead of one DB query per lesson
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            completed_ids = self._completed_lesson_ids()
-            return obj.id in completed_ids
-        return False
-
-    def _completed_lesson_ids(self):
+    def _completed_lesson_ids(self) -> set:
         """
-        Lazily fetch the set of completed lesson IDs for the current user and
-        cache it in the serializer context so LessonSerializer instances that
-        share the same context only hit the DB once total (not once per lesson).
+        Lazily fetch and cache the set of completed lesson IDs for the current
+        user.  The result is stored in the serializer *context* so that all
+        LessonSerializer / CourseSerializer instances that share the same
+        context (e.g. a nested list) only hit the DB once per request.
         """
-        ctx = self.context
+        ctx = self.context  # type: ignore[attr-defined]
         if '_completed_lesson_ids' not in ctx:
             request = ctx.get('request')
             if request and request.user.is_authenticated:
@@ -66,7 +40,42 @@ class LessonSerializer(serializers.ModelSerializer):
         return ctx['_completed_lesson_ids']
 
 
-class CourseSerializer(serializers.ModelSerializer):
+class LessonAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LessonAttachment
+        fields = ['id', 'title', 'file', 'uploaded_at']
+
+
+class LessonSerializer(ElearningMixin, serializers.ModelSerializer):
+    attachments  = LessonAttachmentSerializer(many=True, read_only=True)
+    is_completed = serializers.SerializerMethodField()
+    title_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Lesson
+        fields = [
+            'id', 'title', 'title_tr', 'title_en', 'title_display',
+            'content', 'video_url', 'order',
+            'duration_minutes', 'attachments', 'is_completed',
+        ]
+
+    def get_title_display(self, obj):
+        lang = self._lang()
+        if lang == 'tr' and obj.title_tr:
+            return obj.title_tr
+        if lang == 'en' and obj.title_en:
+            return obj.title_en
+        return obj.title
+
+    def get_is_completed(self, obj):
+        # Uses the mixin's cached _completed_lesson_ids — no per-lesson DB query.
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.id in self._completed_lesson_ids()
+        return False
+
+
+class CourseSerializer(ElearningMixin, serializers.ModelSerializer):
     lessons            = LessonSerializer(many=True, read_only=True)
     total_lessons      = serializers.IntegerField(source='lessons.count', read_only=True)
     completed_lessons  = serializers.SerializerMethodField()
@@ -86,15 +95,6 @@ class CourseSerializer(serializers.ModelSerializer):
             'lessons', 'total_lessons', 'completed_lessons', 'progress_percentage',
         ]
 
-    def _lang(self):
-        request = self.context.get('request')
-        if request:
-            return (
-                request.query_params.get('lang')
-                or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-            )
-        return None
-
     def get_title_display(self, obj):
         lang = self._lang()
         if lang == 'tr' and obj.title_tr:
@@ -112,9 +112,9 @@ class CourseSerializer(serializers.ModelSerializer):
         return obj.description
 
     def get_completed_lessons(self, obj):
-        # Fix I: reuse the cached completed-lesson set — no extra DB round-trip
-        # Fix BUG-08: use set comprehension over obj.lessons.all() to hit the
-        # prefetch cache; .values_list() always issues a new DB query.
+        # Uses mixin's cached _completed_lesson_ids — no extra DB round-trip.
+        # Uses obj.lessons.all() to hit the prefetch cache; .values_list()
+        # would bypass it and issue a new query.
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             lesson_ids = {l.id for l in obj.lessons.all()}
@@ -122,32 +122,13 @@ class CourseSerializer(serializers.ModelSerializer):
         return 0
 
     def get_progress_percentage(self, obj):
-        # Fix BUG-09: use len(list(...)) to hit the prefetch cache;
-        # .count() always issues a COUNT(*) query regardless of prefetch.
+        # len(list(...)) hits the prefetch cache; .count() always issues a
+        # COUNT(*) query regardless of prefetch.
         total = len(list(obj.lessons.all()))
         if total == 0:
             return 0
         completed = self.get_completed_lessons(obj)
         return round((completed / total) * 100)
-
-    def _completed_lesson_ids(self):
-        """
-        Lazily fetch and cache all completed lesson IDs for the current user.
-        Shared between get_completed_lessons and the nested LessonSerializer
-        instances so the whole request only issues one LessonProgress query.
-        """
-        ctx = self.context
-        if '_completed_lesson_ids' not in ctx:
-            request = ctx.get('request')
-            if request and request.user.is_authenticated:
-                ctx['_completed_lesson_ids'] = set(
-                    LessonProgress.objects.filter(
-                        user=request.user, is_completed=True
-                    ).values_list('lesson_id', flat=True)
-                )
-            else:
-                ctx['_completed_lesson_ids'] = set()
-        return ctx['_completed_lesson_ids']
 
 
 class LessonProgressSerializer(serializers.ModelSerializer):

@@ -79,8 +79,9 @@ def _run_translation_in_background(model_class, pk, fields_to_translate):
                 logger.info('Auto-translated %s.%s (pk=%s)', model_class.__name__, target_field, pk)
 
         if changed_fields:
-            # Fix M: skip validation so bulk_create paths aren't blocked.
-            instance.save(update_fields=changed_fields, skip_validation=True)
+            # update_fields already prevents full_clean() in Question.save(),
+            # and other models don't override save() so skip_validation must NOT be passed.
+            instance.save(update_fields=changed_fields)
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()

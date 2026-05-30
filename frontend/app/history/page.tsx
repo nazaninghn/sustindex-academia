@@ -26,9 +26,10 @@ export default function HistoryPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const { lang } = useLang();
-  const [attempts, setAttempts] = useState<Attempt[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
+  const [attempts,   setAttempts]   = useState<Attempt[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [loadError,  setLoadError]  = useState(false);
+  const [filter,     setFilter]     = useState<'all' | 'completed' | 'in-progress'>('all');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -41,8 +42,8 @@ export default function HistoryPage() {
       if (Array.isArray(data)) setAttempts(data);
       else if (data && Array.isArray(data.results)) setAttempts(data.results);
       else setAttempts([]);
-    } catch (error) {
-      console.error('Failed to load attempts:', error);
+    } catch {
+      setLoadError(true);
       setAttempts([]);
     } finally {
       setLoading(false);
@@ -64,6 +65,22 @@ export default function HistoryPage() {
   }
 
   if (!user) return null;
+
+  /* ── Load error ── */
+  if (loadError) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
+        <AppNav />
+        <main className="wrap" style={{ padding: '64px 32px', textAlign: 'center' }}>
+          <div style={{ background: '#FFF5F3', border: '1px solid var(--danger)', padding: '18px 24px', display: 'inline-block' }}>
+            <p style={{ fontSize: 13, color: 'var(--danger)' }}>
+              {lang === 'tr' ? 'Geçmiş yüklenemedi. Lütfen sayfayı yenileyin.' : 'Failed to load history. Please refresh the page.'}
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   const completed = attempts.filter((a) => a.is_completed);
   const inProgress = attempts.filter((a) => !a.is_completed);

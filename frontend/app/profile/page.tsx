@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -34,6 +34,14 @@ export default function ProfilePage() {
   const [pwSaving,  setPwSaving]  = useState(false);
   const [pwError,   setPwError]   = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
+
+  // ── Timer refs — cleared on unmount to prevent setState-on-unmounted-component ──
+  const pwSuccessTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveSuccessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (pwSuccessTimer.current)   clearTimeout(pwSuccessTimer.current);
+    if (saveSuccessTimer.current) clearTimeout(saveSuccessTimer.current);
+  }, []);
 
   // Fix HIGH #24: split into two effects — auth guard and form hydration are independent concerns.
   useEffect(() => {
@@ -90,7 +98,8 @@ export default function ProfilePage() {
       await userAPI.changePassword(pwForm.old_password, pwForm.new_password);
       setPwForm({ old_password: '', new_password: '', confirm: '' });
       setPwSuccess(true);
-      setTimeout(() => setPwSuccess(false), 4000);
+      if (pwSuccessTimer.current) clearTimeout(pwSuccessTimer.current);
+      pwSuccessTimer.current = setTimeout(() => setPwSuccess(false), 4000);
     } catch (err: unknown) {
       // L1: narrow err from unknown before property access.
       const e = err as { response?: { data?: { detail?: string | string[] } } };
@@ -127,7 +136,8 @@ export default function ProfilePage() {
       setSaveSuccess(true);
       emitDataChange({ source: 'profile' });   // ← live-refresh dashboard greeting
       await refreshUser();
-      setTimeout(() => setSaveSuccess(false), 3000);
+      if (saveSuccessTimer.current) clearTimeout(saveSuccessTimer.current);
+      saveSuccessTimer.current = setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       console.error('Failed to update profile:', error);
       setSaveError(
@@ -291,11 +301,11 @@ export default function ProfilePage() {
 
                   {/* Email */}
                   <div className="field">
-                    <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                    <label htmlFor="prof-email" style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
                       {lang === 'tr' ? 'E-posta' : 'Email'}
                     </label>
                     {isEditing ? (
-                      <input className="input" type="email" name="email" value={formData.email} onChange={handleChange} />
+                      <input id="prof-email" className="input" type="email" name="email" value={formData.email} onChange={handleChange} autoComplete="email" />
                     ) : (
                       <div className="input" style={{ background: 'var(--cream-deep)', color: 'var(--ink-2)' }}>{user.email}</div>
                     )}
@@ -303,11 +313,11 @@ export default function ProfilePage() {
 
                   {/* First name */}
                   <div className="field">
-                    <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                    <label htmlFor="prof-first" style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
                       {lang === 'tr' ? 'Ad' : 'First Name'}
                     </label>
                     {isEditing ? (
-                      <input className="input" type="text" name="first_name" value={formData.first_name} onChange={handleChange} />
+                      <input id="prof-first" className="input" type="text" name="first_name" value={formData.first_name} onChange={handleChange} autoComplete="given-name" />
                     ) : (
                       <div className="input" style={{ background: 'var(--cream-deep)', color: 'var(--ink-2)' }}>{user.first_name || '—'}</div>
                     )}
@@ -315,11 +325,11 @@ export default function ProfilePage() {
 
                   {/* Last name */}
                   <div className="field">
-                    <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                    <label htmlFor="prof-last" style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
                       {lang === 'tr' ? 'Soyad' : 'Last Name'}
                     </label>
                     {isEditing ? (
-                      <input className="input" type="text" name="last_name" value={formData.last_name} onChange={handleChange} />
+                      <input id="prof-last" className="input" type="text" name="last_name" value={formData.last_name} onChange={handleChange} autoComplete="family-name" />
                     ) : (
                       <div className="input" style={{ background: 'var(--cream-deep)', color: 'var(--ink-2)' }}>{user.last_name || '—'}</div>
                     )}
@@ -327,11 +337,11 @@ export default function ProfilePage() {
 
                   {/* Company */}
                   <div className="field">
-                    <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                    <label htmlFor="prof-company" style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
                       {lang === 'tr' ? 'Şirket' : 'Company'}
                     </label>
                     {isEditing ? (
-                      <input className="input" type="text" name="company_name" value={formData.company_name} onChange={handleChange} />
+                      <input id="prof-company" className="input" type="text" name="company_name" value={formData.company_name} onChange={handleChange} autoComplete="organization" />
                     ) : (
                       <div className="input" style={{ background: 'var(--cream-deep)', color: 'var(--ink-2)' }}>{user.company_name || '—'}</div>
                     )}
@@ -339,11 +349,11 @@ export default function ProfilePage() {
 
                   {/* Phone */}
                   <div className="field">
-                    <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                    <label htmlFor="prof-phone" style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
                       {lang === 'tr' ? 'Telefon' : 'Phone'}
                     </label>
                     {isEditing ? (
-                      <input className="input" type="tel" name="phone" value={formData.phone} onChange={handleChange} />
+                      <input id="prof-phone" className="input" type="tel" name="phone" value={formData.phone} onChange={handleChange} autoComplete="tel" />
                     ) : (
                       <div className="input" style={{ background: 'var(--cream-deep)', color: 'var(--ink-2)' }}>{user.phone || '—'}</div>
                     )}
@@ -420,41 +430,47 @@ export default function ProfilePage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 400 }}>
                     {/* Old password */}
                     <div className="field">
-                      <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                      <label htmlFor="sec-pw-old" style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
                         {lang === 'tr' ? 'Mevcut Şifre' : 'Current Password'}
                       </label>
                       <input
+                        id="sec-pw-old"
                         className="input"
                         type="password"
                         placeholder="••••••••"
                         value={pwForm.old_password}
                         onChange={(e) => setPwForm({ ...pwForm, old_password: e.target.value })}
+                        autoComplete="current-password"
                       />
                     </div>
                     {/* New password */}
                     <div className="field">
-                      <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                      <label htmlFor="sec-pw-new" style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
                         {lang === 'tr' ? 'Yeni Şifre' : 'New Password'}
                       </label>
                       <input
+                        id="sec-pw-new"
                         className="input"
                         type="password"
                         placeholder="••••••••"
                         value={pwForm.new_password}
                         onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })}
+                        autoComplete="new-password"
                       />
                     </div>
                     {/* Confirm */}
                     <div className="field">
-                      <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                      <label htmlFor="sec-pw-confirm" style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
                         {lang === 'tr' ? 'Şifreyi Onayla' : 'Confirm New Password'}
                       </label>
                       <input
+                        id="sec-pw-confirm"
                         className="input"
                         type="password"
                         placeholder="••••••••"
                         value={pwForm.confirm}
                         onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
+                        autoComplete="new-password"
                       />
                     </div>
                   </div>

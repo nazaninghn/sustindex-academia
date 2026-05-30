@@ -65,7 +65,7 @@ export default function SurveysPage() {
     if (user) {
       surveyAPI
         .getSurveys()
-        .then((data: any) => {
+        .then((data: Survey[] | { results: Survey[] }) => {
           const list = Array.isArray(data) ? data : (data?.results ?? []);
           setSurveys(list);
         })
@@ -108,7 +108,13 @@ export default function SurveysPage() {
 
   const visible = surveys.filter((s) => filter === 'all' || s.category === filter);
 
-  if (authLoading) return null;
+  if (authLoading) return (
+    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
+        LOADING…
+      </span>
+    </div>
+  );
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>

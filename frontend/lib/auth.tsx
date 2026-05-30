@@ -93,6 +93,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // Security fix: blacklist the refresh token server-side so it can't be reused
+    // for the remaining REFRESH_TOKEN_LIFETIME (7 days) even if extracted from storage.
+    // Fire-and-forget — user is logged out immediately regardless of network result.
+    const refresh = getToken('refresh_token');
+    if (refresh) {
+      api
+        .post('/api/v1/auth/token/blacklist/', { refresh })
+        .catch(() => { /* ignore — token will expire naturally */ });
+    }
     clearTokens();   // clears both localStorage and sessionStorage
     setUser(null);
   };

@@ -58,6 +58,7 @@ export default function CourseDetailPage() {
   const [loadingCourse,  setLoadingCourse]  = useState(true);
   const [error,          setError]          = useState('');
   const [completing,     setCompleting]     = useState<number | null>(null);  // lessonId being completed
+  const [completeErr,    setCompleteErr]    = useState('');
   const [expandedLesson, setExpandedLesson] = useState<number | null>(null);
 
   /* ── Auth guard ── */
@@ -96,13 +97,15 @@ export default function CourseDetailPage() {
   /* ── Complete lesson ── */
   const handleComplete = async (lessonId: number) => {
     setCompleting(lessonId);
+    setCompleteErr('');
     try {
       await elearningAPI.completeLesson(lessonId);
       emitDataChange({ source: 'lesson', lessonId });  // ← live-refresh dashboard
       // Refresh course to get updated progress / is_completed flags
       await loadCourse();
     } catch {
-      // Silently ignore — lesson may already be completed
+      // Lesson completion is idempotent — user can safely retry.
+      setCompleteErr(t('course_complete_err'));
     } finally {
       setCompleting(null);
     }
@@ -234,6 +237,23 @@ export default function CourseDetailPage() {
             </div>
           </div>
 
+          {/* ── Lesson completion error ── */}
+          {completeErr && (
+            <div style={{
+              background: '#FEF2F0', border: '1px solid #F5C6BB',
+              padding: '10px 16px', marginBottom: 16,
+              fontSize: 12, color: 'var(--danger)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <span>{completeErr}</span>
+              <button
+                onClick={() => setCompleteErr('')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--danger)', lineHeight: 1 }}
+                aria-label="Dismiss"
+              >×</button>
+            </div>
+          )}
+
           {/* ── Lesson list ── */}
           <div>
             <h2 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-3)', marginBottom: 16 }}>
@@ -260,6 +280,7 @@ export default function CourseDetailPage() {
                     <div
                       role="button"
                       aria-expanded={isExpanded}
+                      aria-label={`${isExpanded ? 'Collapse' : 'Expand'} lesson: ${lesson.title_display}`}
                       tabIndex={0}
                       onClick={() => setExpandedLesson(isExpanded ? null : lesson.id)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedLesson(isExpanded ? null : lesson.id); } }}

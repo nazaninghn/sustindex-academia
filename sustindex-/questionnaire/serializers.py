@@ -169,6 +169,32 @@ class SurveySerializer(serializers.ModelSerializer):
         return representation
 
 
+# ── Shared mixin ────────────────────────────────────────────────────────────
+class AttemptBreakdownMixin:
+    """
+    Caches the expensive get_category_breakdown() result per attempt instance
+    on the serializer so that get_total_score, get_overall_grade, and
+    get_category_scores all share one result dict without repeated DB queries.
+    Previously this method was copy-pasted in both QuestionnaireAttemptSerializer
+    and QuestionnaireAttemptListSerializer.
+    """
+
+    def _breakdown(self, obj) -> dict:
+        cache_attr = f'_cached_breakdown_{obj.id}'
+        if hasattr(self, cache_attr):
+            return getattr(self, cache_attr)
+        if not obj.is_completed:
+            empty: dict = {
+                'categories': [], 'total_score': 0,
+                'total_possible': 0, 'total_percentage': 0,
+            }
+            setattr(self, cache_attr, empty)
+            return empty
+        result = obj.get_category_breakdown()
+        setattr(self, cache_attr, result)
+        return result
+
+
 class UserDocumentSerializer(serializers.ModelSerializer):
     file_size_display = serializers.CharField(source='get_file_size_display', read_only=True)
     
@@ -228,7 +254,7 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
         return answer
 
 
-class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
+class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSerializer):
     answers = AnswerSerializer(many=True, read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
     survey_name = serializers.CharField(source='survey.name', read_only=True)
@@ -248,20 +274,6 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
         ]
 
     # ---- helpers ----
-
-    def _breakdown(self, obj):
-        cache_attr = f'_cached_breakdown_{obj.id}'
-        if hasattr(self, cache_attr):
-            return getattr(self, cache_attr)
-
-        if not obj.is_completed:
-            empty = {'categories': [], 'total_score': 0, 'total_possible': 0, 'total_percentage': 0}
-            setattr(self, cache_attr, empty)
-            return empty
-
-        result = obj.get_category_breakdown()
-        setattr(self, cache_attr, result)
-        return result
 
     def _get_language(self):
         request = self.context.get('request')
@@ -320,7 +332,7 @@ class QuestionnaireAttemptSerializer(serializers.ModelSerializer):
         return localized
 
 
-class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
+class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.ModelSerializer):
     """Lightweight serializer for listing attempts — delegates to model."""
     user_name = serializers.CharField(source='user.username', read_only=True)
     survey_name = serializers.CharField(source='survey.name', read_only=True)
@@ -337,20 +349,6 @@ class QuestionnaireAttemptListSerializer(serializers.ModelSerializer):
             'is_completed', 'total_score', 'overall_grade',
             'category_scores',
         ]
-
-    def _breakdown(self, obj):
-        cache_attr = f'_cached_breakdown_{obj.id}'
-        if hasattr(self, cache_attr):
-            return getattr(self, cache_attr)
-
-        if not obj.is_completed:
-            empty = {'categories': [], 'total_score': 0, 'total_possible': 0, 'total_percentage': 0}
-            setattr(self, cache_attr, empty)
-            return empty
-
-        result = obj.get_category_breakdown()
-        setattr(self, cache_attr, result)
-        return result
 
     def get_total_score(self, obj):
         return self._breakdown(obj)['total_percentage']

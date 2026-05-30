@@ -115,7 +115,10 @@ export const attemptAPI = {
     notes?:      string,
     textAnswer?: string,
   ) => {
-    const payload: Record<string, any> = { attempt: attemptId, question: questionId };
+    const payload: Record<string, number | number[] | string | null | undefined> = {
+      attempt: attemptId,
+      question: questionId,
+    };
     if (choiceIds && choiceIds.length > 0) payload.choices_ids = choiceIds;
     else if (choiceId !== null && choiceId !== undefined) payload.choice = choiceId;
     if (notes)      payload.notes       = notes;
@@ -130,7 +133,15 @@ export const attemptAPI = {
   },
 
   /** Upload a supporting document for a saved answer (uses native fetch so FormData boundary is set correctly) */
-  uploadDocument: async (answerId: number, file: File, title?: string): Promise<any> => {
+  uploadDocument: async (answerId: number, file: File, title?: string): Promise<{
+    id: number;
+    title: string;
+    description: string;
+    file: string;
+    uploaded_at: string;
+    file_size: number;
+    file_size_display: string;
+  }> => {
     if (typeof window === 'undefined') throw new Error('uploadDocument is browser-only');
     // Fix BUG-03: use getToken() helper so session-storage users (remember=false) are covered.
     const token = getToken('access_token');

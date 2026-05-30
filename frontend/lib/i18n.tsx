@@ -90,12 +90,8 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   step_1_d: { en: 'Create your account in under a minute.',          tr: 'Hesabınızı bir dakikadan kısa sürede oluşturun.' },
   step_2_t: { en: 'Answer',    tr: 'Yanıtla' },
   step_2_d: { en: 'Respond to 12 indicators across E·S·G.',           tr: 'Ç·S·Y arasında 12 göstergeyi yanıtlayın.' },
-  // Fix K: replaced mismatched step_4_t/step_5_d pair with a consistent step_3 pair
   step_3_t: { en: 'Get Report', tr: 'Rapor Al' },
   step_3_d: { en: 'Receive your calculated score and download the executive-grade PDF.', tr: 'Hesaplanan puanınızı alın ve yönetici seviyesinde PDF\'inizi indirin.' },
-  // Kept for any other code that may reference these keys
-  step_4_t: { en: 'Calculate', tr: 'Hesapla' },
-  step_5_d: { en: 'Download your executive-grade PDF.',               tr: 'Yönetici seviyesinde PDF\'inizi indirin.' },
 
   /* Footer */
   foot_platform:   { en: 'Platform',    tr: 'Platform' },
@@ -250,6 +246,7 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   course_back:         { en: '← Back to Courses',           tr: '← Kurslara Dön' },
   course_not_found:    { en: 'Course not found.',            tr: 'Kurs bulunamadı.' },
   course_load_fail:    { en: 'Failed to load course.',       tr: 'Kurs yüklenemedi.' },
+  course_complete_err: { en: 'Could not save progress. Please try again.', tr: 'İlerleme kaydedilemedi. Lütfen tekrar deneyin.' },
   course_progress:     { en: 'Progress',                     tr: 'İlerleme' },
   course_lessons_word: { en: 'lessons',                      tr: 'ders' },
   course_lessons_head: { en: 'Lessons',                      tr: 'Dersler' },

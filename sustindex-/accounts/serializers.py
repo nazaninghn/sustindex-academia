@@ -24,8 +24,14 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     
     def validate_email(self, value):
         # Fix F: Django's AbstractUser doesn't enforce unique emails — do it here.
-        if value and User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
+        # Instance-aware: exclude the current user so a PATCH that re-submits the
+        # same email (or an admin edit) doesn't trigger a false uniqueness error.
+        if value:
+            qs = User.objects.filter(email__iexact=value)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError("A user with this email already exists.")
         return value
 
     def validate(self, data):
