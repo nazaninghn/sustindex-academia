@@ -10,13 +10,27 @@ import { surveyAPI, attemptAPI } from '@/lib/api';
 
 interface Survey {
   id: number;
-  name: string;
-  description?: string;
+  name: string; name_en?: string; name_tr?: string;
+  description?: string; description_en?: string; description_tr?: string;
   question_count?: number;
   questions?: { id: number }[];
   estimated_time?: string;
   category?: string;   // env | soc | gov — may not come from API
   tag?: string;
+}
+
+/** Pick the right language field, fall back to default text */
+function loc(
+  obj: { name?: string; name_en?: string; name_tr?: string;
+         description?: string; description_en?: string; description_tr?: string },
+  field: 'name' | 'description',
+  lang: string
+): string {
+  const trKey  = `${field}_tr`  as 'name_tr'  | 'description_tr';
+  const enKey  = `${field}_en`  as 'name_en'  | 'description_en';
+  if (lang === 'tr' && obj[trKey]) return obj[trKey]!;
+  if (lang === 'en' && obj[enKey]) return obj[enKey]!;
+  return obj[field] || '';
 }
 
 function SkeletonCard() {
@@ -230,11 +244,11 @@ export default function SurveysPage() {
 
                 {/* Title + description */}
                 <h3 style={{ fontSize: 18, marginBottom: 10, fontWeight: 500, letterSpacing: '-0.01em' }}>
-                  {s.name}
+                  {loc(s, 'name', lang)}
                 </h3>
                 {s.description && (
                   <p style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 24, lineHeight: 1.65 }}>
-                    {s.description}
+                    {loc(s, 'description', lang)}
                   </p>
                 )}
 

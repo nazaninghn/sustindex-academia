@@ -41,4 +41,8 @@ echo "Importing GRI questionnaire data..."
 python manage.py import_gri_questionnaire data/GRI_Questionnaire_v3_FIXED.xlsx
 
 echo ""
+echo "Translating questionnaire to Turkish..."
+python manage.py translate_questionnaire --survey GRI || echo "Translation step failed (non-fatal)"
+
+echo ""
 echo "Build completed successfully!"
