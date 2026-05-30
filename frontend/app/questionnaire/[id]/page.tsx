@@ -61,6 +61,8 @@ export default function QuestionnairePage() {
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const langRef       = useRef(lang);
   const submitLockRef = useRef(false);
+  /* surveyId stored so refreshTexts can re-fetch without re-loading the attempt */
+  const surveyIdRef   = useRef<number | null>(null);
   useEffect(() => { langRef.current = lang; }, [lang]);
 
   /* ── Data state ── */
@@ -82,6 +84,30 @@ export default function QuestionnairePage() {
     if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
+  /**
+   * Lightweight re-fetch: only updates question texts + survey name.
+   * Does NOT touch answers, notes, currentIdx — so the user keeps their position.
+   * Called whenever lang changes after initial load.
+   */
+  const refreshTexts = useCallback(async () => {
+    const sid = surveyIdRef.current;
+    if (!sid) return;
+    try {
+      const { surveyAPI } = await import('@/lib/api');
+      const survey = await surveyAPI.getSurvey(sid);
+      setSurveyName(survey.name || '');
+      const qs: Question[] = (survey.questions || []).sort(
+        (a: Question, b: Question) => a.order - b.order
+      );
+      setQuestions(qs);
+    } catch { /* non-fatal — keep showing previous texts */ }
+  }, []); // no deps — reads surveyIdRef directly
+
+  /* Re-fetch question texts whenever language changes (after initial load) */
+  useEffect(() => {
+    if (surveyIdRef.current) refreshTexts();
+  }, [lang, refreshTexts]);
+
   const loadData = useCallback(async () => {
     try {
       const attempt = await attemptAPI.getAttempt(Number(id));
@@ -89,9 +115,12 @@ export default function QuestionnairePage() {
 
       const { surveyAPI } = await import('@/lib/api');
       if (!attempt.survey) {
-        setError(langRef.current === 'tr' ? 'Ankete bağlı deneme bulunamadı.' : 'Attempt has no associated survey.');
+        setError(langRef.current === 'tr' ? 'Ankete bagli deneme bulunamadi.' : 'Attempt has no associated survey.');
         return;
       }
+      /* Save survey ID so refreshTexts can use it on lang switch */
+      surveyIdRef.current = attempt.survey;
+
       const survey = await surveyAPI.getSurvey(attempt.survey);
       setSurveyName(survey.name || '');
 
@@ -150,8 +179,12 @@ export default function QuestionnairePage() {
     (isMixedType && (selection.length > 0 || textAns.trim().length > 0)) ||
     (!hasChoices && !isTextType);
 
-  /* ── Localised helpers for current question ── */
-  const qText    = q ? loc(q, lang) : '';
+  /* ── Localised helpers for current question ──
+   * qText / choiceText: use `text` directly — after refreshTexts() the API already
+   * returns the correct language in `text`.  loc() is kept as extra safety for
+   * cases where text_tr is populated but the API didn't override text.
+   * catLabel: always resolved from the stored _tr/_en fields (set by import command). */
+  const qText    = q ? (loc(q, lang) || q.text) : '';
   const catLabel = q
     ? (lang === 'tr' && q.category_name_tr) ? q.category_name_tr
       : (lang === 'en' && q.category_name_en) ? q.category_name_en
@@ -395,7 +428,8 @@ export default function QuestionnairePage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 32 }}>
             {q.choices.map((choice, i) => {
               const isSel = selection.includes(choice.id);
-              const choiceText = loc(choice, lang);
+              /* Use loc() first; fall back to choice.text (already in correct lang after refreshTexts) */
+              const choiceText = loc(choice, lang) || choice.text;
               return (
                 <button
                   key={choice.id}
