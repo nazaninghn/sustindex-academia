@@ -470,31 +470,30 @@ class QuestionnaireAttempt(models.Model):
         return self._grade_for_score(self.total_score)
     
     def get_recommendations(self):
-        """Provide dynamic recommendations based on category scores.
+        """Provide GRI-aligned recommendations based on category scores.
 
-        Fix BUG-25: previously called get_category_score() per category,
-        issuing 2 DB queries per category (N+1). Now reuses get_category_breakdown()
-        which executes a single bulk question query for the whole attempt.
+        Uses the gri_recommendations module to generate specific, actionable
+        recommendations with GRI standard references, timelines, and quick wins.
+        Only generates recommendations for categories scoring below 80%.
         """
         if not self.is_completed:
             return []
+        from .gri_recommendations import get_recommendations_for_category
         breakdown = self.get_category_breakdown()
         recommendations = []
         for cat in breakdown['categories']:
             pct  = cat['percentage']
             name = cat['name']
-            if pct < 50:
-                recommendations.append({
-                    'category':   name,
-                    'priority':   'High',
-                    'suggestion': f'Improve your performance in {name}. Current score is below 50%.',
-                })
-            elif pct < 70:
-                recommendations.append({
-                    'category':   name,
-                    'priority':   'Medium',
-                    'suggestion': f'Good progress in {name}, but there is room for improvement.',
-                })
+            # Only recommend for categories below excellent (80%)
+            if pct < 80:
+                recs = get_recommendations_for_category(name, pct)
+                recommendations.extend(recs)
+        # Sort: High priority first, then by score ascending
+        priority_order = {'High': 0, 'Medium': 1, 'Low': 2}
+        recommendations.sort(key=lambda r: (
+            priority_order.get(r.get('priority', 'Low'), 2),
+            r.get('score_pct', 50),
+        ))
         return recommendations
 
 

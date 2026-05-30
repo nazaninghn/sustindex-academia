@@ -266,6 +266,10 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
     category_scores = serializers.SerializerMethodField()
     total_score = serializers.SerializerMethodField()
     overall_grade = serializers.SerializerMethodField()
+    pillar_scores = serializers.SerializerMethodField()
+    maturity = serializers.SerializerMethodField()
+    answered_count = serializers.SerializerMethodField()
+    total_questions = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionnaireAttempt
@@ -273,6 +277,7 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
             'id', 'user', 'user_name', 'survey', 'survey_name',
             'session', 'session_name', 'started_at', 'completed_at',
             'is_completed', 'total_score', 'overall_grade',
+            'pillar_scores', 'maturity', 'answered_count', 'total_questions',
             'answers', 'recommendations', 'category_scores',
         ]
 
@@ -295,12 +300,39 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
     def get_overall_grade(self, obj):
         if not obj.is_completed:
             return None
-        # H1: delegate to model's single source of truth for grade thresholds.
         score = self._breakdown(obj)['total_percentage']
         return QuestionnaireAttempt._grade_for_score(score)
 
     def get_recommendations(self, obj):
         return obj.get_recommendations() if obj.is_completed else []
+
+    def get_pillar_scores(self, obj):
+        """Return E/S/G pillar scores stored on the attempt."""
+        return {
+            'environmental': round(obj.environmental_score or 0, 1),
+            'social':        round(obj.social_score or 0, 1),
+            'governance':    round(obj.governance_score or 0, 1),
+        }
+
+    def get_maturity(self, obj):
+        """Return maturity label + narrative for the overall score."""
+        if not obj.is_completed:
+            return None
+        from .gri_recommendations import maturity_label, maturity_narrative
+        language = self._get_language() or 'en'
+        score = self._breakdown(obj)['total_percentage']
+        return {
+            'label':     maturity_label(score, language),
+            'narrative': maturity_narrative(score, language),
+        }
+
+    def get_answered_count(self, obj):
+        return obj.answers.count()
+
+    def get_total_questions(self, obj):
+        if obj.survey:
+            return obj.survey.questions.filter(is_active=True).count()
+        return 0
 
     def get_category_scores(self, obj):
         breakdown = self._breakdown(obj)

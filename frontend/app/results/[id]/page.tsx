@@ -8,69 +8,117 @@ import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/shared';
 import { attemptAPI } from '@/lib/api';
-import { gradeColor, priorityColor, sanitizeHtml } from '@/lib/utils';
+import { sanitizeHtml } from '@/lib/utils';
 
-function priorityDot(p: string) {
-  return (
-    <span style={{
-      display: 'inline-block', width: 6, height: 6,
-      borderRadius: '50%', background: priorityColor(p), flexShrink: 0,
-    }} />
-  );
+/* ─── Colour helpers ─────────────────────────────────────── */
+function gradeColor(g: string): string {
+  if (!g) return 'var(--ink-3)';
+  if (g.startsWith('A')) return '#2d6a4f';
+  if (g.startsWith('B')) return '#52796f';
+  if (g.startsWith('C')) return '#b5835a';
+  return '#c1121f';
+}
+function scoreColor(pct: number): string {
+  if (pct >= 80) return '#2d6a4f';
+  if (pct >= 60) return '#52796f';
+  if (pct >= 40) return '#b5835a';
+  if (pct >= 20) return '#e07b39';
+  return '#c1121f';
+}
+function scoreLabel(pct: number, lang: string): string {
+  if (pct >= 80) return lang === 'tr' ? 'Mükemmel' : 'Excellent';
+  if (pct >= 60) return lang === 'tr' ? 'İyi' : 'Good';
+  if (pct >= 40) return lang === 'tr' ? 'Gelişiyor' : 'Developing';
+  if (pct >= 20) return lang === 'tr' ? 'Başlangıç' : 'Initial';
+  return lang === 'tr' ? 'Kritik' : 'Critical';
+}
+function effortColor(e: string): string {
+  if (e === 'Low')    return '#52796f';
+  if (e === 'Medium') return '#b5835a';
+  return '#c1121f';
+}
+function priorityColor(p: string): string {
+  if (p === 'High')   return '#c1121f';
+  if (p === 'Medium') return '#b5835a';
+  return '#52796f';
 }
 
-/* ─── Score ring ─────────────────────────────────────────── */
-function ScoreRing({ score, grade }: { score: number; grade: string }) {
-  const r = 52, cx = 64, cy = 64, stroke = 5;
-  const circ = 2 * Math.PI * r;
-  const dash = (score / 100) * circ;
-  return (
-    <svg width={128} height={128} viewBox="0 0 128 128">
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
-      <circle
-        cx={cx} cy={cy} r={r} fill="none"
-        stroke={gradeColor(grade)} strokeWidth={stroke}
-        strokeDasharray={`${dash} ${circ - dash}`}
-        strokeLinecap="round"
-        transform="rotate(-90 64 64)"
-        style={{ transition: 'stroke-dasharray 1s ease' }}
-      />
-      <text x={cx} y={cy - 6} textAnchor="middle"
-        fontFamily="'IBM Plex Sans', sans-serif" fontWeight="300" fontSize="28"
-        letterSpacing="-2" fill="var(--ink)">{score}</text>
-      <text x={cx} y={cy + 14} textAnchor="middle"
-        fontFamily="'IBM Plex Sans', sans-serif" fontWeight="600" fontSize="13"
-        fill={gradeColor(grade)}>{grade}</text>
-    </svg>
-  );
+/* ─── Types ─────────────────────────────────────────────── */
+interface CategoryScore {
+  id: number; key: string; name: string;
+  score: number; max_score: number; percentage: number;
 }
-
-/* ═══════════════════════════════════════════════════════════
-   Results Page
-   ═══════════════════════════════════════════════════════════ */
-/* ─── Types ────────────────────────────────────────────────── */
-interface CategoryScore { id: number; key: string; name: string; score: number; max_score: number; percentage: number }
 interface Recommendation {
-  category: string;
-  priority?: string;
-  priority_level?: string;   // alternate field name from some API versions
-  suggestion?: string;
-  title?: string;
-  text?: string;             // alternate title field
-  recommendation?: string;   // alternate title field
-  description?: string;
-  detail?: string;           // alternate description field
+  category: string; priority: string;
+  gri_standard?: string; title?: string; description?: string;
+  quick_win?: string; timeline_days?: number; effort?: string;
+  score_pct?: number;
+  /* legacy */
+  suggestion?: string; text?: string; recommendation?: string;
 }
 interface AnswerDoc { id: number; title: string; file: string; file_size_display?: string }
-interface AttemptAnswer { id: number; question: number; question_text: string; choice_text?: string; choices_display?: string; notes?: string; documents?: AnswerDoc[] }
+interface AttemptAnswer {
+  id: number; question: number; question_text: string;
+  choice_text?: string; choices_display?: string;
+  notes?: string; documents?: AnswerDoc[];
+}
+interface PillarScores { environmental: number; social: number; governance: number }
+interface Maturity     { label: string; narrative: string }
 interface Attempt {
   id: number; is_completed: boolean; completed_at: string | null;
   total_score: number; overall_grade: string;
   survey_name: string; user_name: string; session_name?: string;
   category_scores: CategoryScore[]; recommendations: Recommendation[];
   answers: AttemptAnswer[];
+  pillar_scores?: PillarScores;
+  maturity?: Maturity;
+  answered_count?: number;
+  total_questions?: number;
 }
 
+/* ─── Score Ring ─────────────────────────────────────────── */
+function ScoreRing({ score, grade }: { score: number; grade: string }) {
+  const r = 52, cx = 64, cy = 64, stroke = 6;
+  const circ = 2 * Math.PI * r;
+  const dash  = (score / 100) * circ;
+  const color = gradeColor(grade);
+  return (
+    <svg width={136} height={136} viewBox="0 0 128 128">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
+      <circle cx={cx} cy={cy} r={r} fill="none"
+        stroke={color} strokeWidth={stroke}
+        strokeDasharray={`${dash} ${circ - dash}`}
+        strokeLinecap="round" transform="rotate(-90 64 64)"
+        style={{ transition: 'stroke-dasharray 1.2s ease' }}
+      />
+      <text x={cx} y={cy - 4} textAnchor="middle"
+        fontFamily="'IBM Plex Sans', sans-serif" fontWeight="300" fontSize="30"
+        letterSpacing="-2" fill="var(--ink)">{score}</text>
+      <text x={cx} y={cy + 16} textAnchor="middle"
+        fontFamily="'IBM Plex Mono', sans-serif" fontWeight="700" fontSize="14"
+        fill={color}>{grade}</text>
+    </svg>
+  );
+}
+
+/* ─── Mini gauge bar ─────────────────────────────────────── */
+function MiniGauge({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{label}</span>
+        <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 12, color }}>{Math.round(value)}</span>
+      </div>
+      <div style={{ height: 4, background: 'var(--line)', borderRadius: 2 }}>
+        <div style={{ width: `${Math.min(value, 100)}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 1s ease' }} />
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Results Page
+   ═══════════════════════════════════════════════════════════ */
 export default function ResultsPage() {
   const { id }   = useParams<{ id: string }>();
   const router   = useRouter();
@@ -79,8 +127,8 @@ export default function ResultsPage() {
 
   const [attempt,    setAttempt]    = useState<Attempt | null>(null);
   const [loading,    setLoading]    = useState(true);
-  const [fetchError, setFetchError] = useState('');   // Fix CRITICAL #6
-  const [tab,        setTab]        = useState<'overview' | 'evidence'>('overview');
+  const [fetchError, setFetchError] = useState('');
+  const [tab,        setTab]        = useState<'overview' | 'actions' | 'evidence'>('overview');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -90,36 +138,27 @@ export default function ResultsPage() {
     if (user && id) {
       attemptAPI.getAttempt(Number(id))
         .then((data: Attempt) => setAttempt(data))
-        .catch((err: unknown) => {
-          console.error('Failed to load attempt:', err);
-          setFetchError(lang === 'tr' ? 'Değerlendirme yüklenemedi.' : 'Failed to load assessment.');
-        })
+        .catch(() => setFetchError(lang === 'tr' ? 'Değerlendirme yüklenemedi.' : 'Failed to load assessment.'))
         .finally(() => setLoading(false));
     }
-  // Fix #5: removed `lang` — language switch is presentational and must not
-  // trigger a full API re-fetch; error message language is fine to be stale.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, id]);
 
-  // Redirect incomplete attempts — must be in effect, NOT during render
   useEffect(() => {
     if (!loading && attempt && !attempt.is_completed) {
       router.replace(`/questionnaire/${id}`);
     }
   }, [loading, attempt, id, router]);
 
-  /* ── Loading ── */
   if (authLoading || loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
+          {lang === 'tr' ? 'YÜKLENIYOR…' : 'LOADING…'}
         </span>
       </div>
     );
   }
-
-  /* ── Fetch error / not found ── */
   if (!attempt) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
@@ -132,8 +171,6 @@ export default function ResultsPage() {
       </div>
     );
   }
-
-  /* ── Incomplete — redirect handled in useEffect above ── */
   if (!attempt.is_completed) return null;
 
   const score       = Math.round(attempt.total_score ?? 0);
@@ -141,26 +178,48 @@ export default function ResultsPage() {
   const categories  = attempt.category_scores ?? [];
   const recs        = attempt.recommendations ?? [];
   const answersArr  = attempt.answers ?? [];
-  const companyName = user?.company_name || user?.username || '';
+  const pillars     = attempt.pillar_scores;
+  const maturity    = attempt.maturity;
+  const answeredCnt = attempt.answered_count ?? answersArr.length;
+  const totalQ      = attempt.total_questions ?? 0;
+  const companyName = (user as { company_name?: string; username?: string })?.company_name || user?.username || '';
   const surveyName  = attempt.survey_name || (lang === 'tr' ? 'ESG Değerlendirmesi' : 'ESG Assessment');
   const completedAt = attempt.completed_at
-    ? new Date(attempt.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    ? new Date(attempt.completed_at).toLocaleDateString(
+        lang === 'tr' ? 'tr-TR' : 'en-GB',
+        { day: 'numeric', month: 'long', year: 'numeric' }
+      )
     : '—';
 
-  // Answers that have notes or documents
   const evidenceAnswers = answersArr.filter((a) => a.notes || (a.documents?.length ?? 0) > 0);
+  const highPriorityRecs = recs.filter((r) => r.priority === 'High');
+  const mediumRecs       = recs.filter((r) => r.priority === 'Medium');
+  const lowRecs          = recs.filter((r) => r.priority === 'Low');
+
+  /* ── Pillar label helper ── */
+  const pillarLabel = (key: string) => {
+    const labels: Record<string, Record<string, string>> = {
+      environmental: { en: 'Environmental', tr: 'Çevre' },
+      social:        { en: 'Social',        tr: 'Sosyal' },
+      governance:    { en: 'Governance',    tr: 'Yönetişim' },
+    };
+    return labels[key]?.[lang] ?? key;
+  };
+  const pillarColor = (key: string) => {
+    if (key === 'environmental') return '#2d6a4f';
+    if (key === 'social')        return '#52796f';
+    return '#1e3a5f';
+  };
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
       <div className="no-print"><AppNav /></div>
 
-      <main className="wrap" style={{ padding: '32px 32px 80px' }}>
+      <main className="wrap" style={{ padding: '32px 32px 80px', maxWidth: 900 }}>
 
         {/* ── Toolbar ── */}
-        <div className="no-print" style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32,
-        }}>
-          <Link href="/dashboard" style={{ textDecoration: 'none', fontSize: 11, color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 6, letterSpacing: '0.02em' }}>
+        <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+          <Link href="/dashboard" style={{ textDecoration: 'none', fontSize: 11, color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             ← {lang === 'tr' ? 'Panele Dön' : 'Back to Dashboard'}
           </Link>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -179,237 +238,436 @@ export default function ResultsPage() {
             REPORT HEADER
             ══════════════════════════════════════ */}
         <div className="print-section" style={{
-          borderTop: '2px solid var(--ink)',
-          paddingTop: 28, paddingBottom: 32,
-          marginBottom: 32, borderBottom: '1px solid var(--line)',
-          display: 'grid', gridTemplateColumns: '1fr auto', gap: 48, alignItems: 'center',
+          borderTop: '3px solid var(--ink)', paddingTop: 28, paddingBottom: 32,
+          marginBottom: 0,
         }}>
-          <div>
-            <span style={{
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)',
-              letterSpacing: '0.12em', textTransform: 'uppercase', display: 'block', marginBottom: 14,
-            }}>
-              REF-{String(attempt.id).padStart(4, '0')} · {completedAt} · sustindex
-            </span>
-            <h1 style={{ fontSize: 28, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 14 }}>
-              {lang === 'tr' ? 'ESG Değerlendirme Raporu' : 'ESG Assessment Report'}
-              {companyName && (
-                <>
-                  <br />
-                  <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500, fontSize: 20 }}>
-                    {companyName}
-                  </em>
-                </>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 32, flexWrap: 'wrap' }}>
+            {/* Left: metadata */}
+            <div style={{ flex: 1 }}>
+              <span style={{
+                fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)',
+                letterSpacing: '0.12em', textTransform: 'uppercase', display: 'block', marginBottom: 14,
+              }}>
+                REF-{String(attempt.id).padStart(4, '0')} · {completedAt} · SustIndex GRI Framework
+              </span>
+              <h1 style={{ fontSize: 26, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 10 }}>
+                {lang === 'tr' ? 'ESG Yetkinlik Değerlendirme Raporu' : 'ESG Competency Assessment Report'}
+                {companyName && (
+                  <>
+                    <br />
+                    <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500, fontSize: 18 }}>
+                      {companyName}
+                    </em>
+                  </>
+                )}
+              </h1>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                  <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Anket:' : 'Survey:'}</strong>
+                  {' '}{surveyName}
+                </span>
+                <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                  <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Çerçeve:' : 'Framework:'}</strong>
+                  {' '}GRI Universal · SASB · TCFD
+                </span>
+              </div>
+              {totalQ > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                  {answeredCnt}/{totalQ} {lang === 'tr' ? 'soru yanıtlandı' : 'questions answered'} ·{' '}
+                  {Math.round((answeredCnt / totalQ) * 100)}% {lang === 'tr' ? 'tamamlandı' : 'completion'}
+                </span>
               )}
-            </h1>
-            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-                <strong style={{ fontWeight: 600, color: 'var(--ink)' }}>{lang === 'tr' ? 'Anket:' : 'Survey:'}</strong>
-                {' '}{surveyName}
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>·</span>
-              <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-                <strong style={{ fontWeight: 600, color: 'var(--ink)' }}>{lang === 'tr' ? 'Çerçeve:' : 'Framework:'}</strong>
-                {' '}GRI · SASB · ISO 26000
-              </span>
+            </div>
+
+            {/* Right: score ring */}
+            <div style={{ textAlign: 'center', flexShrink: 0 }}>
+              <ScoreRing score={score} grade={grade} />
+              <div style={{ marginTop: 4 }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--ink-4)', letterSpacing: '0.08em', display: 'block' }}>
+                  {lang === 'tr' ? 'GENEL SKOR' : 'OVERALL SCORE'}
+                </span>
+                {maturity && (
+                  <span style={{
+                    display: 'inline-block', marginTop: 4,
+                    fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 10,
+                    color: gradeColor(grade), letterSpacing: '0.06em', textTransform: 'uppercase',
+                    background: 'var(--olive-wash)', padding: '2px 8px',
+                  }}>
+                    {maturity.label}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Score ring */}
-          <div style={{ textAlign: 'center' }}>
-            <ScoreRing score={score} grade={grade} />
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.08em', display: 'block', marginTop: 4 }}>
-              {lang === 'tr' ? 'genel skor' : 'overall score'}
-            </span>
-          </div>
+          {/* Maturity narrative */}
+          {maturity?.narrative && (
+            <div style={{
+              marginTop: 20, padding: '16px 20px',
+              background: 'var(--paper)', borderLeft: '3px solid var(--olive-deep)',
+              fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.7,
+            }}>
+              {maturity.narrative}
+            </div>
+          )}
         </div>
 
         {/* ══════════════════════════════════════
-            TABS (Overview / Evidence)
+            E / S / G PILLAR SCORES
+            ══════════════════════════════════════ */}
+        {pillars && (pillars.environmental > 0 || pillars.social > 0 || pillars.governance > 0) && (
+          <div className="print-section" style={{
+            marginTop: 24, padding: '20px 24px',
+            background: 'var(--paper)', border: '1px solid var(--line)',
+          }}>
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--ink-4)',
+              letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 16,
+            }}>
+              {lang === 'tr' ? 'ESG Boyut Puanları' : 'ESG Pillar Scores'}
+            </span>
+            <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+              {(['environmental', 'social', 'governance'] as const).map((key) => (
+                <MiniGauge
+                  key={key}
+                  label={pillarLabel(key)}
+                  value={pillars[key]}
+                  color={pillarColor(key)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════
+            TABS
             ══════════════════════════════════════ */}
         <div className="no-print" style={{
-          display: 'flex', gap: 0, marginBottom: 28, borderBottom: '1px solid var(--line)',
+          display: 'flex', gap: 0, marginTop: 28, marginBottom: 0,
+          borderBottom: '1px solid var(--line)',
         }}>
-          {/* Fix LOW #45: renamed map param from `t` to `tabKey` to avoid shadowing the i18n t() function */}
-          {(['overview', 'evidence'] as const).map((tabKey) => (
-            <button key={tabKey} onClick={() => setTab(tabKey)} style={{
-              padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer',
-              borderBottom: tab === tabKey ? '2px solid var(--ink)' : '2px solid transparent',
-              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: tab === tabKey ? 600 : 400,
-              fontSize: 12, color: tab === tabKey ? 'var(--ink)' : 'var(--ink-3)',
-              marginBottom: -1, transition: 'color 0.15s',
-              letterSpacing: '0.02em',
+          {([
+            ['overview', lang === 'tr' ? 'Performans Özeti' : 'Performance Summary'],
+            ['actions',  lang === 'tr' ? `Aksiyon Planı${recs.length > 0 ? ` (${recs.length})` : ''}` : `Action Plan${recs.length > 0 ? ` (${recs.length})` : ''}`],
+            ['evidence', lang === 'tr' ? `Notlar & Kanıtlar${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}` : `Notes & Evidence${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}`],
+          ] as [typeof tab, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)} style={{
+              padding: '11px 22px', background: 'none', border: 'none', cursor: 'pointer',
+              borderBottom: tab === key ? '2px solid var(--ink)' : '2px solid transparent',
+              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: tab === key ? 600 : 400,
+              fontSize: 12, color: tab === key ? 'var(--ink)' : 'var(--ink-3)',
+              marginBottom: -1, transition: 'color 0.15s', letterSpacing: '0.02em',
             }}>
-              {tabKey === 'overview'
-                ? (lang === 'tr' ? 'Genel Bakış' : 'Overview')
-                : (lang === 'tr' ? `Notlar & Kanıtlar${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}` : `Notes & Evidence${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}`)}
+              {label}
             </button>
           ))}
         </div>
 
         {/* ══════════════════════════════════════
-            TAB: OVERVIEW
+            TAB: OVERVIEW — Category breakdown
             ══════════════════════════════════════ */}
         {tab === 'overview' && (
-          <>
-            {/* Category breakdown */}
-            {categories.length > 0 && (
-              <div className="print-section" style={{ marginBottom: 32 }}>
+          <div className="print-section" style={{ marginTop: 24 }}>
+
+            {categories.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+                {lang === 'tr' ? 'Kategori verisi bulunamadı.' : 'No category data available.'}
+              </div>
+            ) : (
+              <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-                  <div>
-                    <span className="eyebrow" style={{ display: 'block', marginBottom: 3 }}>
-                      {lang === 'tr' ? 'Kategori Dağılımı' : 'Category Breakdown'}
-                    </span>
-                    <h2 style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' }}>
-                      {lang === 'tr'
-                        ? <>ESG <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>boyutları</em></>
-                        : <>ESG <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>dimensions</em></>}
-                    </h2>
-                  </div>
+                  <h2 style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' }}>
+                    {lang === 'tr' ? 'Kategori Performans Analizi' : 'Category Performance Analysis'}
+                  </h2>
                   <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)' }}>
                     {categories.length} {lang === 'tr' ? 'kategori' : 'categories'}
                   </span>
                 </div>
 
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(${Math.min(categories.length, 3)}, 1fr)`,
-                  border: '1px solid var(--line)',
-                }}>
-                  {categories.map((cat, i) => (
-                    <div key={cat.id} style={{
-                      padding: '28px 28px 24px', background: 'var(--paper)',
-                      borderRight: i < categories.length - 1 ? '1px solid var(--line)' : 'none',
-                    }}>
-                      {/* Category key letter */}
-                      <div style={{
-                        fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 700,
-                        fontSize: 36, color: 'var(--olive-deep)', letterSpacing: '-0.04em',
-                        lineHeight: 1, marginBottom: 12,
-                      }}>
-                        {cat.key?.[0] || cat.name?.[0] || String(i + 1)}
-                      </div>
-                      <h3 style={{ fontSize: 11.5, marginBottom: 16, fontWeight: 600, color: 'var(--ink-2)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                        {cat.name}
-                      </h3>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
-                        <span style={{
-                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-                          fontSize: 48, letterSpacing: '-0.04em', lineHeight: 0.9,
-                          fontVariantNumeric: 'tabular-nums', color: 'var(--ink)',
-                        }}>{Math.round(cat.percentage ?? 0)}</span>
-                        <span style={{ fontSize: 11, color: 'var(--ink-3)', paddingBottom: 2 }}>/ 100</span>
-                      </div>
-                      <div className="bar bar-olive" style={{ marginBottom: 10, height: 3 }}>
-                        <span style={{ width: `${cat.percentage ?? 0}%` }} />
-                      </div>
-                      <div style={{ fontSize: 10.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                        {cat.score} / {cat.max_score} {lang === 'tr' ? 'puan' : 'pts'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recommendations */}
-            {recs.length > 0 && (
-              <div className="print-section">
-                <div style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
-                  borderBottom: '2px solid var(--ink)', paddingBottom: 14, marginBottom: 20,
-                }}>
-                  <div>
-                    <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>
-                      {lang === 'tr' ? 'Öncelikli Aksiyon Planı' : 'Priority Action Plan'}
-                    </span>
-                    <h2 style={{ fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em' }}>
-                      {lang === 'tr'
-                        ? <>Sırada <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>ne</em> yapılmalı.</>
-                        : <>What to do <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>next</em>.</>}
-                    </h2>
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
-                    {recs.length} {lang === 'tr' ? 'öneri' : 'recommendations'}
-                  </span>
-                </div>
-
+                {/* Category rows */}
                 <div style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
-                  {recs.map((r, i) => {
-                    const priority = r.priority || r.priority_level || '';
-                    const pColor   = priorityColor(priority);
+                  {categories.map((cat, i) => {
+                    const pct   = Math.round(cat.percentage ?? 0);
+                    const color = scoreColor(pct);
+                    const label = scoreLabel(pct, lang);
                     return (
-                      <div key={i} style={{
-                        display: 'grid', gridTemplateColumns: '28px 116px 1fr',
-                        gap: 20, alignItems: 'flex-start',
+                      <div key={cat.id} style={{
                         padding: '18px 24px',
-                        borderBottom: i < recs.length - 1 ? '1px solid var(--line)' : 'none',
-                        transition: 'background 0.1s',
-                      }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--cream-deep)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', paddingTop: 2 }}>
-                          {String(i + 1).padStart(2, '0')}
-                        </span>
-                        <span style={{
-                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 10,
-                          letterSpacing: '0.1em', textTransform: 'uppercase', color: pColor,
-                          display: 'inline-flex', alignItems: 'center', gap: 6, paddingTop: 2,
-                        }}>
-                          {priorityDot(priority)}
-                          {priority || (lang === 'tr' ? 'Öneri' : 'Action')}
-                        </span>
+                        borderBottom: i < categories.length - 1 ? '1px solid var(--line)' : 'none',
+                        display: 'grid', gridTemplateColumns: '1fr 80px 64px 80px',
+                        gap: 16, alignItems: 'center',
+                      }}>
+                        {/* Category name + bar */}
                         <div>
-                          <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 13, marginBottom: 4 }}>
-                            {r.title || r.text || r.recommendation || r.category || JSON.stringify(r)}
+                          <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 8, color: 'var(--ink)' }}>
+                            {cat.name}
                           </div>
-                          {(r.description || r.detail || r.suggestion) && (
-                            <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6, maxWidth: 640 }}>
-                              {r.description || r.detail || r.suggestion}
-                            </div>
-                          )}
+                          <div style={{ height: 5, background: 'var(--line)', borderRadius: 3 }}>
+                            <div style={{
+                              width: `${pct}%`, height: '100%',
+                              background: color, borderRadius: 3,
+                              transition: 'width 1s ease',
+                            }} />
+                          </div>
                         </div>
+                        {/* Score / max */}
+                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: 'var(--ink-3)', textAlign: 'right' }}>
+                          {cat.score}/{cat.max_score} {lang === 'tr' ? 'puan' : 'pts'}
+                        </span>
+                        {/* Percentage */}
+                        <span style={{
+                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 18,
+                          color, textAlign: 'right', letterSpacing: '-0.02em',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}>
+                          {pct}%
+                        </span>
+                        {/* Label badge */}
+                        <span style={{
+                          display: 'inline-block', padding: '3px 8px', textAlign: 'center',
+                          fontSize: 9.5, fontFamily: "'IBM Plex Mono', monospace",
+                          fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                          color, border: `1px solid ${color}`, borderRadius: 2,
+                        }}>
+                          {label}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
-              </div>
+
+                {/* Score legend */}
+                <div style={{ marginTop: 12, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  {[
+                    { color: '#c1121f', label: lang === 'tr' ? '0–19%  Kritik'    : '0–19%  Critical'    },
+                    { color: '#e07b39', label: lang === 'tr' ? '20–39% Başlangıç' : '20–39% Initial'     },
+                    { color: '#b5835a', label: lang === 'tr' ? '40–59% Gelişiyor' : '40–59% Developing'  },
+                    { color: '#52796f', label: lang === 'tr' ? '60–79% İyi'       : '60–79% Good'        },
+                    { color: '#2d6a4f', label: lang === 'tr' ? '80–100% Mükemmel' : '80–100% Excellent'  },
+                  ].map(({ color, label: lbl }) => (
+                    <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>{lbl}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
 
             {/* Export CTA */}
             <div className="no-print" style={{
-              marginTop: 40, padding: '24px 28px',
+              marginTop: 32, padding: '20px 24px',
               background: 'var(--paper)', border: '1px solid var(--line)',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24,
             }}>
               <div>
-                <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>
-                  {lang === 'tr' ? 'Raporu Dışa Aktar' : 'Export Report'}
-                </span>
-                <h3 style={{ fontSize: 15, fontWeight: 500, marginBottom: 4, letterSpacing: '-0.01em' }}>
-                  {lang === 'tr' ? 'Yönetici sunumu için PDF indirin' : 'Download a board-ready PDF report'}
+                <h3 style={{ fontSize: 14, fontWeight: 500, marginBottom: 3 }}>
+                  {lang === 'tr' ? 'Tam raporu PDF olarak indirin' : 'Export the full report as PDF'}
                 </h3>
-                <p style={{ fontSize: 12, color: 'var(--ink-3)', maxWidth: 480, lineHeight: 1.55 }}>
+                <p style={{ fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
                   {lang === 'tr'
-                    ? 'Tüm değerlendirme verileri, kategori dağılımı ve öneriler dahil profesyonel formatta.'
-                    : 'Professional format including the full breakdown, category scores, and prioritized recommendations.'}
+                    ? 'Tüm bölümler dahil — yönetim kurulu ve yatırımcı sunumuna hazır format.'
+                    : 'All sections included — board-ready and investor-ready format.'}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                <button className="btn btn-primary" onClick={() => window.print()}>
-                  <Icon.download /> {lang === 'tr' ? 'PDF İndir' : 'Export PDF'}
-                </button>
-              </div>
+              <button className="btn btn-primary btn-sm" onClick={() => window.print()} style={{ flexShrink: 0 }}>
+                <Icon.download /> {lang === 'tr' ? 'PDF İndir' : 'Export PDF'}
+              </button>
             </div>
-          </>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════
+            TAB: ACTION PLAN
+            ══════════════════════════════════════ */}
+        {tab === 'actions' && (
+          <div className="print-section" style={{ marginTop: 24 }}>
+            {recs.length === 0 ? (
+              <div style={{
+                background: 'var(--paper)', border: '1px solid var(--line)',
+                padding: '56px 40px', textAlign: 'center',
+              }}>
+                <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 8 }}>
+                  {lang === 'tr' ? 'Tebrikler — İyileştirme Önerisi Yok!' : 'Congratulations — No Improvement Actions Needed!'}
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                  {lang === 'tr'
+                    ? 'Tüm kategorilerde mükemmel performans sergiliyorsunuz.'
+                    : 'You are performing at excellent level across all categories.'}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Summary counts */}
+                <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+                  {[
+                    { count: highPriorityRecs.length, label: lang === 'tr' ? 'Yüksek Öncelik' : 'High Priority', color: '#c1121f' },
+                    { count: mediumRecs.length,        label: lang === 'tr' ? 'Orta Öncelik'  : 'Medium Priority', color: '#b5835a' },
+                    { count: lowRecs.length,           label: lang === 'tr' ? 'Düşük Öncelik' : 'Low Priority',   color: '#52796f' },
+                  ].map(({ count, label: lbl, color }) => count > 0 && (
+                    <div key={lbl} style={{
+                      padding: '10px 20px', background: 'var(--paper)',
+                      border: `1px solid ${color}`, display: 'flex', gap: 10, alignItems: 'center',
+                    }}>
+                      <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300, fontSize: 28, color, letterSpacing: '-0.03em' }}>{count}</span>
+                      <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{lbl}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Recommendation cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {recs.map((r, i) => {
+                    const pColor = priorityColor(r.priority);
+                    const title  = r.title || r.text || r.recommendation || r.category;
+                    const desc   = r.description || r.suggestion;
+                    return (
+                      <div key={i} style={{
+                        background: 'var(--paper)', border: '1px solid var(--line)',
+                        borderLeft: `4px solid ${pColor}`,
+                        padding: '20px 24px',
+                      }}>
+                        {/* Header row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 700,
+                              color: pColor, letterSpacing: '0.1em', textTransform: 'uppercase',
+                              border: `1px solid ${pColor}`, padding: '2px 7px',
+                            }}>
+                              {r.priority === 'High' ? (lang === 'tr' ? 'Yüksek' : 'High') :
+                               r.priority === 'Medium' ? (lang === 'tr' ? 'Orta' : 'Medium') :
+                               (lang === 'tr' ? 'Düşük' : 'Low')}
+                            </span>
+                            <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                              {r.category}
+                            </span>
+                            {r.gri_standard && (
+                              <span style={{
+                                fontSize: 9.5, color: 'var(--olive-deep)',
+                                fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em',
+                                background: 'var(--olive-wash)', padding: '2px 7px',
+                              }}>
+                                {r.gri_standard}
+                              </span>
+                            )}
+                          </div>
+                          {/* Score + effort badges */}
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                            {r.score_pct !== undefined && (
+                              <span style={{
+                                fontSize: 9.5, fontFamily: "'IBM Plex Mono', monospace",
+                                color: scoreColor(r.score_pct), letterSpacing: '0.04em',
+                              }}>
+                                {r.score_pct}% {lang === 'tr' ? 'mevcut' : 'current'}
+                              </span>
+                            )}
+                            {r.effort && (
+                              <span style={{
+                                fontSize: 9, fontFamily: "'IBM Plex Mono', monospace",
+                                color: effortColor(r.effort), letterSpacing: '0.06em',
+                                textTransform: 'uppercase', border: `1px solid ${effortColor(r.effort)}`,
+                                padding: '1px 6px',
+                              }}>
+                                {r.effort === 'High' ? (lang === 'tr' ? 'Yüksek Efor' : 'High Effort') :
+                                 r.effort === 'Medium' ? (lang === 'tr' ? 'Orta Efor' : 'Medium Effort') :
+                                 (lang === 'tr' ? 'Düşük Efor' : 'Low Effort')}
+                              </span>
+                            )}
+                            {r.timeline_days && (
+                              <span style={{
+                                fontSize: 9, fontFamily: "'IBM Plex Mono', monospace",
+                                color: 'var(--ink-4)', letterSpacing: '0.06em',
+                                background: 'var(--cream-deep)', padding: '2px 7px',
+                              }}>
+                                {r.timeline_days}{lang === 'tr' ? ' gün' : ' days'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Title */}
+                        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink)', marginBottom: 8, lineHeight: 1.4 }}>
+                          {title}
+                        </div>
+
+                        {/* Description */}
+                        {desc && (
+                          <p style={{ fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.65, marginBottom: r.quick_win ? 12 : 0 }}>
+                            {desc}
+                          </p>
+                        )}
+
+                        {/* Quick win */}
+                        {r.quick_win && (
+                          <div style={{
+                            marginTop: 10, padding: '10px 14px',
+                            background: 'var(--olive-wash)', borderRadius: 2,
+                            display: 'flex', gap: 10, alignItems: 'flex-start',
+                          }}>
+                            <span style={{
+                              fontFamily: "'IBM Plex Mono', monospace", fontSize: 8.5,
+                              color: 'var(--olive-deep)', letterSpacing: '0.1em', textTransform: 'uppercase',
+                              fontWeight: 700, flexShrink: 0, paddingTop: 1,
+                            }}>
+                              {lang === 'tr' ? 'Hızlı Kazanım' : 'Quick Win'}
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+                              {r.quick_win}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Action timeline summary */}
+                <div style={{ marginTop: 24, padding: '20px 24px', background: 'var(--paper)', border: '1px solid var(--line)' }}>
+                  <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--ink-4)',
+                    letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14,
+                  }}>
+                    {lang === 'tr' ? 'Uygulama Zaman Çizelgesi' : 'Implementation Timeline'}
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                    {[
+                      { days: 90,  label: lang === 'tr' ? '90 Gün'  : '90 Days'  },
+                      { days: 180, label: lang === 'tr' ? '180 Gün' : '180 Days' },
+                      { days: 365, label: lang === 'tr' ? '12 Ay'   : '12 Months'},
+                    ].map(({ days, label: lbl }) => {
+                      const bucket = recs.filter((r) => (r.timeline_days ?? 90) <= days &&
+                        (days === 90 || (r.timeline_days ?? 90) > days / 2));
+                      return (
+                        <div key={days} style={{ borderTop: '2px solid var(--line)', paddingTop: 12 }}>
+                          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', marginBottom: 8, letterSpacing: '0.06em' }}>
+                            {lbl} ({bucket.length} {lang === 'tr' ? 'aksiyon' : 'actions'})
+                          </div>
+                          {bucket.slice(0, 3).map((r, j) => (
+                            <div key={j} style={{ fontSize: 11, color: 'var(--ink-2)', marginBottom: 4, lineHeight: 1.4 }}>
+                              · {r.title || r.category}
+                            </div>
+                          ))}
+                          {bucket.length > 3 && (
+                            <div style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                              +{bucket.length - 3} {lang === 'tr' ? 'daha' : 'more'}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {/* ══════════════════════════════════════
             TAB: EVIDENCE & NOTES
             ══════════════════════════════════════ */}
         {tab === 'evidence' && (
-          <div>
+          <div style={{ marginTop: 24 }}>
             {evidenceAnswers.length === 0 ? (
               <div style={{
                 background: 'var(--paper)', border: '1px solid var(--line)',
@@ -419,73 +677,48 @@ export default function ResultsPage() {
                   {lang === 'tr' ? 'Bu değerlendirmede not veya belge eklenmemiş.' : 'No notes or documents were added to this assessment.'}
                 </p>
                 <p style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                  {lang === 'tr' ? 'Değerlendirme sırasında soru başına not veya kanıt dosyası ekleyebilirsiniz.' : 'You can add per-question notes and evidence files while completing assessments.'}
+                  {lang === 'tr' ? 'Bir sonraki değerlendirmede per-soru not ve kanıt dosyası ekleyin.' : 'Add per-question notes and evidence files in your next assessment.'}
                 </p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {evidenceAnswers.map((ans, i) => (
-                  <div key={ans.id} style={{
-                    background: 'var(--paper)', border: '1px solid var(--line)', padding: '20px 24px',
-                  }}>
-                    {/* Question text */}
+                  <div key={ans.id} style={{ background: 'var(--paper)', border: '1px solid var(--line)', padding: '20px 24px' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-                      <span style={{
-                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-                        color: 'var(--ink-4)', letterSpacing: '0.06em', flexShrink: 0, paddingTop: 2,
-                      }}>Q{String(i + 1).padStart(2, '0')}</span>
-                      <div
-                        className="prose"
-                        style={{ fontSize: 13, color: 'var(--ink-2)', flex: 1 }}
-                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(ans.question_text || '') }}
-                      />
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--ink-4)', letterSpacing: '0.06em', flexShrink: 0, paddingTop: 2 }}>
+                        Q{String(i + 1).padStart(2, '0')}
+                      </span>
+                      <div className="prose" style={{ fontSize: 13, color: 'var(--ink-2)', flex: 1 }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(ans.question_text || '') }} />
                     </div>
-
-                    {/* Answer */}
                     {ans.choices_display && ans.choices_display !== 'No answer provided' && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                         <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.08em' }}>
                           {lang === 'tr' ? 'YANIT:' : 'ANSWER:'}
                         </span>
-                        <span style={{
-                          background: 'var(--olive-wash)', padding: '3px 10px',
-                          fontSize: 12, color: 'var(--olive-deep)', fontWeight: 500,
-                        }}>{ans.choices_display}</span>
+                        <span style={{ background: 'var(--olive-wash)', padding: '3px 10px', fontSize: 12, color: 'var(--olive-deep)', fontWeight: 500 }}>
+                          {ans.choices_display}
+                        </span>
                       </div>
                     )}
-
-                    {/* Notes */}
                     {ans.notes && (
-                      <div style={{
-                        background: 'var(--cream-deep)', padding: '12px 16px',
-                        borderLeft: '3px solid var(--olive-deep)', marginBottom: 10,
-                      }}>
-                        <span style={{
-                          fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)',
-                          letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 6,
-                        }}>
+                      <div style={{ background: 'var(--cream-deep)', padding: '12px 16px', borderLeft: '3px solid var(--olive-deep)', marginBottom: 10 }}>
+                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
                           {lang === 'tr' ? 'Not' : 'Note'}
                         </span>
                         <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.6 }}>{ans.notes}</p>
                       </div>
                     )}
-
-                    {/* Documents */}
                     {(ans.documents?.length ?? 0) > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <span style={{
-                          fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)',
-                          letterSpacing: '0.1em', textTransform: 'uppercase',
-                        }}>
+                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
                           {lang === 'tr' ? 'Belgeler' : 'Documents'} ({ans.documents!.length})
                         </span>
                         {ans.documents?.map((doc) => (
                           <a key={doc.id} href={doc.file} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                             <div style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              padding: '8px 12px', background: 'var(--cream)',
-                              border: '1px solid var(--line)',
-                              transition: 'border-color 0.15s',
+                              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                              background: 'var(--cream)', border: '1px solid var(--line)', transition: 'border-color 0.15s',
                             }}
                               onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
                               onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
@@ -513,6 +746,7 @@ export default function ResultsPage() {
             )}
           </div>
         )}
+
       </main>
     </div>
   );
