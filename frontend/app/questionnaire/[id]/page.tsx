@@ -12,20 +12,39 @@ import { sanitizeHtml } from '@/lib/utils';
 import { emitDataChange } from '@/lib/events';
 
 /* ─── Types ──────────────────────────────────────────────── */
-interface Choice   { id: number; text: string; score: number; order: number }
+interface Choice {
+  id: number;
+  text: string; text_en?: string; text_tr?: string;
+  score: number; order: number;
+}
 interface Question {
-  id: number; text: string; category: number; category_name: string;
-  order: number; allow_multiple: boolean; question_type: string; choices: Choice[];
+  id: number;
+  text: string; text_en?: string; text_tr?: string;
+  category: number;
+  category_name: string; category_name_en?: string; category_name_tr?: string;
+  order: number; allow_multiple: boolean; question_type: string;
+  choices: Choice[];
   attachment?: string;
 }
 
-/* ─── Constants (Fix 8: outside component — not re-created every render) ── */
+/* ─── Constants ──────────────────────────────────────────── */
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
+/* ─── Localised text helper ──────────────────────────────── */
+function loc(
+  obj: { text?: string; text_en?: string; text_tr?: string },
+  lang: string
+): string {
+  if (lang === 'tr' && obj.text_tr) return obj.text_tr;
+  if (lang === 'en' && obj.text_en) return obj.text_en;
+  return obj.text || '';
+}
 
 /* ─── Paperclip icon ─────────────────────────────────────── */
 function PaperclipIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21.44 11.05L12.25 20.24a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.42 17.41a2 2 0 01-2.83-2.83l8.49-8.48"/>
     </svg>
   );
@@ -41,7 +60,6 @@ export default function QuestionnairePage() {
   const { lang } = useLang();
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const langRef       = useRef(lang);
-  // Fix HIGH #19: ref-based submit lock — prevents double-complete race on rapid re-renders
   const submitLockRef = useRef(false);
   useEffect(() => { langRef.current = lang; }, [lang]);
 
@@ -51,7 +69,7 @@ export default function QuestionnairePage() {
   const [currentIdx,  setCurrentIdx]  = useState(0);
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
-  const [exitSaving,  setExitSaving]  = useState(false);   // Fix 7
+  const [exitSaving,  setExitSaving]  = useState(false);
   const [error,       setError]       = useState('');
 
   /* ── Answer state — keyed by question.id ── */
@@ -60,21 +78,16 @@ export default function QuestionnairePage() {
   const [textAnswers,  setTextAnswers]  = useState<Record<number, string>>({});
   const [pendingFiles, setPendingFiles] = useState<Record<number, File[]>>({});
 
-  /* ── UI state ── */
-  const [notesOpen, setNotesOpen] = useState(false);
-
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
-  /* Fix 3: wrap in useCallback so the effect dependency is stable */
   const loadData = useCallback(async () => {
     try {
       const attempt = await attemptAPI.getAttempt(Number(id));
       if (attempt.is_completed) { router.replace(`/results/${id}`); return; }
 
       const { surveyAPI } = await import('@/lib/api');
-      // Fix BUG-10: attempt.survey is nullable — guard before API call
       if (!attempt.survey) {
         setError(langRef.current === 'tr' ? 'Ankete bağlı deneme bulunamadı.' : 'Attempt has no associated survey.');
         return;
@@ -87,7 +100,6 @@ export default function QuestionnairePage() {
       );
       setQuestions(qs);
 
-      // Pre-fill saved answers, notes, text answers
       const preAnswers: Record<number, number[]> = {};
       const preNotes:   Record<number, string>   = {};
       const preText:    Record<number, string>   = {};
@@ -109,15 +121,11 @@ export default function QuestionnairePage() {
     } finally {
       setLoading(false);
     }
-  }, [id, router]);   // Fix X: lang removed — was causing full re-load on language switch
+  }, [id, router]);
 
-  /* Fix 3: loadData now listed in deps — no stale closure */
   useEffect(() => {
     if (user && id) loadData();
   }, [user, id, loadData]);
-
-  /* Collapse notes when switching questions */
-  useEffect(() => { setNotesOpen(false); }, [currentIdx]);
 
   /* ── Derived ── */
   const q           = questions[currentIdx];
@@ -132,16 +140,23 @@ export default function QuestionnairePage() {
   const answeredCount = Object.keys(answers).length;
   const progress      = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
 
-  const isTextType   = q?.question_type === 'text' || q?.choices?.length === 0;
-  const isMixedType  = q?.question_type === 'mixed';
-  const hasChoices   = (q?.choices?.length ?? 0) > 0 && !isTextType;
+  const isTextType  = q?.question_type === 'text' || q?.choices?.length === 0;
+  const isMixedType = q?.question_type === 'mixed';
+  const hasChoices  = (q?.choices?.length ?? 0) > 0 && !isTextType;
 
-  // Fix BUG-14: note alone should not unlock Next — it is supplementary, not an answer.
   const canSubmit =
     (hasChoices && selection.length > 0) ||
     (isTextType && textAns.trim().length > 0) ||
     (isMixedType && (selection.length > 0 || textAns.trim().length > 0)) ||
-    (!hasChoices && !isTextType);          // edge: no choices, not text — allow skip
+    (!hasChoices && !isTextType);
+
+  /* ── Localised helpers for current question ── */
+  const qText    = q ? loc(q, lang) : '';
+  const catLabel = q
+    ? (lang === 'tr' && q.category_name_tr) ? q.category_name_tr
+      : (lang === 'en' && q.category_name_en) ? q.category_name_en
+      : q.category_name
+    : '';
 
   /* ── Handlers ── */
   const toggleChoice = (choiceId: number) => {
@@ -158,7 +173,6 @@ export default function QuestionnairePage() {
     if (!newFiles || !q) return;
     const arr = Array.from(newFiles);
     setPendingFiles({ ...pendingFiles, [q.id]: [...files, ...arr] });
-    // Fix 6: reset so re-selecting the same file fires onChange again
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -187,7 +201,6 @@ export default function QuestionnairePage() {
         answerId = res?.id ?? null;
       }
 
-      // Upload pending files — surface failures as a non-blocking warning (#2)
       if (answerId && files.length > 0) {
         const failedUploads: string[] = [];
         for (const file of files) {
@@ -203,7 +216,7 @@ export default function QuestionnairePage() {
 
       if (isLast) {
         await attemptAPI.completeAttempt(Number(id));
-        emitDataChange({ source: 'questionnaire', id });   // ← live-refresh dashboard
+        emitDataChange({ source: 'questionnaire', id });
         router.push(`/results/${id}`);
       } else {
         setCurrentIdx((i) => i + 1);
@@ -219,7 +232,6 @@ export default function QuestionnairePage() {
 
   const handlePrev = () => { if (!isFirst) setCurrentIdx((i) => i - 1); };
 
-  /* Fix HIGH #20: auto-save current answer before jumping via progress dot */
   const handleJumpTo = async (targetIdx: number) => {
     if (targetIdx === currentIdx) return;
     if (q && (selection.length > 0 || note.trim() || textAns.trim())) {
@@ -230,12 +242,11 @@ export default function QuestionnairePage() {
           await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
         else if (textAns.trim() || note.trim())
           await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-      } catch { /* non-fatal — user still navigates */ }
+      } catch { /* non-fatal */ }
     }
     setCurrentIdx(targetIdx);
   };
 
-  /* Fix 4 + Fix 7: upload files & show loading before navigating away */
   const handleSaveAndExit = async () => {
     if (exitSaving) return;
     setExitSaving(true);
@@ -253,9 +264,8 @@ export default function QuestionnairePage() {
             const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
             answerId = res?.id ?? null;
           }
-        } catch { /* non-fatal — still exit */ }
+        } catch { /* non-fatal */ }
 
-        // Fix 4: upload pending files for current question before leaving
         if (answerId && files.length > 0) {
           for (const file of files) {
             try { await attemptAPI.uploadDocument(answerId, file); } catch { /* non-fatal */ }
@@ -273,7 +283,7 @@ export default function QuestionnairePage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
+          {lang === 'tr' ? 'YÜKLENIYOR…' : 'LOADING…'}
         </span>
       </div>
     );
@@ -283,10 +293,10 @@ export default function QuestionnairePage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
         <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>
-          {error || (lang === 'tr' ? 'Soru bulunamadı.' : 'No questions found.')}
+          {error || (lang === 'tr' ? 'Soru bulunamadi.' : 'No questions found.')}
         </p>
         <Link href="/surveys" style={{ textDecoration: 'none' }}>
-          <button className="btn btn-outline">{lang === 'tr' ? '← Anketlere Dön' : '← Back to Surveys'}</button>
+          <button className="btn btn-outline">{lang === 'tr' ? '← Anketlere Don' : '← Back to Surveys'}</button>
         </Link>
       </div>
     );
@@ -298,7 +308,6 @@ export default function QuestionnairePage() {
       {/* ─── Sticky header ─────────────────────────────── */}
       <header style={{ borderBottom: '1px solid var(--line)', position: 'sticky', top: 0, background: 'var(--cream)', zIndex: 10 }}>
         <div className="wrap" style={{ padding: '13px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          {/* Left: logo + survey name */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <Logo size={20} />
             <span style={{ width: 1, height: 18, background: 'var(--line)' }} />
@@ -306,7 +315,6 @@ export default function QuestionnairePage() {
               {surveyName}
             </span>
           </div>
-          {/* Right: progress + exit */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 80, height: 2, background: 'var(--line)', borderRadius: 1 }}>
@@ -316,7 +324,6 @@ export default function QuestionnairePage() {
                 {progress}%
               </span>
             </div>
-            {/* Fix 7: disabled + label change while saving */}
             <button
               className="btn btn-outline btn-sm"
               onClick={handleSaveAndExit}
@@ -325,11 +332,10 @@ export default function QuestionnairePage() {
             >
               {exitSaving
                 ? (lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
-                : (lang === 'tr' ? 'Kaydet & Çık' : 'Save & Exit')}
+                : (lang === 'tr' ? 'Kaydet & Cik' : 'Save & Exit')}
             </button>
           </div>
         </div>
-        {/* Thin progress line */}
         <div style={{ height: 2, background: 'var(--line-soft)' }}>
           <div style={{ width: `${progress}%`, height: '100%', background: 'var(--ink)', transition: 'width 0.4s ease' }} />
         </div>
@@ -341,7 +347,7 @@ export default function QuestionnairePage() {
         {/* Category pill + counter */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 36 }}>
           <span className="pill pill-olive">
-            {q.category_name || `${lang === 'tr' ? 'Kategori' : 'Category'} ${q.category}`}
+            {catLabel || `${lang === 'tr' ? 'Kategori' : 'Category'} ${q.category}`}
           </span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
             <span style={{
@@ -354,12 +360,12 @@ export default function QuestionnairePage() {
           </div>
         </div>
 
-        {/* ─── Question text (rendered HTML) ─── */}
+        {/* ─── Question text ─── */}
         <div style={{ marginBottom: 32, paddingBottom: 32, borderBottom: '1px solid var(--line)' }}>
           <div
             className="prose"
             style={{ fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--ink)' }}
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(q.text) }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(qText) }}
           />
           {q.allow_multiple && (
             <p style={{
@@ -367,10 +373,9 @@ export default function QuestionnairePage() {
               fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em',
               marginTop: 10,
             }}>
-              {lang === 'tr' ? '↳ Birden fazla seçeneği işaretleyebilirsiniz' : '↳ Multiple answers allowed — select all that apply'}
+              {lang === 'tr' ? '↳ Birden fazla secenegi isaretleyebilirsiniz' : '↳ Multiple answers allowed — select all that apply'}
             </p>
           )}
-          {/* Question attachment (if any) */}
           {q.attachment && (
             <a
               href={q.attachment} target="_blank" rel="noreferrer"
@@ -380,16 +385,17 @@ export default function QuestionnairePage() {
                 fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em',
               }}
             >
-              <PaperclipIcon /> {lang === 'tr' ? 'Ek dosyayı görüntüle' : 'View attachment'}
+              <PaperclipIcon /> {lang === 'tr' ? 'Ek dosyayi goruntule' : 'View attachment'}
             </a>
           )}
         </div>
 
-        {/* ─── Choices (choice / mixed type) ─── */}
+        {/* ─── Choices ─── */}
         {hasChoices && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 32 }}>
             {q.choices.map((choice, i) => {
               const isSel = selection.includes(choice.id);
+              const choiceText = loc(choice, lang);
               return (
                 <button
                   key={choice.id}
@@ -408,7 +414,6 @@ export default function QuestionnairePage() {
                   onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.borderRightColor = e.currentTarget.style.borderTopColor = e.currentTarget.style.borderBottomColor = 'var(--ink-3)'; }}
                   onMouseLeave={(e) => { if (!isSel) { e.currentTarget.style.borderRightColor = e.currentTarget.style.borderTopColor = e.currentTarget.style.borderBottomColor = 'var(--line)'; } }}
                 >
-                  {/* Circle (single) or Square (multi) badge */}
                   <span style={{
                     width: 24, height: 24,
                     borderRadius: q.allow_multiple ? 3 : '50%',
@@ -422,7 +427,7 @@ export default function QuestionnairePage() {
                     {isSel && q.allow_multiple ? '✓' : (LETTERS[i] ?? String(i + 1))}
                   </span>
 
-                  <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>{choice.text}</span>
+                  <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>{choiceText}</span>
 
                   <span style={{
                     fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
@@ -445,13 +450,13 @@ export default function QuestionnairePage() {
               color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
               display: 'block', marginBottom: 8,
             }}>
-              {lang === 'tr' ? 'Yanıtınız' : 'Your Answer'}
+              {lang === 'tr' ? 'Yanitiniz' : 'Your Answer'}
             </label>
             <textarea
               value={textAns}
               onChange={(e) => setTextAnswers({ ...textAnswers, [q.id]: e.target.value })}
               rows={4}
-              placeholder={lang === 'tr' ? 'Yanıtınızı buraya yazın…' : 'Type your answer here…'}
+              placeholder={lang === 'tr' ? 'Yanitinizi buraya yazin…' : 'Type your answer here…'}
               style={{
                 width: '100%', padding: '14px 16px',
                 background: 'var(--paper)', border: '1px solid var(--line)',
@@ -467,150 +472,123 @@ export default function QuestionnairePage() {
           </div>
         )}
 
-        {/* ─── Notes & Evidence section ─── */}
+        {/* ─── Notes & Evidence — always visible ────────────── */}
         <div style={{
           borderTop: '1px solid var(--line)',
-          paddingTop: 20, marginBottom: 40,
+          paddingTop: 20,
+          marginBottom: 40,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
         }}>
-          {/* Toggle row */}
-          <button
-            type="button"
-            onClick={() => setNotesOpen((v) => !v)}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 8, padding: 0,
-              color: notesOpen ? 'var(--ink)' : 'var(--ink-3)',
-              fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12, fontWeight: 500,
-              transition: 'color 0.15s',
-            }}
-          >
-            <span style={{
-              width: 20, height: 20,
-              border: '1px solid var(--line)', borderRadius: 3,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 10, color: 'var(--olive-deep)',
-              background: (note || files.length > 0) ? 'var(--olive-wash)' : 'transparent',
+          {/* Section title */}
+          <p style={{
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
+            color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
+            margin: 0,
+          }}>
+            {lang === 'tr' ? 'Not & Kanit (isteğe bağlı)' : 'Notes & Evidence (optional)'}
+          </p>
+
+          {/* Notes textarea */}
+          <div>
+            <label style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+              color: 'var(--ink-4)', letterSpacing: '0.08em',
+              display: 'block', marginBottom: 6,
             }}>
-              {note || files.length > 0 ? '✓' : '+'}
-            </span>
-            {lang === 'tr' ? 'Not & Kanıt Ekle' : 'Add Notes & Evidence'}
-            {(note || files.length > 0) && (
-              <span style={{
-                fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--olive-deep)',
-                background: 'var(--olive-wash)', padding: '2px 6px', letterSpacing: '0.05em',
-              }}>
-                {[note ? '1 note' : '', files.length > 0 ? `${files.length} file${files.length > 1 ? 's' : ''}` : '']
-                  .filter(Boolean).join(' · ')}
-              </span>
-            )}
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-4)' }}>{notesOpen ? '▲' : '▼'}</span>
-          </button>
+              {lang === 'tr' ? 'Notlar / Yorumlar' : 'Notes / Comments'}
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNotes({ ...notes, [q.id]: e.target.value })}
+              rows={3}
+              placeholder={lang === 'tr'
+                ? 'Bu soruyla ilgili ek not veya yorum ekleyin…'
+                : 'Add context, clarifications, or additional comments…'}
+              style={{
+                width: '100%', padding: '12px 14px',
+                background: 'var(--cream-deep)', border: '1px solid var(--line)',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12.5,
+                color: 'var(--ink)', lineHeight: 1.6, resize: 'vertical',
+                outline: 'none', borderRadius: 0,
+                transition: 'border-color 0.15s',
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+              onBlur={(e)  => (e.currentTarget.style.borderColor = 'var(--line)')}
+            />
+          </div>
 
-          {/* Expandable body */}
-          {notesOpen && (
-            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Notes textarea */}
-              <div>
-                <label style={{
-                  fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-                  color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
-                  display: 'block', marginBottom: 8,
-                }}>
-                  {lang === 'tr' ? 'Notlar / Yorumlar' : 'Notes / Comments'}
-                </label>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNotes({ ...notes, [q.id]: e.target.value })}
-                  rows={3}
-                  placeholder={lang === 'tr'
-                    ? 'Bu soruyla ilgili ek not, yorum veya bağlam bilgisi ekleyin…'
-                    : 'Add context, clarifications, or additional comments for this answer…'}
-                  style={{
-                    width: '100%', padding: '12px 14px',
-                    background: 'var(--cream-deep)', border: '1px solid var(--line)',
-                    fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12.5,
-                    color: 'var(--ink)', lineHeight: 1.6, resize: 'vertical',
-                    outline: 'none', borderRadius: 0,
-                  }}
-                  onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
-                  onBlur={(e)  => (e.currentTarget.style.borderColor = 'var(--line)')}
-                />
-              </div>
+          {/* File upload */}
+          <div>
+            <label style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+              color: 'var(--ink-4)', letterSpacing: '0.08em',
+              display: 'block', marginBottom: 6,
+            }}>
+              {lang === 'tr' ? 'Kanit Belgesi Yukle' : 'Upload Evidence'}
+            </label>
 
-              {/* File upload */}
-              <div>
-                <label style={{
-                  fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-                  color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
-                  display: 'block', marginBottom: 8,
-                }}>
-                  {lang === 'tr' ? 'Kanıt Belgesi Yükle' : 'Upload Evidence'}
-                </label>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '8px 14px', background: 'transparent',
+                border: '1px dashed var(--line)', cursor: 'pointer',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12, color: 'var(--ink-3)',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--ink-3)'; e.currentTarget.style.color = 'var(--ink)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--ink-3)'; }}
+            >
+              <PaperclipIcon />
+              {lang === 'tr' ? 'Dosya sec veya surukle' : 'Choose file or drag & drop'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+              style={{ display: 'none' }}
+              onChange={(e) => addFiles(e.target.files)}
+            />
 
-                {/* Upload button */}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                    padding: '8px 14px', background: 'transparent',
-                    border: '1px dashed var(--line)', cursor: 'pointer',
-                    fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12, color: 'var(--ink-3)',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--ink-3)'; e.currentTarget.style.color = 'var(--ink)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--ink-3)'; }}
-                >
-                  <PaperclipIcon />
-                  {lang === 'tr' ? 'Dosya seç veya sürükle' : 'Choose file or drag & drop'}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                  style={{ display: 'none' }}
-                  onChange={(e) => addFiles(e.target.files)}
-                />
-
-                {/* Fix 5: stable key = name+size, not array index */}
-                {files.length > 0 && (
-                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {files.map((file, idx) => (
-                      <div key={`${file.name}-${file.size}`} style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '8px 12px', background: 'var(--paper)',
-                        border: '1px solid var(--line)',
-                      }}>
-                        <PaperclipIcon />
-                        <span style={{ flex: 1, fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {file.name}
-                        </span>
-                        <span style={{ fontSize: 10, color: 'var(--ink-4)', flexShrink: 0 }}>
-                          {file.size < 1024 * 1024
-                            ? `${Math.round(file.size / 1024)} KB`
-                            : `${(file.size / 1024 / 1024).toFixed(1)} MB`}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeFile(idx)}
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            color: 'var(--ink-4)', fontSize: 13, lineHeight: 1, padding: '0 2px',
-                            flexShrink: 0,
-                          }}
-                        >×</button>
-                      </div>
-                    ))}
+            {files.length > 0 && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {files.map((file, idx) => (
+                  <div key={`${file.name}-${file.size}`} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 12px', background: 'var(--paper)',
+                    border: '1px solid var(--line)',
+                  }}>
+                    <PaperclipIcon />
+                    <span style={{ flex: 1, fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {file.name}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--ink-4)', flexShrink: 0 }}>
+                      {file.size < 1024 * 1024
+                        ? `${Math.round(file.size / 1024)} KB`
+                        : `${(file.size / 1024 / 1024).toFixed(1)} MB`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(idx)}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--ink-4)', fontSize: 13, lineHeight: 1, padding: '0 2px',
+                        flexShrink: 0,
+                      }}
+                    >×</button>
                   </div>
-                )}
-
-                <p style={{ fontSize: 10.5, color: 'var(--ink-4)', marginTop: 8 }}>
-                  {lang === 'tr' ? 'PDF, Word, Excel, resim — maks. 10 MB' : 'PDF, Word, Excel, images — max 10 MB per file'}
-                </p>
+                ))}
               </div>
-            </div>
-          )}
+            )}
+
+            <p style={{ fontSize: 10.5, color: 'var(--ink-4)', marginTop: 8 }}>
+              {lang === 'tr' ? 'PDF, Word, Excel, resim — maks. 10 MB' : 'PDF, Word, Excel, images — max 10 MB per file'}
+            </p>
+          </div>
         </div>
 
         {/* ─── Error ─── */}
@@ -631,10 +609,10 @@ export default function QuestionnairePage() {
             disabled={isFirst}
             style={{ opacity: isFirst ? 0.3 : 1 }}
           >
-            {lang === 'tr' ? '← Önceki' : '← Previous'}
+            {lang === 'tr' ? '← Onceki' : '← Previous'}
           </button>
 
-          {/* Dot progress — Fix HIGH #20 + LOW #44: save on jump, keyboard accessible */}
+          {/* Dot progress */}
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', maxWidth: 400, justifyContent: 'center' }}>
             {questions.map((qItem, i) => (
               <span
@@ -669,7 +647,7 @@ export default function QuestionnairePage() {
             {saving
               ? (lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
               : isLast
-                ? (lang === 'tr' ? 'Tamamla ✓' : 'Finish ✓')
+                ? (lang === 'tr' ? 'Tamamla' : 'Finish')
                 : (lang === 'tr' ? 'Sonraki' : 'Next')}
             {!saving && !isLast && <Icon.arrow />}
           </button>

@@ -31,11 +31,14 @@ class ChoiceSerializer(serializers.ModelSerializer):
 
 class QuestionSerializer(serializers.ModelSerializer):
     choices = ChoiceSerializer(many=True, read_only=True)
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    
+    category_name    = serializers.CharField(source='category.name',    read_only=True)
+    category_name_en = serializers.CharField(source='category.name_en', read_only=True)
+    category_name_tr = serializers.CharField(source='category.name_tr', read_only=True)
+
     class Meta:
         model = Question
-        fields = ['id', 'survey', 'category', 'category_name', 'text', 'text_tr', 'text_en',
+        fields = ['id', 'survey', 'category', 'category_name', 'category_name_en', 'category_name_tr',
+                  'text', 'text_tr', 'text_en',
                   'question_type', 'order', 'is_active', 'allow_multiple', 'attachment', 'choices']
     
     def to_representation(self, instance):
