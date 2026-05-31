@@ -15,24 +15,51 @@ function HeroIllustration() {
   const [hovering, setHovering] = useState(false);
 
   return (
-    <div
-      style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: 4 }}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
-    >
-      <Image
-        src="/assets/hero-s.png"
-        alt="Sustindex hero"
-        width={720}
-        height={400}
-        style={{
-          width: '100%', maxWidth: 720, height: 'auto', display: 'block',
-          borderRadius: 4,
-          transform: hovering ? 'scale(1.04)' : 'scale(1)',
-          transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        }}
-        priority
-      />
+    <div style={{ display: 'inline-block', position: 'relative', maxWidth: 720, width: '100%' }}>
+      {/* Image */}
+      <div
+        style={{ overflow: 'hidden', borderRadius: '4px 4px 0 0' }}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+      >
+        <Image
+          src="/assets/hero-s.png"
+          alt="Sustindex hero"
+          width={720}
+          height={400}
+          style={{
+            width: '100%', height: 'auto', display: 'block',
+            transform: hovering ? 'scale(1.04)' : 'scale(1)',
+            transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+          priority
+        />
+      </div>
+
+      {/* Caption — glued to bottom of image */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+        background: 'var(--olive-deep)',
+        padding: '11px 28px',
+        borderRadius: '0 0 4px 4px',
+      }}>
+        {/* Leaf icon */}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="rgba(255,255,255,0.85)" strokeWidth="1.8"
+          strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 21c0-9 7-16 18-18-2 11-9 18-18 18zM3 21l9-9"/>
+        </svg>
+        <span style={{
+          fontFamily: "'IBM Plex Sans', sans-serif",
+          fontWeight: 600,
+          fontSize: 12,
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: 'rgba(255,255,255,0.92)',
+        }}>
+          Sustainability Index Platform
+        </span>
+      </div>
     </div>
   );
 }
@@ -45,7 +72,7 @@ function Hero() {
   return (
     <section style={{ padding: '32px 0 80px', position: 'relative' }}>
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '0 32px', textAlign: 'center' }}>
-        <div style={{ marginBottom: 8 }}>
+        <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'center' }}>
           <HeroIllustration />
         </div>
 
