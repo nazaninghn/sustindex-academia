@@ -15,10 +15,10 @@ function HeroIllustration() {
   const [hovering, setHovering] = useState(false);
 
   return (
-    <div style={{ display: 'inline-block', position: 'relative', maxWidth: 720, width: '100%' }}>
+    <div style={{ display: 'inline-block', maxWidth: 720, width: '100%' }}>
       {/* Image */}
       <div
-        style={{ overflow: 'hidden', borderRadius: '4px 4px 0 0' }}
+        style={{ overflow: 'hidden', borderRadius: 4 }}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
       >
@@ -36,29 +36,31 @@ function HeroIllustration() {
         />
       </div>
 
-      {/* Caption — glued to bottom of image */}
+      {/* Caption — minimal, editorial */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-        background: 'var(--olive-deep)',
-        padding: '11px 28px',
-        borderRadius: '0 0 4px 4px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14,
+        marginTop: 16,
       }}>
-        {/* Leaf icon */}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="rgba(255,255,255,0.85)" strokeWidth="1.8"
-          strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 21c0-9 7-16 18-18-2 11-9 18-18 18zM3 21l9-9"/>
-        </svg>
-        <span style={{
-          fontFamily: "'IBM Plex Sans', sans-serif",
-          fontWeight: 600,
-          fontSize: 12,
-          letterSpacing: '0.22em',
-          textTransform: 'uppercase',
-          color: 'rgba(255,255,255,0.92)',
-        }}>
-          Sustainability Index Platform
-        </span>
+        <span style={{ flex: 1, height: 1, background: 'var(--olive-deep)', opacity: 0.25, maxWidth: 72 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+            stroke="var(--olive-deep)" strokeWidth="1.8"
+            strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+            <path d="M3 21c0-9 7-16 18-18-2 11-9 18-18 18zM3 21l9-9"/>
+          </svg>
+          <span style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 10,
+            fontWeight: 500,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            color: 'var(--olive-deep)',
+            opacity: 0.8,
+          }}>
+            Sustainability Index Platform
+          </span>
+        </div>
+        <span style={{ flex: 1, height: 1, background: 'var(--olive-deep)', opacity: 0.25, maxWidth: 72 }} />
       </div>
     </div>
   );
