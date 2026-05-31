@@ -76,21 +76,6 @@ function Hero() {
           <HeroIllustration />
         </div>
 
-        {/* Eyebrow pill */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          background: 'var(--cream-pill)', color: 'var(--olive-deep)',
-          padding: '7px 18px', borderRadius: 999,
-          fontFamily: "'IBM Plex Sans', sans-serif",
-          fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase',
-          marginBottom: 28,
-        }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 21c0-9 7-16 18-18-2 11-9 18-18 18zM3 21l9-9"/>
-          </svg>
-          {t('hero_pill')}
-        </div>
-
         {/* Title */}
         <h1 style={{
           fontSize: 'clamp(36px, 6vw, 60px)', lineHeight: 1.05,
