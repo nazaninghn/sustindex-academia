@@ -59,10 +59,18 @@ python manage.py translate_questionnaire --survey GRI || echo "Translation step 
 echo ""
 echo "Building combined GRI Complete Assessment survey..."
 # Rebuilds the single hierarchical survey from the 12 imported source surveys.
-# --clear     : drops and fully rebuilds the combined survey on each deploy
+# --clear           : drops and fully rebuilds the combined survey on each deploy
 # --hide-components : sets the 12 individual GRI surveys to is_active=False
-#               so only the combined survey appears on the surveys page.
-python manage.py create_combined_survey --clear --hide-components
+#                     so only the combined survey appears on the surveys page.
+# Non-fatal: use || so a failure here doesn't abort the entire deploy.
+python manage.py create_combined_survey --clear --hide-components && echo "[OK] Combined survey built." || {
+    echo ""
+    echo "=========================================================="
+    echo " WARNING: create_combined_survey failed."
+    echo " The 12 individual surveys remain visible."
+    echo " Check the lines above for the Python traceback."
+    echo "=========================================================="
+}
 
 echo ""
 echo "Build completed successfully!"
