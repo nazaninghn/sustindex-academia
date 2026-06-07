@@ -70,13 +70,22 @@ export default function RegisterPage() {
       router.push('/dashboard');
     } catch (err: unknown) {
       // L1: narrow err from unknown before property access.
-      const e = err as { response?: { data?: { username?: string[]; email?: string[]; detail?: string } } };
-      setError(
-        e.response?.data?.username?.[0] ||
-        e.response?.data?.email?.[0] ||
-        e.response?.data?.detail ||
-        t('reg_fail')
-      );
+      const e = err as { response?: { status?: number; data?: { username?: string[]; email?: string[]; password?: string[]; detail?: string } } };
+      // Fix R5-M-06: surface HTTP 429 throttle clearly
+      if (e.response?.status === 429) {
+        setError(t('err_throttle'));
+      } else {
+        setError(
+          e.response?.data?.username?.[0] ||
+          e.response?.data?.email?.[0] ||
+          // Fix R6-07: surface password validation errors from Django's
+          // AUTH_PASSWORD_VALIDATORS (e.g. "too common", "too short") so the
+          // user knows exactly what to fix rather than seeing a generic message.
+          e.response?.data?.password?.[0] ||
+          e.response?.data?.detail ||
+          t('reg_fail')
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -84,9 +93,10 @@ export default function RegisterPage() {
 
   // Don't flash the registration form while the auth state is still being determined.
   // All hooks are above this point — safe to early-return here.
+  // Fix R5-L-08: use t() for bilingual loading label
   if (authLoading) return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>LOADING…</span>
+      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>{t('t_loading_auth')}</span>
     </div>
   );
 

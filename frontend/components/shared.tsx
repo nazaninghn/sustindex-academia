@@ -42,7 +42,11 @@ export const Icon = {
 /* ============================================================
    GradeChip
    ============================================================ */
-export function GradeChip({ grade = 'A-', size = 48 }: { grade?: string; size?: number }) {
+// Fix R4-L-01: default was 'A-' which is not a valid grade in the system
+// (_grade_for_score never produces 'A-'). Changed to undefined so callers
+// that don't pass a grade render an em-dash placeholder instead of a
+// misleadingly-high invalid grade label.
+export function GradeChip({ grade, size = 48 }: { grade?: string; size?: number }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: 12,
@@ -51,7 +55,7 @@ export function GradeChip({ grade = 'A-', size = 48 }: { grade?: string; size?: 
       fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600,
       fontSize: size * 0.42, letterSpacing: '-0.04em',
     }}>
-      {grade}
+      {grade ?? '—'}
     </div>
   );
 }

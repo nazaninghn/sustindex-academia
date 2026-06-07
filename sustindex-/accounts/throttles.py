@@ -22,3 +22,12 @@ class RegisterRateThrottle(AnonRateThrottle):
     Prevents bulk account creation / spam.
     """
     scope = 'register'
+
+
+class PasswordResetThrottle(AnonRateThrottle):
+    """
+    Fix R4-C-01: max 5 password-reset requests per hour per IP.
+    Applied to both forgot_password and reset_password endpoints to prevent
+    email enumeration via timing, link flooding, and brute-force token guessing.
+    """
+    scope = 'password_reset'

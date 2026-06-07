@@ -16,7 +16,10 @@ class Report(models.Model):
         ordering = ['-generated_at']
     
     def __str__(self):
-        return f"Report {self.attempt.user.username} - {self.generated_at.strftime('%Y-%m-%d')}"
+        # Fix R10-04: avoid chaining attempt.user.username (2 lazy-load queries
+        # per row in admin list views).  attempt_id is a cached FK integer —
+        # no extra DB round-trip required.
+        return f"Report #{self.attempt_id} — {self.generated_at.strftime('%Y-%m-%d')}"
 
 
 class ReportSection(models.Model):

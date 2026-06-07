@@ -24,7 +24,8 @@ export function sanitizeHtml(dirty: string): string {
 export function gradeColor(g: string | null | undefined): string {
   if (!g) return 'var(--ink-3)';
   if (g.startsWith('A')) return 'var(--olive-deep)';
-  if (g.startsWith('B')) return '#4a7c6f';
+  // Fix: use CSS variable instead of hardcoded hex — consistent with all other color usage.
+  if (g.startsWith('B')) return 'var(--olive)';
   if (g.startsWith('C')) return 'var(--amber)';
   return 'var(--danger)';
 }

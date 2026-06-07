@@ -138,12 +138,31 @@ class Category(models.Model):
                 params={'total': total},
             )
 
+    def save(self, *args, **kwargs):
+        # Fix H-04: run clean() on every save so weight validation fires even
+        # for bulk admin operations (queryset.update() bypasses clean() entirely,
+        # but individual .save() calls do run this).
+        if 'update_fields' not in kwargs:
+            self.full_clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         survey_name = self.survey.name if self.survey else 'Global'
         return f"{survey_name} - {self.name}"
 
     def get_category_score(self, attempt):
-        """Calculate category percentage score for an attempt."""
+        """Calculate category percentage score for an attempt.
+
+        .. deprecated::
+            Fix R7-06: this method issues at minimum 3 DB queries per category
+            (questions.filter, answers.filter, questions.prefetch_related) and
+            is called in a loop in the legacy admin report view, creating an N+1
+            pattern.  Prefer attempt.get_category_breakdown() which resolves the
+            entire breakdown in 2 queries total (one for questions, one for
+            answers) using pre-fetched in-memory data.
+            This method is retained only for backward compatibility with any
+            external code that calls it directly.
+        """
         if attempt.survey:
             questions = self.questions.filter(is_active=True, survey=attempt.survey)
         else:
@@ -182,7 +201,20 @@ class Question(models.Model):
         ('text', _('Text (open-ended answer)')),
         ('mixed', _('Mixed (choices + text)')),
     ]
-    
+
+    # Branching by sector: blank = universal (shown to every respondent);
+    # a specific value = shown only when the attempt's selected_sector matches.
+    SECTOR_CHOICES = [
+        ('',             _('Universal (all sectors)')),
+        ('agri',         _('Agriculture')),
+        ('finance',      _('Financial Services')),
+        ('construction', _('Construction')),
+        ('manufacturing',_('Manufacturing')),
+        ('health',       _('Healthcare')),
+        ('tech',         _('Technology')),
+        ('retail',       _('Retail & Trade')),
+    ]
+
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name='questions', verbose_name=_('Survey'), null=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='questions', verbose_name=_('Category'))
     text = RichTextField(verbose_name=_('Question Text'))
@@ -194,6 +226,20 @@ class Question(models.Model):
     allow_multiple = models.BooleanField(default=False, verbose_name=_('Allow Multiple Choices'), help_text=_('Allow users to select multiple answers'))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created At'))
     attachment = models.FileField(upload_to='question_attachments/', blank=True, verbose_name=_('Question Attachment'))
+    # Branching field — Feature: sector-specific questionnaire routing.
+    # Empty string = universal; a sector code = visible only to that sector.
+    sector = models.CharField(
+        max_length=20,
+        choices=SECTOR_CHOICES,
+        blank=True,
+        default='',
+        verbose_name=_('Sector'),
+        help_text=_(
+            "Leave blank for universal questions (shown to all respondents). "
+            "Set to a specific sector to show this question only to respondents "
+            "who selected that sector when starting their attempt."
+        ),
+    )
     
     class Meta:
         verbose_name = _('Question')
@@ -270,6 +316,15 @@ class QuestionnaireAttempt(models.Model):
     social_score = models.FloatField(default=0.0, null=True, blank=True, verbose_name=_('Social Score'))
     governance_score = models.FloatField(default=0.0, null=True, blank=True, verbose_name=_('Governance Score'))
     overall_grade = models.CharField(max_length=2, blank=True, verbose_name=_('Overall Grade'))
+    # Branching field — the sector the user selected when starting this attempt.
+    # Empty string = no sector selected (universal / backward-compatible).
+    selected_sector = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        verbose_name=_('Selected Sector'),
+        help_text=_('Industry sector chosen by the user at the start of this attempt.'),
+    )
     
     class Meta:
         verbose_name = _('Questionnaire Attempt')
@@ -289,18 +344,42 @@ class QuestionnaireAttempt(models.Model):
         return results['total_percentage']
 
     def get_survey_categories(self):
-        """Return categories for the current survey in display order."""
+        """Return categories for the current survey in display order.
+
+        Fix R5-L-09: prefer the prefetch_related('survey__categories') cache
+        set up by QuestionnaireAttemptViewSet._base_queryset() before falling
+        back to a fresh DB query.  This avoids a redundant SELECT per attempt
+        in serializer hot paths.
+
+        Fix R6-09: replaced the private _result_cache probe (a Django ORM
+        internal that could vanish in a future Django version) with a public
+        approach: calling .all() on a prefetched relation returns the cached
+        queryset, and list() forces evaluation either way.
+        """
         if self.survey:
-            categories = Category.objects.filter(survey=self.survey).order_by('order')
-            if categories.exists():
-                return categories
-            return Category.objects.filter(
-                questions__survey=self.survey,
-                questions__is_active=True
+            # .all() on a prefetched Manager returns the in-memory cache when
+            # prefetch_related('survey__categories') was used; otherwise it
+            # issues a fresh DB query — both paths are handled transparently.
+            # IMPORTANT: do NOT chain .order_by() after .all() — that creates
+            # a new queryset that bypasses the prefetch cache.  Sort in Python
+            # instead so the prefetch optimisation is preserved.
+            cats = sorted(self.survey.categories.all(), key=lambda c: c.order)
+            if cats:
+                return cats
+            # Fallback for surveys where categories are linked via questions
+            # (used in admin / management commands without prefetching).
+            cats = list(
+                Category.objects.filter(
+                    questions__survey=self.survey,
+                    questions__is_active=True,
+                ).distinct().order_by('order')
+            )
+            return cats
+        return list(
+            Category.objects.filter(
+                questions__is_active=True,
             ).distinct().order_by('order')
-        return Category.objects.filter(
-            questions__is_active=True
-        ).distinct().order_by('order')
+        )
 
     def get_category_breakdown(self):
         """Build dynamic category breakdown for the current attempt.
@@ -313,10 +392,17 @@ class QuestionnaireAttempt(models.Model):
         categories = list(self.get_survey_categories())  # 1-2 queries max
 
         # ── Fix BB: one query for ALL questions in this survey ────────────────
+        # Sector filtering: universal questions (sector='') are always included;
+        # sector-specific questions are included only when the attempt's
+        # selected_sector matches.  Empty selected_sector = universal-only mode
+        # (backward-compatible with all pre-branching attempts).
         if self.survey:
+            from django.db.models import Q as _Q
+            _sector = self.selected_sector or ''
             all_questions = list(
                 Question.objects
                 .filter(is_active=True, survey=self.survey)
+                .filter(_Q(sector='') | _Q(sector=_sector))
                 .prefetch_related('choices')
                 .select_related('category')
             )
@@ -341,10 +427,13 @@ class QuestionnaireAttempt(models.Model):
         for q in all_questions:
             questions_by_cat[q.category_id].append(q)
 
-        # Fetch all answers for this attempt in one query
-        all_answers = self.answers.select_related(
-            'choice', 'question'
-        ).prefetch_related('choices')
+        # Fix R7-02: calling .select_related().prefetch_related() on self.answers
+        # creates a NEW queryset that bypasses any prefetch_related cache already
+        # populated by QuestionnaireAttemptViewSet._base_queryset() (which prefetches
+        # answers__choice, answers__choices, answers__question__choices).  Using
+        # .all() instead returns the in-memory cache when prefetching was done,
+        # or falls back to a single DB query when it wasn't — both are correct.
+        all_answers = list(self.answers.all())
         answers_by_qid = {a.question_id: a for a in all_answers}
 
         category_scores = []
@@ -433,6 +522,9 @@ class QuestionnaireAttempt(models.Model):
         new_env   = round(env_n / env_d, 2) if env_d else avg
         new_soc   = round(soc_n / soc_d, 2) if soc_d else avg
         new_gov   = round(gov_n / gov_d, 2) if gov_d else avg
+        # Fix R7-13: round() to integer is intentional — total_score is stored
+        # as an IntegerField on the model (0-100 range), so fractional percentages
+        # must be truncated.  The raw float is still available via get_category_breakdown().
         new_total = round(results['total_percentage'])
         new_grade = self._grade_for_score(new_total)
 
@@ -513,7 +605,10 @@ class Answer(models.Model):
         unique_together = ['attempt', 'question']
     
     def __str__(self):
-        return f"{self.attempt.user.username} - {self.question}"
+        # Fix R11-04: avoid chaining attempt.user.username AND self.question.__str__
+        # (which itself lazy-loads survey + category) — up to 4 extra DB queries per
+        # row in admin list views. Use cached FK integers only — zero extra queries.
+        return f"Answer #{self.pk} — Q{self.question_id}"
     
     def get_total_score(self):
         """Calculate total score for this answer.
@@ -575,7 +670,9 @@ class UserDocument(models.Model):
         ordering = ['-uploaded_at']
 
     def __str__(self):
-        return f"{self.answer.attempt.user.username} - {self.title}"
+        # Fix R11-03: avoid chaining answer.attempt.user.username (3 lazy-load queries
+        # per row in admin list views). Use local fields only — zero extra DB queries.
+        return f"{self.title} (#{self.pk})"
 
     def get_file_size_display(self):
         """Return human readable file size"""

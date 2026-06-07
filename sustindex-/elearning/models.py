@@ -45,7 +45,10 @@ class Course(models.Model):
         ordering = ['order', '-created_at']
 
     def __str__(self):
-        company_str = f' — {self.company.company_name}' if self.company else ''
+        # Fix R12-01: `if self.company` triggers a SELECT to hydrate the FK object
+        # even when company_id is NULL.  Check the cached integer instead — zero
+        # extra queries in admin list views.
+        company_str = f' — company #{self.company_id}' if self.company_id else ''
         return f'{self.title}{company_str}'
 
 
@@ -68,7 +71,10 @@ class Lesson(models.Model):
         unique_together = [('course', 'order')]
 
     def __str__(self):
-        return f'{self.course.title} — {self.title}'
+        # Fix R12-02: self.course.title traverses the FK and fires a SELECT per
+        # admin row.  Use the cached FK integer + local title field — zero extra
+        # DB queries.
+        return f'[#{self.course_id}] {self.title}'
 
 
 class LessonAttachment(models.Model):
@@ -97,4 +103,7 @@ class LessonProgress(models.Model):
         unique_together = ['user', 'lesson']
 
     def __str__(self):
-        return f'{self.user.username} — {self.lesson.title}'
+        # Fix R12-03: self.user.username + self.lesson.title each fire a SELECT
+        # per admin row (two FK lazy-loads).  Cached FK integers only — zero
+        # extra DB queries.
+        return f'Progress #{self.pk} (user #{self.user_id} / lesson #{self.lesson_id})'

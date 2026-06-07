@@ -8,6 +8,9 @@ effort level, and a quick-win action.
 Called from QuestionnaireAttempt.get_recommendations().
 """
 
+import logging as _logging
+_log = _logging.getLogger(__name__)
+
 # ── Category type detection ────────────────────────────────────────────────
 
 def _cat_type(name: str) -> str:
@@ -358,12 +361,23 @@ _RECS = {
 }
 
 # Aliases for sector types → map to 'general'
+# Fix M-01: use dict() shallow copy so each alias gets its own mapping object.
+# The previous _RECS[_k] = _RECS['general'] made ALL aliases share the SAME dict
+# reference — mutating one sector's entry at runtime would corrupt all others.
 for _k in ('sector_agri', 'sector_finance', 'sector_construction',
            'sector_manufacturing', 'sector_health', 'sector_tech', 'sector_retail'):
-    _RECS[_k] = _RECS['general']
+    _RECS[_k] = dict(_RECS['general'])
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
+
+# Fix #1: _priority was defined AFTER the function that calls it.
+# Moved here so the call site is always below the definition.
+def _priority(pct: float) -> str:
+    if pct < 40:  return 'High'
+    if pct < 65:  return 'Medium'
+    return 'Low'
+
 
 def get_recommendations_for_category(name: str, pct: float) -> list:
     """
@@ -372,8 +386,15 @@ def get_recommendations_for_category(name: str, pct: float) -> list:
     the report concise.
     """
     cat_type = _cat_type(name)
-    band     = _band(pct)
-    pool     = _RECS.get(cat_type, _RECS['general']).get(band, [])
+    # Fix #2: if cat_type somehow falls outside the known set, log a warning
+    # so it's visible in the deployment logs rather than silently using 'general'.
+    if cat_type not in _RECS:
+        _log.warning(
+            'get_recommendations_for_category: unrecognised cat_type %r for '
+            'category %r — falling back to "general"', cat_type, name
+        )
+    band = _band(pct)
+    pool = _RECS.get(cat_type, _RECS['general']).get(band, [])
     recs = []
     for r in pool[:2]:
         recs.append({
@@ -388,12 +409,6 @@ def get_recommendations_for_category(name: str, pct: float) -> list:
             'score_pct':     round(pct),
         })
     return recs
-
-
-def _priority(pct: float) -> str:
-    if pct < 40:  return 'High'
-    if pct < 65:  return 'Medium'
-    return 'Low'
 
 
 def maturity_narrative(pct: float, lang: str = 'en') -> str:

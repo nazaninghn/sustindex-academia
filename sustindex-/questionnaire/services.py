@@ -7,8 +7,12 @@ from django.db.models import Count, Q
 def recalc_attempt_score(attempt):
     """
     Recalculate attempt score using the canonical scoring logic.
+
+    Fix R6-20: pass save=True explicitly so scores are always persisted
+    (the default in calculate_scores may vary; an explicit kwarg is unambiguous
+    and signals intent clearly to future maintainers).
     """
-    attempt.calculate_scores()
+    attempt.calculate_scores(save=True)
     return attempt.total_score
 
 
@@ -24,10 +28,15 @@ def attempt_stats(attempt):
     answered_questions = 0
     cannot_answer_count = 0
 
-    for answer in attempt.answers.all():
+    # Fix R5-H-05: evaluate choices via list() to hit the prefetch_related cache
+    # instead of issuing an answer.choices.exists() DB query per answer (N+1).
+    # Fix R10-02: prefetch 'choices' (M2M/reverse-FK) and select_related 'choice'
+    # (FK) here so the loop below never issues extra per-answer DB queries —
+    # answer.choices.all() returns the prefetch cache, not a new queryset.
+    for answer in attempt.answers.select_related('choice').prefetch_related('choices').all():
         if answer.is_cannot_answer():
             cannot_answer_count += 1
-        elif answer.choice or answer.choices.exists() or (answer.text_answer and answer.text_answer.strip()):
+        elif answer.choice or bool(list(answer.choices.all())) or (answer.text_answer and answer.text_answer.strip()):
             answered_questions += 1
 
     progress_percent = 0

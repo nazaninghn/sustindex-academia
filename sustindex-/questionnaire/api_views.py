@@ -40,12 +40,14 @@ _ALLOWED_CONTENT_TYPES = {
 class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
     # Fix N: prefetch nested relations up-front — avoids N+1 when serializing
     # questions and their choices in a single request.
+    # Fix R5-H-02: require authentication — survey content (including choice
+    # scores) must not be accessible to anonymous users.
     queryset = (
         Survey.objects.filter(is_active=True)
         .prefetch_related('questions__choices', 'sessions')
     )
     serializer_class = SurveySerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['get'])
     def questions(self, request, pk=None):
@@ -57,6 +59,20 @@ class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
             .prefetch_related('choices')
             .order_by('category', 'order')
         )
+        # Sector filtering: when ?attempt=<id> is provided, look up the
+        # attempt's selected_sector and include only universal + matching questions.
+        attempt_id = request.query_params.get('attempt')
+        if attempt_id:
+            try:
+                from django.db.models import Q
+                attempt = QuestionnaireAttempt.objects.only('selected_sector').get(
+                    pk=int(attempt_id),
+                    user=request.user,
+                )
+                sector = attempt.selected_sector or ''
+                questions = questions.filter(Q(sector='') | Q(sector=sector))
+            except (QuestionnaireAttempt.DoesNotExist, ValueError, TypeError):
+                pass  # unknown/invalid attempt_id → return all active questions
         serializer = QuestionSerializer(questions, many=True, context={'request': request})
         return Response(serializer.data)
 
@@ -69,9 +85,10 @@ class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class SurveySessionViewSet(viewsets.ReadOnlyModelViewSet):
+    # Fix R5-H-02: require authentication
     queryset = SurveySession.objects.filter(is_active=True).select_related('survey')  # Fix N
     serializer_class = SurveySessionSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
     def open_sessions(self, request):
@@ -86,6 +103,7 @@ class SurveySessionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+    # Fix R5-H-02: require authentication
     queryset = (
         Category.objects.all()
         .order_by('order')
@@ -101,15 +119,16 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
         )
     )
     serializer_class = CategorySerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
 
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
     # Fix #38: .none() prevents full exposure during schema generation;
     # get_queryset() (with select_related + prefetch_related) is always used.
+    # Fix R5-H-02: require authentication
     queryset = Question.objects.none()
     serializer_class = QuestionSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = (
@@ -123,7 +142,49 @@ class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(survey_id=survey_id)
         if category_id:
             queryset = queryset.filter(category_id=category_id)
+        # Sector filtering: when ?attempt=<id> is provided, look up the
+        # attempt's selected_sector and include only universal + matching questions.
+        attempt_id = self.request.query_params.get('attempt')
+        if attempt_id:
+            try:
+                from django.db.models import Q
+                attempt = QuestionnaireAttempt.objects.only('selected_sector').get(
+                    pk=int(attempt_id),
+                    user=self.request.user,
+                )
+                sector = attempt.selected_sector or ''
+                queryset = queryset.filter(Q(sector='') | Q(sector=sector))
+            except (QuestionnaireAttempt.DoesNotExist, ValueError, TypeError):
+                pass  # unknown/invalid attempt_id → return all active questions
         return queryset.order_by('category', 'order')
+
+
+    @action(detail=True, methods=['get'], url_path='attachment')
+    def download_attachment(self, request, pk=None):
+        """
+        Fix R6-11: serve question attachments through an authenticated endpoint
+        instead of exposing raw /media/ URLs that anyone with the link can access.
+        """
+        import os as _os
+        from django.http import FileResponse as _FileResponse, Http404 as _Http404
+        question = self.get_object()
+        if not question.attachment:
+            raise _Http404
+        try:
+            file_path = question.attachment.path
+        except (ValueError, NotImplementedError):
+            return Response({'url': question.attachment.url})
+        if not _os.path.exists(file_path):
+            raise _Http404
+        try:
+            fh = open(file_path, 'rb')
+        except OSError:
+            raise _Http404
+        return _FileResponse(
+            fh,
+            as_attachment=True,
+            filename=_os.path.basename(question.attachment.name),
+        )
 
 
 class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
@@ -162,16 +223,49 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         return QuestionnaireAttemptSerializer
 
     def perform_create(self, serializer):
-        survey = serializer.validated_data.get('survey')
-        if survey and not survey.allow_multiple_attempts:
-            already_done = QuestionnaireAttempt.objects.filter(
-                user=self.request.user, survey=survey, is_completed=True
-            ).exists()
-            if already_done:
-                raise DRFValidationError({
-                    'detail': 'Multiple attempts are not allowed for this survey.'
-                })
-        serializer.save(user=self.request.user)
+        user = self.request.user
+
+        # Fix C-02: wrap the existence check + insert in a single atomic block
+        # with select_for_update so two concurrent POST requests for the same
+        # (user, survey) can't both pass the `already_done` check and both
+        # insert a duplicate attempt.
+        # Fix R9-03: moved the silver membership check INSIDE the atomic block.
+        # Previously the count() ran outside the transaction, creating a TOCTOU
+        # race: two concurrent Silver users could both read completed_count=0,
+        # both pass the guard, and both create an attempt — eventually yielding
+        # 2 completed assessments.  select_for_update() serialises the check.
+        with transaction.atomic():
+            # Fix H-2: enforce membership-gating at the API layer so direct API
+            # calls can't bypass the attempt limits enforced in the template view.
+            # Silver tier: max 1 completed assessment; Gold: unlimited.
+            # select_for_update locks the rows so a concurrent request is blocked
+            # until this transaction commits, eliminating the race condition.
+            if user.membership_type == 'silver':
+                completed_count = (
+                    QuestionnaireAttempt.objects
+                    .select_for_update()
+                    .filter(user=user, is_completed=True)
+                    .count()
+                )
+                if completed_count >= 1:
+                    raise PermissionDenied(
+                        'Your Silver membership allows 1 completed assessment. '
+                        'Upgrade to Gold for unlimited access.'
+                    )
+
+            survey = serializer.validated_data.get('survey')
+            if survey and not survey.allow_multiple_attempts:
+                already_done = (
+                    QuestionnaireAttempt.objects
+                    .select_for_update()
+                    .filter(user=self.request.user, survey=survey, is_completed=True)
+                    .exists()
+                )
+                if already_done:
+                    raise DRFValidationError({
+                        'detail': 'Multiple attempts are not allowed for this survey.'
+                    })
+            serializer.save(user=self.request.user)
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
@@ -220,7 +314,10 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def my_attempts(self, request):
-        attempts = self.get_queryset().filter(user=request.user)
+        # Fix R4-L-02: removed redundant .filter(user=request.user) — get_queryset()
+        # already scopes results to request.user for non-staff users (see get_queryset).
+        # The extra filter was harmless but misleading and created unnecessary SQL.
+        attempts = self.get_queryset()
         serializer = self.get_serializer(attempts, many=True)
         return Response(serializer.data)
 
@@ -249,19 +346,30 @@ class AnswerViewSet(viewsets.ModelViewSet):
         return AnswerSerializer
 
     def perform_create(self, serializer):
-        attempt_id = self.request.data.get('attempt')
-        if not attempt_id:
+        # Fix M-07: read the attempt from validated_data (already a model instance
+        # after serializer.is_valid()) rather than raw request.data, which would
+        # crash with ValueError if the value is a non-integer string like "abc".
+        attempt = serializer.validated_data.get('attempt')
+        if not attempt:
             raise DRFValidationError({'attempt': 'This field is required.'})
 
-        attempt = get_object_or_404(QuestionnaireAttempt, id=attempt_id)
-
-        if attempt.user != self.request.user:
+        # Fix R9-01: compare by user_id (FK integer) instead of attempt.user to
+        # avoid a lazy-load DB query.  attempt comes from PrimaryKeyRelatedField
+        # (QuestionnaireAttempt.objects.all() without select_related), so
+        # attempt.user would issue an extra SELECT per answer submission.
+        if attempt.user_id != self.request.user.id:
             raise PermissionDenied("Cannot answer for another user's attempt.")
 
         if attempt.is_completed:
             raise DRFValidationError({'detail': 'Cannot modify a completed attempt.'})
 
-        question_id = self.request.data.get('question')
+        # Fix R6-08: derive question_id from validated_data instead of raw
+        # request.data so we bypass the serializer's own validation (the
+        # 'question' field is a PrimaryKeyRelatedField → already resolved to an
+        # instance; using request.data would skip validation and could crash with
+        # a non-integer string or a PK that belongs to a different user).
+        question_obj = serializer.validated_data.get('question')
+        question_id = question_obj.id if question_obj is not None else None
 
         # Fix CRITICAL: wrap in transaction.atomic + select_for_update to eliminate
         # the TOCTOU race where two concurrent requests for the same (attempt, question)
@@ -293,7 +401,10 @@ class AnswerViewSet(viewsets.ModelViewSet):
                 existing.choice_id = choice
                 existing.text_answer = text_answer
                 existing.notes = notes
-                existing.save()
+                # Fix R5-M-09: save only the mutated columns to avoid unnecessary
+                # full-row writes and reduce the risk of concurrent-update collisions
+                # on unrelated fields.
+                existing.save(update_fields=['choice_id', 'text_answer', 'notes'])
 
                 # Fix D (Round 2): always sync M2M — empty list clears stale multi-select choices.
                 # Fix BUG-29: filter by question so IDs from other questions are rejected.
@@ -320,6 +431,38 @@ class UserDocumentViewSet(viewsets.ModelViewSet):
         if self.request.user.is_staff:
             return qs
         return qs.filter(answer__attempt__user=self.request.user)
+
+    @action(detail=True, methods=['get'], url_path='download')
+    def download(self, request, pk=None):
+        """
+        Fix R5-H-03: serve the file through an authenticated endpoint instead of
+        exposing raw /media/ URLs that anyone with the URL can access.
+        get_object() already verifies ownership via get_queryset().
+        """
+        import os
+        from django.http import FileResponse, Http404 as DjangoHttp404
+        doc = self.get_object()
+        if not doc.file:
+            raise DjangoHttp404
+        try:
+            file_path = doc.file.path
+        except (ValueError, NotImplementedError):
+            # Cloud storage (e.g. S3) doesn't have a .path — return the URL directly.
+            return Response({'url': doc.file.url})
+        if not os.path.exists(file_path):
+            raise DjangoHttp404
+        # Fix R6-14: open() first and assign to a variable so that if
+        # FileResponse.__init__ raises, the file descriptor is not leaked.
+        # Django closes the file automatically when the streaming response ends.
+        try:
+            fh = open(file_path, 'rb')
+        except OSError:
+            raise DjangoHttp404
+        return FileResponse(
+            fh,
+            as_attachment=True,
+            filename=os.path.basename(doc.file.name),
+        )
 
     def perform_create(self, serializer):
         file = self.request.FILES.get('file')
@@ -351,11 +494,36 @@ class UserDocumentViewSet(viewsets.ModelViewSet):
         # the Answer instance to serializer.save() so the non-nullable FK is set.
         # Previously serializer.save(file_size=file.size) was called without answer,
         # which caused an IntegrityError on every document upload.
-        answer_id = self.request.data.get('answer')
-        if not answer_id:
+        # Fix H-02: validate answer_id is an integer before passing to
+        # get_object_or_404 — non-integer values caused an unhandled 500 error.
+        answer_id_raw = self.request.data.get('answer')
+        if not answer_id_raw:
             raise DRFValidationError({'answer': 'This field is required.'})
-        answer_obj = get_object_or_404(Answer, id=answer_id)
-        if answer_obj.attempt.user != self.request.user:
-            raise PermissionDenied("Cannot upload documents to another user's answer.")
+        try:
+            answer_id = int(answer_id_raw)
+        except (TypeError, ValueError):
+            raise DRFValidationError({'answer': 'A valid integer is required.'})
+        # Fix R7-01: IDOR — add attempt__user filter so a user can't upload a
+        # document to another user's answer by guessing its integer PK.
+        # get_object_or_404 returns 404 (not 403) for non-owned answers, which
+        # avoids leaking the existence of other users' answer IDs.
+        # Fix R9-02: get_object_or_404 already enforces attempt__user=request.user,
+        # so the explicit ownership check below it was dead code AND caused 2 extra
+        # DB queries per upload (lazy-load of answer_obj.attempt then .user).
+        # Removed — the 404 guard is the single, correct ownership enforcement here.
+        # Fix R10-01: use select_related('attempt') so the is_completed check below
+        # reads from the already-fetched JOIN row instead of issuing a second query.
+        answer_obj = get_object_or_404(
+            Answer.objects.select_related('attempt'),
+            id=answer_id,
+            attempt__user=self.request.user,
+        )
+
+        # Fix R5-C-01: block uploads to completed attempts — scores are already
+        # finalised at that point; allowing new documents would be misleading.
+        if answer_obj.attempt.is_completed:
+            raise DRFValidationError(
+                {'answer': 'Cannot attach documents to a completed attempt.'}
+            )
 
         serializer.save(file_size=file.size, answer=answer_obj)

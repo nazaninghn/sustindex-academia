@@ -73,6 +73,10 @@ api.interceptors.response.use(
       const { data } = await axios.post(`${API_URL}/api/v1/auth/token/refresh/`, { refresh });
       // setToken respects the storage where the refresh token currently lives
       setToken('access_token', data.access);
+      // Fix R6-02: ROTATE_REFRESH_TOKENS=True means the old refresh token is
+      // blacklisted server-side after each refresh cycle.  Without storing the
+      // new refresh token the next 401-refresh will fail → forced logout.
+      if (data.refresh) setToken('refresh_token', data.refresh);
       api.defaults.headers.common.Authorization = `Bearer ${data.access}`;
       flushQueue(null, data.access);
       orig.headers.Authorization = `Bearer ${data.access}`;
@@ -102,8 +106,18 @@ export const attemptAPI = {
     return data;
   },
 
-  startAttempt: async (surveyId: number) => {
-    const { data } = await api.post('/api/v1/attempts/', { survey: surveyId });
+  /**
+   * Start a new attempt for the given survey.
+   * @param surveyId   - The survey to attempt.
+   * @param sector     - Optional industry sector code (e.g. 'tech', 'agri').
+   *                     When provided the backend stores it on the attempt so
+   *                     sector-specific questions are included in the questionnaire.
+   *                     Omit or pass '' for a universal (no-sector) attempt.
+   */
+  startAttempt: async (surveyId: number, sector?: string) => {
+    const payload: Record<string, number | string> = { survey: surveyId };
+    if (sector) payload.selected_sector = sector;
+    const { data } = await api.post('/api/v1/attempts/', payload);
     return data;
   },
 
@@ -121,8 +135,11 @@ export const attemptAPI = {
     };
     if (choiceIds && choiceIds.length > 0) payload.choices_ids = choiceIds;
     else if (choiceId !== null && choiceId !== undefined) payload.choice = choiceId;
-    if (notes)      payload.notes       = notes;
-    if (textAnswer) payload.text_answer = textAnswer;
+    // Fix M-29: always include notes/text_answer even when empty so the backend
+    // clears the field if the user had previously typed something and then erased it.
+    // The old `if (notes)` guard skipped the empty string, leaving stale data on the server.
+    payload.notes       = notes       ?? '';
+    payload.text_answer = textAnswer  ?? '';
     const { data } = await api.post('/api/v1/answers/', payload);
     return data;  // includes { id, ... }
   },
@@ -132,7 +149,16 @@ export const attemptAPI = {
     return data;
   },
 
-  /** Upload a supporting document for a saved answer (uses native fetch so FormData boundary is set correctly) */
+  /** Upload a supporting document for a saved answer.
+   *
+   * Fix R5-C-02: migrated from native `fetch` to the shared `api` axios instance
+   * so the 401-refresh interceptor fires automatically when the access token
+   * expires mid-upload, instead of silently failing with a 401.
+   * Fix R7-10: do NOT set Content-Type manually — when the body is a FormData
+   * instance, axios automatically sets Content-Type: multipart/form-data WITH
+   * the correct boundary parameter.  Manually setting the header removes the
+   * auto-generated boundary, causing the server to return HTTP 400.
+   */
   uploadDocument: async (answerId: number, file: File, title?: string): Promise<{
     id: number;
     title: string;
@@ -142,26 +168,25 @@ export const attemptAPI = {
     file_size: number;
     file_size_display: string;
   }> => {
-    if (typeof window === 'undefined') throw new Error('uploadDocument is browser-only');
-    // Fix BUG-03: use getToken() helper so session-storage users (remember=false) are covered.
-    const token = getToken('access_token');
-    const form  = new FormData();
+    const form = new FormData();
     form.append('answer', String(answerId));
     form.append('file',   file);
     form.append('title',  title || file.name);
 
-    const res = await fetch(`${API_URL}/api/v1/documents/`, {
-      method: 'POST',
-      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: form,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(JSON.stringify(err) || `Upload failed (${res.status})`);
-    }
-    return res.json();
+    // No explicit Content-Type header — axios injects multipart/form-data + boundary automatically.
+    const { data } = await api.post('/api/v1/documents/', form);
+    return data;
   },
 };
+
+/**
+ * Fix R5-H-03: return the authenticated download URL for a document.
+ * Use this instead of `doc.file` directly so the request goes through
+ * the Django auth check rather than hitting the public /media/ path.
+ */
+export function documentDownloadUrl(documentId: number): string {
+  return `${API_URL}/api/v1/documents/${documentId}/download/`;
+}
 
 /* ════════════════════════════════════════════════════════
    Survey API
@@ -231,8 +256,12 @@ export const elearningAPI = {
     return data;
   },
   getLessons: async (courseId?: number) => {
-    const url = courseId ? `/api/v1/lessons/?course=${courseId}` : '/api/v1/lessons/';
-    const { data } = await api.get(url);
+    // Fix L-07: use axios params instead of template-literal URL construction
+    // so the value is properly encoded and the pattern stays consistent with
+    // the rest of the API helpers.
+    const { data } = await api.get('/api/v1/lessons/', {
+      params: courseId !== undefined ? { course: courseId } : undefined,
+    });
     return data;
   },
   getLesson: async (id: number) => {

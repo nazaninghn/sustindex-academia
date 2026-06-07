@@ -46,11 +46,11 @@ except (ImportError, AttributeError):
     AUTOCOMPLETE_AVAILABLE = False
     CategoryAutocomplete = None
 
-# Check if REST framework is installed
-try:
-    from sustindex.settings import REST_FRAMEWORK_INSTALLED
-except ImportError:
-    REST_FRAMEWORK_INSTALLED = False
+# Fix M-22: import via django.conf.settings, not directly from the settings module.
+# Importing from the module creates a circular-import risk and bypasses Django's
+# settings loading machinery (lazy settings, env overrides, test settings).
+from django.conf import settings as _settings
+REST_FRAMEWORK_INSTALLED = getattr(_settings, 'REST_FRAMEWORK_INSTALLED', False)
 
 # Admin panel settings
 admin.site.site_header = "Sustindex Admin Panel"

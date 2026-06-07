@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework_simplejwt.views import (
     TokenObtainPairView, TokenRefreshView, TokenBlacklistView,
 )
@@ -16,7 +17,7 @@ from questionnaire.api_views import (
     SurveyViewSet, SurveySessionViewSet, CategoryViewSet,
     QuestionViewSet, QuestionnaireAttemptViewSet, AnswerViewSet, UserDocumentViewSet
 )
-from elearning.api_views import CourseViewSet, LessonViewSet, LessonProgressViewSet
+from elearning.api_views import CourseViewSet, LessonViewSet, LessonAttachmentViewSet, LessonProgressViewSet
 
 router = DefaultRouter()
 
@@ -34,6 +35,8 @@ router.register(r'documents', UserDocumentViewSet, basename='document')
 
 router.register(r'courses', CourseViewSet, basename='course')
 router.register(r'lessons', LessonViewSet, basename='lesson')
+# Fix R6-03: authenticated download endpoint for lesson attachments
+router.register(r'lesson-attachments', LessonAttachmentViewSet, basename='lessonattachment')
 router.register(r'lesson-progress', LessonProgressViewSet, basename='lessonprogress')
 
 urlpatterns = [
@@ -43,8 +46,11 @@ urlpatterns = [
     # preventing reuse for up to REFRESH_TOKEN_LIFETIME (7 days) after the user logs out.
     path('auth/token/blacklist/', TokenBlacklistView.as_view(), name='token_blacklist'),
 
-    path('schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    # Fix R6-13: restrict schema and docs to authenticated staff only —
+    # exposing the full OpenAPI schema publicly reveals all endpoints,
+    # request/response shapes, and authentication mechanisms to attackers.
+    path('schema/', SpectacularAPIView.as_view(permission_classes=[IsAdminUser]), name='schema'),
+    path('docs/',   SpectacularSwaggerView.as_view(url_name='schema', permission_classes=[IsAdminUser]), name='swagger-ui'),
 
     path('', include(router.urls)),
 ]

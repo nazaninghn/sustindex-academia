@@ -24,7 +24,7 @@ from .serializers import (
     UserSerializer, UserRegistrationSerializer,
     CompanyProfileSerializer, MembershipHistorySerializer
 )
-from .throttles import RegisterRateThrottle
+from .throttles import RegisterRateThrottle, PasswordResetThrottle
 
 User = get_user_model()
 
@@ -73,21 +73,46 @@ class UserViewSet(viewsets.ModelViewSet):
 
         Only fields in _USER_EDITABLE_FIELDS are accepted — this prevents a user from
         elevating their membership_type, is_staff, or is_superuser via this endpoint.
+        Fix R5-M-03: if company_name is being updated, mirror the value to the
+        linked CompanyProfile record so both are kept in sync.
         """
         data = {k: v for k, v in request.data.items() if k in _USER_EDITABLE_FIELDS}
         serializer = self.get_serializer(request.user, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        # Sync company_name to CompanyProfile if it was updated and a profile exists.
+        # Fix R6-01: use related_name='profile' (not the old default 'companyprofile').
+        # Fix R8-D: use a single UPDATE query instead of SELECT + UPDATE.
+        # The old pattern (request.user.profile → .save()) fired an extra SELECT
+        # for the profile record; .filter().update() collapses that to one query
+        # and is also safe when no profile exists (0 rows updated → no-op).
+        new_company_name = data.get('company_name')
+        if new_company_name is not None:
+            CompanyProfile.objects.filter(user=request.user).update(
+                company_name=new_company_name
+            )
+
         return Response(serializer.data)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated],
             url_path='change_password')
     def change_password(self, request):
         """Change the authenticated user's password (requires current password)."""
-        old_password = request.data.get('old_password', '').strip()
-        new_password = request.data.get('new_password', '').strip()
+        # Fix H-03: only strip for the presence check — do NOT strip the value
+        # passed to check_password.  Users with passwords that have leading /
+        # trailing spaces would otherwise be permanently locked out.
+        old_password_raw = request.data.get('old_password', '')
+        new_password_raw = request.data.get('new_password', '')
 
-        if not old_password or not new_password:
+        old_password = old_password_raw  # preserve for check_password
+        # Fix R7-03: do NOT strip() new_password before hashing — if a user
+        # intentionally includes leading/trailing spaces, stripping them here
+        # creates a mismatch with login (which passes the raw value to
+        # authenticate()).  Check presence by stripping, but hash the raw value.
+        new_password = new_password_raw
+
+        if not old_password_raw.strip() or not new_password.strip():
             return Response(
                 {'detail': 'Both old_password and new_password are required.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -109,9 +134,20 @@ class UserViewSet(viewsets.ModelViewSet):
 
         request.user.set_password(new_password)
         request.user.save(update_fields=['password'])
+
+        # Fix H-12: blacklist all existing refresh tokens so a stolen token
+        # can't be used to generate new access tokens after a password change.
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+            for token in OutstandingToken.objects.filter(user=request.user):
+                BlacklistedToken.objects.get_or_create(token=token)
+        except Exception:
+            pass  # token_blacklist app not installed — skip silently
+
         return Response({'detail': 'Password changed successfully.'})
 
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny],
+            throttle_classes=[PasswordResetThrottle])
     def forgot_password(self, request):
         """
         Step 1 of password reset.
@@ -133,11 +169,14 @@ class UserViewSet(viewsets.ModelViewSet):
                 frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
                 reset_link   = f'{frontend_url}/reset-password?uid={uid}&token={token}'
 
+                # Fix H-06: strip newlines from username before embedding it in email
+                # to prevent header injection via a crafted username.
+                safe_username = user.username.replace('\n', ' ').replace('\r', ' ')
                 try:
                     send_mail(
                         subject='Reset your Sustindex password',
                         message=(
-                            f'Hello {user.username},\n\n'
+                            f'Hello {safe_username},\n\n'
                             f'Click the link below to set a new password.\n'
                             f'This link is valid for 3 days.\n\n'
                             f'{reset_link}\n\n'
@@ -157,7 +196,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response({'detail': 'If that email is registered, a reset link has been sent.'})
 
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny],
+            throttle_classes=[PasswordResetThrottle])
     def reset_password(self, request):
         """
         Step 2 of password reset.
@@ -165,9 +205,11 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         uid          = (request.data.get('uid')          or '').strip()
         token        = (request.data.get('token')        or '').strip()
-        new_password = (request.data.get('new_password') or '').strip()
+        # Fix R7-03: preserve raw value for set_password — consistent with how
+        # Django's authenticate() uses the submitted password without stripping.
+        new_password = (request.data.get('new_password') or '')
 
-        if not uid or not token or not new_password:
+        if not uid or not token or not new_password.strip():
             return Response(
                 {'detail': 'uid, token and new_password are all required.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -201,6 +243,18 @@ class UserViewSet(viewsets.ModelViewSet):
 
         user.set_password(new_password)
         user.save(update_fields=['password'])
+
+        # Fix H-05: blacklist all existing refresh tokens so stolen tokens
+        # remain invalid even within their 7-day lifetime after a reset.
+        # Fix R4-M-03: renamed loop variable from `token` to `outstanding_token`
+        # to avoid shadowing the `token` parameter extracted from request.data above.
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+            for outstanding_token in OutstandingToken.objects.filter(user=user):
+                BlacklistedToken.objects.get_or_create(token=outstanding_token)
+        except Exception:
+            pass  # token_blacklist app not installed — skip silently
+
         return Response({'detail': 'Password has been reset successfully.'})
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny],
@@ -230,7 +284,14 @@ class CompanyProfileViewSet(viewsets.ModelViewSet):
         return CompanyProfile.objects.select_related('user').filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        # Fix R5-H-01: CompanyProfile has a OneToOneField to User — a second
+        # POST would crash with IntegrityError 500.  Return HTTP 400 instead.
+        from django.db import IntegrityError
+        try:
+            serializer.save(user=self.request.user)
+        except IntegrityError:
+            from rest_framework.exceptions import ValidationError as DRFVal
+            raise DRFVal({'detail': 'A company profile already exists for this user.'})
 
 
 class MembershipHistoryViewSet(viewsets.ReadOnlyModelViewSet):

@@ -1,11 +1,14 @@
+import os
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from django.http import FileResponse, Http404 as DjangoHttp404
 from django.utils import timezone
-from .models import Course, Lesson, LessonProgress
-from .serializers import CourseSerializer, LessonSerializer, LessonProgressSerializer
+from .models import Course, Lesson, LessonAttachment, LessonProgress
+from .serializers import CourseSerializer, LessonSerializer, LessonAttachmentSerializer, LessonProgressSerializer
 
 
 class CourseViewSet(viewsets.ReadOnlyModelViewSet):
@@ -66,6 +69,42 @@ class LessonViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = LessonProgressSerializer(progress)
         return Response(serializer.data)
+
+
+class LessonAttachmentViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Fix R6-03: serve lesson attachments through an authenticated endpoint
+    instead of exposing raw /media/ URLs that anyone with the URL can access.
+    """
+    serializer_class = LessonAttachmentSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = LessonAttachment.objects.none()  # schema-safe default
+
+    def get_queryset(self):
+        return LessonAttachment.objects.select_related('lesson__course')
+
+    @action(detail=True, methods=['get'], url_path='download')
+    def download(self, request, pk=None):
+        """Stream the attachment file after ownership verification."""
+        att = self.get_object()
+        if not att.file:
+            raise DjangoHttp404
+        try:
+            file_path = att.file.path
+        except (ValueError, NotImplementedError):
+            # Cloud storage (e.g. S3) — return the signed URL directly.
+            return Response({'url': att.file.url})
+        if not os.path.exists(file_path):
+            raise DjangoHttp404
+        try:
+            fh = open(file_path, 'rb')
+        except OSError:
+            raise DjangoHttp404
+        return FileResponse(
+            fh,
+            as_attachment=True,
+            filename=os.path.basename(att.file.name),
+        )
 
 
 class LessonProgressViewSet(viewsets.ReadOnlyModelViewSet):

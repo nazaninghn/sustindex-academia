@@ -29,7 +29,9 @@ interface StripCourse {
   tag: string;
   level: string;
   icon_emoji: string;
-  duration_hours: number;
+  // Fix R4-H-03: Django serializes DecimalField / CharField as string — was typed
+  // as number which caused TypeScript to accept .toFixed() calls that fail at runtime.
+  duration_hours: string;
   total_lessons: number;
   progress_percentage: number;
   order: number;
@@ -61,11 +63,14 @@ function SparkLine({ data }: { data: number[] }) {
 
 /* ─── Courses Strip ──────────────────────────────────────────── */
 function CoursesStrip() {
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   // Fix #33: gate the API call on user being authenticated to avoid 401s on mount
   const { user } = useAuth();
-  const [courses, setCourses]         = useState<StripCourse[]>([]);
+  const [courses, setCourses]           = useState<StripCourse[]>([]);
   const [stripLoading, setStripLoading] = useState(true);
+  // Fix R4-H-02: track load failure distinctly so we can show an error message
+  // instead of silently rendering an empty section.
+  const [stripError, setStripError]     = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -75,7 +80,7 @@ function CoursesStrip() {
         const list: StripCourse[] = Array.isArray(data) ? data : (data?.results ?? []);
         setCourses(list.slice(0, 4));
       })
-      .catch(() => setCourses([]))
+      .catch(() => { setStripError(true); setCourses([]); })
       .finally(() => setStripLoading(false));
   }, [user]);
 
@@ -86,20 +91,30 @@ function CoursesStrip() {
         display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
         marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--line)',
       }}>
+        {/* Fix R5-L-05: use t() instead of inline ternaries so translations stay DRY */}
         <div>
           <span className="eyebrow" style={{ display: 'block', marginBottom: 4 }}>
-            {lang === 'tr' ? 'E-Öğrenim' : 'E-Learning'}
+            {t('courses_eyebrow')}
           </span>
           <h2 style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' }}>
-            {lang === 'tr'
-              ? <>Sürdürülebilirlik <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>kursları</em></>
-              : <>Sustainability <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>courses</em></>}
+            {t('dash_sust_courses')}
           </h2>
         </div>
         <Link href="/courses" style={{ textDecoration: 'none', fontSize: 11, color: 'var(--ink-3)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          {lang === 'tr' ? 'Tüm kurslar' : 'All courses'} <Icon.arrow />
+          {/* Fix R7-11: use t() so this string stays in the central i18n catalogue */}
+          {t('dash_all_courses')} <Icon.arrow />
         </Link>
       </div>
+
+      {/* Fix R4-H-02: show error banner instead of empty grid on fetch failure */}
+      {stripError && !stripLoading && (
+        <div style={{
+          padding: '14px 18px', background: 'var(--paper)', border: '1px solid var(--line)',
+          fontSize: 12, color: 'var(--danger)', marginBottom: 12,
+        }}>
+          {t('courses_load_error')}
+        </div>
+      )}
 
       <div className="courses-strip-grid">
         {stripLoading
@@ -176,7 +191,9 @@ function CoursesStrip() {
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
                       <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>
-                        {c.total_lessons} {lang === 'tr' ? 'modül' : 'mod'} · {c.duration_hours}
+                        {/* Fix L-08: append unit to duration_hours — without it the
+                            number appeared bare with no context (e.g. "4" instead of "4 hr") */}
+                        {c.total_lessons} {lang === 'tr' ? 'modül' : 'mod'} · {c.duration_hours} {lang === 'tr' ? 'sa' : 'hr'}
                       </span>
                       <span style={{ fontSize: 10, fontWeight: 500, color: status === 'done' ? 'var(--ink-4)' : 'var(--ink)' }}>
                         {status === 'done' ? (lang === 'tr' ? 'Tekrar' : 'Review') : status === 'active' ? (lang === 'tr' ? 'Devam →' : 'Resume →') : (lang === 'tr' ? 'Başla →' : 'Start →')}
@@ -195,7 +212,9 @@ function CoursesStrip() {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-          {lang === 'tr' ? '🔒  Daha fazla kurs yakında eklenecek.' : '🔒  More courses coming soon — content being prepared.'}
+          {/* Fix R9-07: use t() — dash_coming_soon exists in i18n catalogue,
+              hardcoded ternary was inconsistent with every other string on this page */}
+          {t('dash_coming_soon')}
         </span>
         <Link href="/courses" style={{ textDecoration: 'none' }}>
           <button className="btn btn-outline btn-sm">
@@ -211,7 +230,9 @@ function CoursesStrip() {
    Dashboard Page
    ═══════════════════════════════════════════════════════════════ */
 export default function DashboardPage() {
-  const { lang }                    = useLang();
+  // Fix R6-17: destructure t() so DashboardPage uses the i18n system
+  // consistently instead of mixing lang ternaries and t() calls.
+  const { lang, t }                 = useLang();
   const { user, isLoading: authLoading } = useAuth();
   const router                      = useRouter();
 
@@ -259,7 +280,7 @@ export default function DashboardPage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
+          {t('t_loading_auth')}
         </span>
       </div>
     );
@@ -285,12 +306,20 @@ export default function DashboardPage() {
   const firstName    = user?.first_name || user?.username || '';
   const completed    = attempts.filter((a) => a.is_completed);
   const inProgress   = attempts.filter((a) => !a.is_completed);
-  const latest       = completed.length > 0 ? completed[completed.length - 1] : null;
+  // Fix M-10: API returns attempts ordered newest-first (-started_at).
+  // completed[0] is the most recent; the old completed[length-1] was the oldest.
+  const latest       = completed.length > 0 ? completed[0] : null;
   const activeAttempt = inProgress[0] ?? null;
   const avgScore     = completed.length > 0
     ? Math.round(completed.reduce((s, a) => s + (a.total_score ?? 0), 0) / completed.length) : 0;
-  const trendVals    = completed.slice(-6).map((a) => Math.round(a.total_score ?? 0));
-  const recentRows   = [...completed].reverse().slice(0, 6);
+  // Fix M-11: sparkline should go old→new; take 6 newest then reverse so the
+  // chart reads left (oldest) to right (newest) — the old slice(-6) was correct
+  // directionally but took the 6 oldest items from an already-newest-first list.
+  const trendVals    = completed.slice(0, 6).reverse().map((a) => Math.round(a.total_score ?? 0));
+  // Fix M-11: recentRows should show the 6 most recent — API already sorts
+  // newest-first so we just take the first 6; the old [...completed].reverse()
+  // was reversing to oldest-first and showing the 6 oldest attempts.
+  const recentRows   = completed.slice(0, 6);
   const hasData      = completed.length > 0 || inProgress.length > 0;
 
   const dateStr = new Date().toLocaleDateString(

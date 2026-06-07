@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html, strip_tags
@@ -5,6 +7,8 @@ from django.db import transaction
 from django.utils import timezone
 from django.urls import reverse
 from django.utils.safestring import mark_safe
+
+logger = logging.getLogger(__name__)
 
 try:
     from dal import autocomplete
@@ -35,8 +39,10 @@ class SurveyAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     list_per_page = 50
     
     fieldsets = (
+        # Fix M-02: i18n fields were missing — admins couldn't edit bilingual
+        # name/description from the survey edit page.
         (_('Survey Information'), {
-            'fields': ('name', 'description', 'is_active')
+            'fields': ('name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'is_active')
         }),
         (_('Settings'), {
             'fields': ('allow_multiple_attempts', 'show_results_immediately')
@@ -72,50 +78,110 @@ class SurveyAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     
     @admin.action(description=_('Duplicate selected surveys'))
     def duplicate_survey(self, request, queryset):
+        # Fix R4-C-02: wrap each survey duplication in its own atomic transaction
+        # so a failure mid-copy (e.g. IntegrityError on a question) rolls back that
+        # survey's partial data and surfaces an error message instead of leaving
+        # orphan categories/questions in the database.
+        duplicated = 0
         for survey in queryset:
-            new_survey = Survey.objects.create(
-                name=f"{survey.name} (Copy)",
-                description=survey.description,
-                is_active=False,
-                allow_multiple_attempts=survey.allow_multiple_attempts,
-                show_results_immediately=survey.show_results_immediately
+          try:
+            with transaction.atomic():
+                self._duplicate_one_survey(survey)
+            duplicated += 1
+          except Exception as exc:
+            logger.exception('duplicate_survey: failed to duplicate survey pk=%s', survey.pk)
+            self.message_user(
+                request,
+                _('Failed to duplicate survey "%(name)s": %(error)s') % {
+                    'name': survey.name, 'error': str(exc)
+                },
+                level='error',
             )
-            
-            # Duplicate categories and build old->new mapping
-            category_map = {}
-            for category in survey.categories.all():
-                old_id = category.pk
-                category.pk = None
-                category.survey = new_survey
-                category.save()
-                category_map[old_id] = category
-            
-            for question in survey.questions.all():
-                old_choices = list(question.choices.all())
-                old_cat_id = question.category_id
-                question.pk = None
-                question.survey = new_survey
-                # Map to the new category
-                if old_cat_id in category_map:
-                    question.category = category_map[old_cat_id]
-                question.save()
-                
-                for choice in old_choices:
-                    choice.pk = None
-                    choice.question = question
-                    choice.save()
-        
-        self.message_user(request, _('Surveys duplicated successfully.'))
+        if duplicated:
+            self.message_user(request, _('%d survey(s) duplicated successfully.') % duplicated)
+
+    def _duplicate_one_survey(self, survey):
+        """Inner helper — runs inside the caller-managed atomic block."""
+        # Fix C-05: copy ALL localised fields so bilingual surveys aren't corrupted.
+        # Fix M-04: use the Category/Question constructors instead of mutating in-place
+        # (category.pk = None pattern leaves the original object in a dirty state).
+        new_survey = Survey.objects.create(
+            name=f"{survey.name} (Copy)",
+            name_tr=survey.name_tr,
+            name_en=survey.name_en,
+            description=survey.description,
+            description_tr=survey.description_tr,
+            description_en=survey.description_en,
+            is_active=False,
+            allow_multiple_attempts=survey.allow_multiple_attempts,
+            show_results_immediately=survey.show_results_immediately,
+        )
+
+        category_map = {}
+        for orig_cat in survey.categories.all():
+            new_cat = Category.objects.create(
+                survey=new_survey,
+                name=orig_cat.name,
+                name_tr=orig_cat.name_tr,
+                name_en=orig_cat.name_en,
+                description=orig_cat.description,
+                description_tr=orig_cat.description_tr,
+                description_en=orig_cat.description_en,
+                order=orig_cat.order,
+                max_score=orig_cat.max_score,
+                environmental_weight=orig_cat.environmental_weight,
+                social_weight=orig_cat.social_weight,
+                governance_weight=orig_cat.governance_weight,
+            )
+            category_map[orig_cat.pk] = new_cat
+
+        for orig_q in survey.questions.prefetch_related('choices').all():
+            # Fix R8-C: look up the new category strictly.  The old fallback
+            # `category_map.get(category_id, orig_q.category)` silently reused
+            # a category from the ORIGINAL survey when the question was orphaned
+            # (category not in map) — bypassing Question.clean() via
+            # skip_validation=True and creating a cross-survey FK reference.
+            new_cat = category_map.get(orig_q.category_id)
+            if new_cat is None:
+                logger.warning(
+                    '_duplicate_one_survey: question pk=%s has category_id=%s '
+                    'not found in new survey — skipping question.',
+                    orig_q.pk, orig_q.category_id,
+                )
+                continue
+            new_q = Question.objects.create(
+                survey=new_survey,
+                category=new_cat,
+                text=orig_q.text,
+                text_tr=orig_q.text_tr,
+                text_en=orig_q.text_en,
+                question_type=orig_q.question_type,
+                order=orig_q.order,
+                is_active=False,
+                allow_multiple=orig_q.allow_multiple,
+                skip_validation=True,   # survey FK already set correctly
+            )
+            for orig_c in orig_q.choices.all():
+                Choice.objects.create(
+                    question=new_q,
+                    text=orig_c.text,
+                    text_tr=orig_c.text_tr,
+                    text_en=orig_c.text_en,
+                    score=orig_c.score,
+                    order=orig_c.order,
+                )
     
     @admin.action(description=_('Activate selected surveys'))
     def activate_surveys(self, request, queryset):
+        # Fix M-19: f-strings inside _() are never translated — _() looks up the
+        # already-interpolated string as a key and finds nothing.  Use % formatting.
         updated = queryset.update(is_active=True)
-        self.message_user(request, _(f'{updated} surveys activated.'))
-    
+        self.message_user(request, _('%d surveys activated.') % updated)
+
     @admin.action(description=_('Deactivate selected surveys'))
     def deactivate_surveys(self, request, queryset):
         updated = queryset.update(is_active=False)
-        self.message_user(request, _(f'{updated} surveys deactivated.'))
+        self.message_user(request, _('%d surveys deactivated.') % updated)
 
 
 # ========== Survey Session Admin ==========
@@ -157,11 +223,14 @@ class SurveySessionAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
         color = colors.get(status, '#666')
         icon = icons.get(status, '⚪')
         
+        # Fix H-8: get_status_display() is the Django auto-method for a field
+        # with choices — SurveySession has no such field.  Use the correct
+        # model method get_status_label() which returns the localised string.
         return format_html(
             '<span style="background: {}; color: white; padding: 5px 12px; border-radius: 15px; font-weight: bold;">'
             '{} {}'
             '</span>',
-            color, icon, obj.get_status_display()
+            color, icon, obj.get_status_label()
         )
     
     @admin.display(description=_('Attempts'))
@@ -177,12 +246,12 @@ class SurveySessionAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     @admin.action(description=_('Activate selected sessions'))
     def activate_sessions(self, request, queryset):
         updated = queryset.update(is_active=True)
-        self.message_user(request, _(f'{updated} sessions activated.'))
-    
+        self.message_user(request, _('%d sessions activated.') % updated)
+
     @admin.action(description=_('Deactivate selected sessions'))
     def deactivate_sessions(self, request, queryset):
         updated = queryset.update(is_active=False)
-        self.message_user(request, _(f'{updated} sessions deactivated.'))
+        self.message_user(request, _('%d sessions deactivated.') % updated)
 
 
 # ========== Inlines ==========
@@ -190,7 +259,9 @@ class SurveySessionAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
 class ChoiceInline(admin.TabularInline):
     model = Choice
     extra = 1
-    fields = ['order', 'text', 'score']
+    # Fix M-03: add text_tr and text_en so admins can fill bilingual choice labels
+    # from within the Question edit page without needing a separate Choice admin view.
+    fields = ['order', 'text', 'text_tr', 'text_en', 'score']
     ordering = ['order']
     show_change_link = True
     
@@ -208,8 +279,11 @@ class UserDocumentInline(admin.TabularInline):
     can_delete = True
     
     def file_link(self, obj):
+        # Fix R6-04: use authenticated DRF download endpoint instead of raw
+        # /media/ URL so media files are not served unauthenticated.
         if obj.file:
-            return format_html('<a href="{}" target="_blank">📄 {}</a>', obj.file.url, obj.file.name.split('/')[-1])
+            download_url = f'/api/v1/documents/{obj.pk}/download/'
+            return format_html('<a href="{}" target="_blank">📄 {}</a>', download_url, obj.file.name.split('/')[-1])
         return '-'
     file_link.short_description = _('File')
 
@@ -217,6 +291,9 @@ class UserDocumentInline(admin.TabularInline):
 class AnswerInline(admin.TabularInline):
     model = Answer
     extra = 0
+    # Fix L-03: question and choice must be in readonly_fields — otherwise they
+    # are rendered as editable dropdowns, letting admins accidentally reassign
+    # an answer to a different question or choice.
     readonly_fields = ['question', 'choice', 'answered_at', 'document_count']
     fields = ['question', 'choice', 'answered_at', 'document_count']
     can_delete = False
@@ -233,7 +310,8 @@ class AnswerInline(admin.TabularInline):
 
 @admin.register(Category)
 class CategoryAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
-    list_display = ['id', 'name', 'survey', 'order', 'max_score', 'question_count']
+    # Fix L-04: add score_weights to list_display — it was defined but never shown.
+    list_display = ['id', 'name', 'survey', 'order', 'max_score', 'question_count', 'score_weights']
     list_editable = ['order']
     list_filter = ['survey']
     search_fields = ['name', 'description']
@@ -244,8 +322,11 @@ class CategoryAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
         (_('Basic Information'), {
             'fields': ('survey', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'order')
         }),
+        # Fix H-01: environmental_weight, social_weight, governance_weight were
+        # missing from the Scoring fieldset — admins had no way to set pillar
+        # weights from the category edit page.
         (_('Scoring'), {
-            'fields': ('max_score',)
+            'fields': ('max_score', 'environmental_weight', 'social_weight', 'governance_weight')
         }),
     )
     
@@ -270,17 +351,24 @@ class CategoryAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
 
 @admin.register(Question)
 class QuestionAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
-    list_display = ['id', 'survey', 'category', 'order', 'question_type', 'text_preview', 'allow_multiple', 'choice_count', 'is_active', 'created_at']
-    list_filter = ['survey' if not DROPDOWN_FILTER_AVAILABLE else ('survey', RelatedDropdownFilter), 'category' if not DROPDOWN_FILTER_AVAILABLE else ('category', RelatedDropdownFilter), 'is_active', 'allow_multiple', 'question_type', 'created_at']
-    list_editable = ['order', 'is_active', 'allow_multiple', 'question_type']
+    list_display = ['id', 'survey', 'category', 'order', 'question_type', 'sector', 'text_preview', 'allow_multiple', 'choice_count', 'is_active', 'created_at']
+    list_filter = ['survey' if not DROPDOWN_FILTER_AVAILABLE else ('survey', RelatedDropdownFilter), 'category' if not DROPDOWN_FILTER_AVAILABLE else ('category', RelatedDropdownFilter), 'sector', 'is_active', 'allow_multiple', 'question_type', 'created_at']
+    list_editable = ['order', 'sector', 'is_active', 'allow_multiple', 'question_type']
     search_fields = ['text']
     ordering = ['survey', 'category', 'order']
     inlines = [ChoiceInline]
     list_per_page = 50
-    
+
     fieldsets = (
         (_('Structure'), {
-            'fields': ('survey', 'category', 'order', 'is_active')
+            'fields': ('survey', 'category', 'order', 'is_active'),
+        }),
+        (_('Sector (Branching)'), {
+            'fields': ('sector',),
+            'description': _(
+                'Leave blank for universal questions (shown to all respondents). '
+                'Select a sector to show this question only to respondents who chose that sector.'
+            ),
         }),
         (_('Question Type'), {
             'fields': ('question_type', 'allow_multiple',),
@@ -313,32 +401,48 @@ class QuestionAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     @admin.action(description=_('Activate selected questions'))
     def activate_questions(self, request, queryset):
         updated = queryset.update(is_active=True)
-        self.message_user(request, _(f'{updated} questions activated successfully.'))
-    
+        self.message_user(request, _('%d questions activated successfully.') % updated)
+
     @admin.action(description=_('Deactivate selected questions'))
     def deactivate_questions(self, request, queryset):
         updated = queryset.update(is_active=False)
-        self.message_user(request, _(f'{updated} questions deactivated successfully.'))
-    
+        self.message_user(request, _('%d questions deactivated successfully.') % updated)
+
     @admin.action(description=_('Duplicate selected questions (with choices)'))
     def duplicate_questions(self, request, queryset):
+        # Fix H-02: use Question() constructor + skip_validation=True instead of
+        # question.pk = None + question.save().  The pk=None pattern mutates the
+        # original object, and Question.save() calls full_clean() which raises
+        # ValidationError when duplicating across survey boundaries — leaving
+        # partial state with no rollback.  Constructor + skip_validation=True is
+        # clean, explicit, and safe inside the transaction.
         duplicated = 0
         with transaction.atomic():
-            for question in queryset.prefetch_related('choices'):
-                old_choices = list(question.choices.all())
-                question.pk = None
-                question.text = f"{question.text} (Copy)"
-                question.is_active = False
-                question.save()
-                
-                for choice in old_choices:
-                    choice.pk = None
-                    choice.question = question
-                    choice.save()
-                
+            for orig_q in queryset.prefetch_related('choices'):
+                new_q = Question(
+                    survey=orig_q.survey,
+                    category=orig_q.category,
+                    text=f"{orig_q.text} (Copy)",
+                    text_tr=orig_q.text_tr,
+                    text_en=orig_q.text_en,
+                    question_type=orig_q.question_type,
+                    order=orig_q.order,
+                    is_active=False,
+                    allow_multiple=orig_q.allow_multiple,
+                )
+                new_q.save(skip_validation=True)
+                for orig_c in orig_q.choices.all():
+                    Choice.objects.create(
+                        question=new_q,
+                        text=orig_c.text,
+                        text_tr=orig_c.text_tr,
+                        text_en=orig_c.text_en,
+                        score=orig_c.score,
+                        order=orig_c.order,
+                    )
                 duplicated += 1
-        
-        self.message_user(request, _(f'{duplicated} questions duplicated successfully.'))
+
+        self.message_user(request, _('%d questions duplicated successfully.') % duplicated)
 
 
 # ========== Choice Admin ==========
@@ -378,7 +482,7 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     
     fieldsets = (
         (_('User Information'), {
-            'fields': ('user', 'survey', 'session')
+            'fields': ('user', 'survey', 'session', 'selected_sector'),
         }),
         (_('Assessment Status'), {
             'fields': ('started_at', 'completed_at', 'is_completed', 'progress_display')
@@ -393,7 +497,14 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
         }),
     )
     
-    actions = ['recalculate_scores', 'mark_as_completed', 'export_results']
+    # Fix R12-05: user_info() accesses obj.user (FK), and list_display exposes
+    # 'survey' and 'session' FKs directly.  Without list_select_related Django
+    # fires three extra SELECT queries per row in the changelist.  One JOIN covers all.
+    list_select_related = ['user', 'survey', 'session']
+
+    # Fix L-1: removed 'export_results' — it was a stub that only showed a
+    # "coming soon" message.  A visible action that does nothing misleads admins.
+    actions = ['recalculate_scores', 'mark_as_completed']
     
     @admin.display(description=_('User'))
     def user_info(self, obj):
@@ -440,11 +551,12 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
         if not obj.overall_grade:
             return '-'
         
+        # Fix L-05: remove 'A-','B-','C-' — _grade_for_score never produces them.
         colors = {
-            'A+': '#28A745', 'A': '#28A745', 'A-': '#28A745',
-            'B+': '#4C6EF5', 'B': '#4C6EF5', 'B-': '#4C6EF5',
-            'C+': '#FFC107', 'C': '#FFC107', 'C-': '#FFC107',
-            'D': '#FF6B35'
+            'A+': '#28A745', 'A': '#28A745',
+            'B+': '#4C6EF5', 'B': '#4C6EF5',
+            'C+': '#FFC107', 'C': '#FFC107',
+            'D':  '#FF6B35',
         }
         color = colors.get(obj.overall_grade, '#666')
         
@@ -490,46 +602,84 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
         if not categories:
             return format_html('<div style="padding:10px;">No category data</div>')
 
+        # Fix C-02: data['name'] is user-supplied text — must be escaped.
+        # Replaced string.format() + mark_safe() with format_html() which
+        # auto-escapes every interpolated value, preventing stored XSS.
         rows = []
         for data in categories:
-            rows.append(
+            rows.append(format_html(
                 '<div style="margin-bottom:10px; padding:10px; background:#f8f9fa; border-radius:8px;">'
                 '<div style="font-weight:600;">{}</div>'
                 '<div>Raw score: <strong>{}</strong> / {}</div>'
                 '<div>Percentage: <strong>{}%</strong></div>'
-                '</div>'.format(data['name'], data['score'], data['max_score'], data['percentage'])
-            )
+                '</div>',
+                data['name'], data['score'], data['max_score'], data['percentage']
+            ))
 
-        rows_html = ''.join(rows)
-        footer = (
+        # format_html() returns SafeString — joining them is safe to mark_safe().
+        rows_combined = mark_safe(''.join(rows))
+        footer = format_html(
             '<div style="margin-top:12px; padding-top:12px; border-top:1px solid #ddd;">'
             '<div><strong>Total raw:</strong> {} / {}</div>'
             '<div><strong>Total percentage:</strong> {}%</div>'
-            '</div>'.format(
-                results['total_score'],
-                results['total_possible'],
-                results['total_percentage']
-            )
+            '</div>',
+            results['total_score'],
+            results['total_possible'],
+            results['total_percentage']
         )
 
-        return mark_safe('<div style="padding:15px;">{}{}</div>'.format(rows_html, footer))
+        return format_html('<div style="padding:15px;">{}{}</div>', rows_combined, footer)
     
     @admin.action(description=_('Recalculate scores'))
     def recalculate_scores(self, request, queryset):
+        # Fix R6-05: add prefetch_related so recalc_attempt_score() doesn't
+        # fire per-answer / per-question / per-choice DB queries for each attempt.
+        queryset = queryset.select_related('user', 'survey', 'session').prefetch_related(
+            'answers__question__choices',
+            'answers__choice',
+            'answers__choices',
+            'survey__categories',
+        )
         count = 0
         for attempt in queryset:
             recalc_attempt_score(attempt)
             count += 1
-        self.message_user(request, _(f'{count} attempts recalculated successfully.'))
-    
+        self.message_user(request, _('%d attempts recalculated successfully.') % count)
+
     @admin.action(description=_('Mark as completed'))
     def mark_as_completed(self, request, queryset):
+        # Fix L-17: calculate scores after marking complete so total_score and
+        # overall_grade are populated.  The old queryset.update() left all score
+        # fields at 0 / blank, making the admin list misleading.
+        # Fix R4-M-02: log and surface exceptions instead of swallowing them silently.
+        # Fix R7-07: re-evaluate queryset with prefetch_related AFTER .update() so
+        # calculate_scores() hits the in-memory cache instead of issuing N+1 queries
+        # for each attempt's answers, choices, and categories.
         updated = queryset.update(is_completed=True, completed_at=timezone.now())
-        self.message_user(request, _(f'{updated} attempts marked as completed.'))
+        queryset = queryset.select_related('user', 'survey', 'session').prefetch_related(
+            'answers__question__choices',
+            'answers__choice',
+            'answers__choices',
+            'survey__categories',
+        )
+        failed = 0
+        for attempt in queryset:
+            try:
+                attempt.calculate_scores(save=True)
+            except Exception:
+                failed += 1
+                logger.exception(
+                    'mark_as_completed: calculate_scores failed for attempt pk=%s', attempt.pk
+                )
+        if failed:
+            self.message_user(
+                request,
+                _('%d attempt(s) could not have scores recalculated — see server logs.') % failed,
+                level='warning',
+            )
+        self.message_user(request, _('%d attempts marked as completed.') % updated)
     
-    @admin.action(description=_('Export results to CSV'))
-    def export_results(self, request, queryset):
-        self.message_user(request, _('Export functionality coming soon!'))
+    # export_results action removed (Fix L-1) — was an unimplemented stub.
 
 
 # ========== Answer Admin ==========
@@ -537,10 +687,18 @@ class QuestionnaireAttemptAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
 @admin.register(Answer)
 class AnswerAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     list_display = ['id', 'attempt', 'question', 'selected_choices_display', 'is_cannot_display', 'answered_at']
+    # Fix R12-05: 'attempt' and 'question' in list_display each call str(obj.fk) —
+    # without list_select_related that's two extra SELECTs per row in the changelist.
+    list_select_related = ['attempt__user', 'question']
     list_filter = ['answered_at']
     search_fields = ['attempt__user__username', 'question__text']
-    readonly_fields = ['answered_at', 'selected_choices_display', 'is_cannot_display']
-    filter_horizontal = ['choices']
+    # Fix L-03: lock question + choice in the detail view as well — they should
+    # never be reassigned after creation.
+    readonly_fields = ['question', 'choice', 'answered_at', 'selected_choices_display', 'is_cannot_display']
+    # Fix R5-M-08: removed filter_horizontal = ['choices'] — `choices` is displayed
+    # via readonly_fields (selected_choices_display), so the M2M widget was silently
+    # failing to render and creating a confusing duplicate field.
+    # filter_horizontal = ['choices']  ← removed
     inlines = [UserDocumentInline]
     date_hierarchy = 'answered_at'
     list_per_page = 50
@@ -587,7 +745,9 @@ class UserDocumentAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     
     @admin.display(description=_('File'))
     def file_link(self, obj):
+        # Fix R6-04: use authenticated DRF download endpoint instead of raw /media/ URL.
         if obj.file:
-            return format_html('<a href="{}" target="_blank">📄 Download</a>', obj.file.url)
+            download_url = f'/api/v1/documents/{obj.pk}/download/'
+            return format_html('<a href="{}" target="_blank">📄 Download</a>', download_url)
         return '-'
 

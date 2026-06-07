@@ -39,7 +39,8 @@ class QuestionSerializer(serializers.ModelSerializer):
         model = Question
         fields = ['id', 'survey', 'category', 'category_name', 'category_name_en', 'category_name_tr',
                   'text', 'text_tr', 'text_en',
-                  'question_type', 'order', 'is_active', 'allow_multiple', 'attachment', 'choices']
+                  'question_type', 'order', 'is_active', 'allow_multiple', 'attachment',
+                  'sector', 'choices']
     
     def to_representation(self, instance):
         # Fix P: super() already serializes `choices` via the field definition AND
@@ -61,10 +62,15 @@ class QuestionSerializer(serializers.ModelSerializer):
         elif language == 'en' and instance.text_en:
             representation['text'] = instance.text_en
 
-        if language == 'tr' and instance.category.name_tr:
-            representation['category_name'] = instance.category.name_tr
-        elif language == 'en' and instance.category.name_en:
-            representation['category_name'] = instance.category.name_en
+        # Fix H-07: guard against category being null — accessing .name_tr on None
+        # raises AttributeError and crashes the serializer for every question in
+        # the survey when any question has no category assigned.
+        cat = instance.category
+        if cat:
+            if language == 'tr' and cat.name_tr:
+                representation['category_name'] = cat.name_tr
+            elif language == 'en' and cat.name_en:
+                representation['category_name'] = cat.name_en
 
         return representation
 
@@ -243,6 +249,18 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
         fields = ['id', 'attempt', 'question', 'choice', 'choices_ids', 'text_answer', 'notes']
         read_only_fields = ['id']
     
+    def validate(self, data):
+        # Fix R4-M-01: verify the single `choice` FK belongs to the `question`
+        # being answered.  Without this check a client could submit any choice ID
+        # from any question and the answer would silently reference the wrong choice.
+        question = data.get('question')
+        choice   = data.get('choice')
+        if question and choice and choice.question_id != question.id:
+            raise serializers.ValidationError(
+                {'choice': 'The selected choice does not belong to this question.'}
+            )
+        return data
+
     def create(self, validated_data):
         choices_ids = validated_data.pop('choices_ids', [])
         answer = Answer.objects.create(**validated_data)
@@ -260,8 +278,10 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
 class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSerializer):
     answers = AnswerSerializer(many=True, read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
-    survey_name = serializers.CharField(source='survey.name', read_only=True)
-    session_name = serializers.CharField(source='session.name', read_only=True)
+    # Fix #10: CharField(source='x.name') crashes when FK is null.
+    # Use SerializerMethodField so we can guard against None gracefully.
+    survey_name  = serializers.SerializerMethodField()
+    session_name = serializers.SerializerMethodField()
     recommendations = serializers.SerializerMethodField()
     category_scores = serializers.SerializerMethodField()
     total_score = serializers.SerializerMethodField()
@@ -277,6 +297,7 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
             'id', 'user', 'user_name', 'survey', 'survey_name',
             'session', 'session_name', 'started_at', 'completed_at',
             'is_completed', 'total_score', 'overall_grade',
+            'selected_sector',
             'pillar_scores', 'maturity', 'answered_count', 'total_questions',
             'answers', 'recommendations', 'category_scores',
         ]
@@ -292,6 +313,14 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
             )
         return None
 
+    # ---- Fix #10: null-safe FK fields ----
+
+    def get_survey_name(self, obj):
+        return obj.survey.name if obj.survey_id and obj.survey else None
+
+    def get_session_name(self, obj):
+        return obj.session.name if obj.session_id and obj.session else None
+
     # ---- fields ----
 
     def get_total_score(self, obj):
@@ -304,14 +333,43 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
         return QuestionnaireAttempt._grade_for_score(score)
 
     def get_recommendations(self, obj):
-        return obj.get_recommendations() if obj.is_completed else []
+        # Fix #4: use _breakdown() so the cached result is shared with
+        # get_total_score / get_category_scores — avoids a second DB round-trip.
+        if not obj.is_completed:
+            return []
+        from .gri_recommendations import get_recommendations_for_category
+        breakdown = self._breakdown(obj)
+        recs = []
+        for cat in breakdown.get('categories', []):
+            if cat['percentage'] < 80:
+                recs.extend(get_recommendations_for_category(cat['name'], cat['percentage']))
+        priority_order = {'High': 0, 'Medium': 1, 'Low': 2}
+        recs.sort(key=lambda r: (
+            priority_order.get(r.get('priority', 'Low'), 2),
+            r.get('score_pct', 50),
+        ))
+        return recs
 
     def get_pillar_scores(self, obj):
-        """Return E/S/G pillar scores stored on the attempt."""
+        # Fix #7/#9: return None for incomplete attempts; compute live pillar
+        # scores from the cached breakdown instead of potentially-stale DB columns.
+        if not obj.is_completed:
+            return None
+        cats = self._breakdown(obj).get('categories', [])
+        env_n = env_d = soc_n = soc_d = gov_n = gov_d = 0.0
+        for c in cats:
+            pct = c['percentage']
+            e_w = c.get('environmental_weight', 0.0)
+            s_w = c.get('social_weight', 0.0)
+            g_w = c.get('governance_weight', 0.0)
+            env_n += e_w * pct;  env_d += e_w
+            soc_n += s_w * pct;  soc_d += s_w
+            gov_n += g_w * pct;  gov_d += g_w
+        avg = round(sum(c['percentage'] for c in cats) / len(cats), 1) if cats else 0.0
         return {
-            'environmental': round(obj.environmental_score or 0, 1),
-            'social':        round(obj.social_score or 0, 1),
-            'governance':    round(obj.governance_score or 0, 1),
+            'environmental': round(env_n / env_d, 1) if env_d else avg,
+            'social':        round(soc_n / soc_d, 1) if soc_d else avg,
+            'governance':    round(gov_n / gov_d, 1) if gov_d else avg,
         }
 
     def get_maturity(self, obj):
@@ -327,17 +385,36 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
         }
 
     def get_answered_count(self, obj):
-        return obj.answers.count()
+        # Fix #8: use len() so the prefetch_related cache is hit instead of
+        # issuing a separate COUNT query for every attempt.
+        return len(obj.answers.all())
 
     def get_total_questions(self, obj):
-        if obj.survey:
-            return obj.survey.questions.filter(is_active=True).count()
-        return 0
+        # Fix R4-H-01: use the prefetch cache from survey__categories / questions
+        # instead of issuing a fresh .count() query for every attempt in the list.
+        # The viewset prefetches 'survey__categories'; here we hit the questions
+        # prefetch cache set up on the survey object itself via questions__choices.
+        if not obj.survey:
+            return 0
+        # If the questions relation is already cached by prefetch_related, len()
+        # uses the cache; otherwise fall back to a filtered queryset (no N+1 on
+        # single-object detail views where prefetch may not be set).
+        try:
+            qs = obj.survey.questions.all()
+            # _result_cache is set by prefetch_related; if present, filter in Python.
+            if hasattr(qs, '_result_cache') and qs._result_cache is not None:
+                return sum(1 for q in qs._result_cache if q.is_active)
+        except Exception:
+            pass
+        return obj.survey.questions.filter(is_active=True).count()
 
     def get_category_scores(self, obj):
         breakdown = self._breakdown(obj)
         categories = breakdown.get('categories', [])
-        language = self._get_language()
+        # Fix R7-08: default to 'en' when no request context is present
+        # (e.g. admin views, management commands) so category names are always
+        # localised rather than falling back to the raw `name` field only.
+        language = self._get_language() or 'en'
 
         # Single bulk query instead of one per category (fixes N+1)
         cat_map: dict = {}
@@ -369,9 +446,10 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
 
 class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.ModelSerializer):
     """Lightweight serializer for listing attempts — delegates to model."""
-    user_name = serializers.CharField(source='user.username', read_only=True)
-    survey_name = serializers.CharField(source='survey.name', read_only=True)
-    session_name = serializers.CharField(source='session.name', read_only=True)
+    user_name    = serializers.CharField(source='user.username', read_only=True)
+    # Fix #10: guard against null FK (survey/session may be null)
+    survey_name  = serializers.SerializerMethodField()
+    session_name = serializers.SerializerMethodField()
     category_scores = serializers.SerializerMethodField()
     total_score = serializers.SerializerMethodField()
     overall_grade = serializers.SerializerMethodField()
@@ -382,8 +460,16 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
             'id', 'user', 'user_name', 'survey', 'survey_name',
             'session', 'session_name', 'started_at', 'completed_at',
             'is_completed', 'total_score', 'overall_grade',
+            'selected_sector',
             'category_scores',
         ]
+
+    # Fix #10: null-safe FK accessors for list serializer
+    def get_survey_name(self, obj):
+        return obj.survey.name if obj.survey_id and obj.survey else None
+
+    def get_session_name(self, obj):
+        return obj.session.name if obj.session_id and obj.session else None
 
     def get_total_score(self, obj):
         return self._breakdown(obj)['total_percentage']
@@ -402,5 +488,6 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
 class QuestionnaireAttemptCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuestionnaireAttempt
-        fields = ['id', 'survey', 'session']
+        # selected_sector is optional: blank / omitted = universal (no sector filtering).
+        fields = ['id', 'survey', 'session', 'selected_sector']
         read_only_fields = ['id']

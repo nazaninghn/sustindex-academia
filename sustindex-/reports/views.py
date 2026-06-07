@@ -41,7 +41,12 @@ def generate_report(request, attempt_id):
 @login_required
 def view_report(request, report_id):
     """View report"""
-    report = get_object_or_404(Report, id=report_id, attempt__user=request.user)
+    # Fix R11-01: select_related('attempt__user') so report.attempt.xxx accesses
+    # below read from the pre-fetched JOIN row instead of issuing lazy-load queries.
+    report = get_object_or_404(
+        Report.objects.select_related('attempt__user'),
+        id=report_id, attempt__user=request.user,
+    )
     
     context = {
         'report': report,
@@ -62,7 +67,12 @@ def view_report(request, report_id):
 @login_required
 def download_report_pdf(request, report_id):
     """Download report as PDF"""
-    report = get_object_or_404(Report, id=report_id, attempt__user=request.user)
+    # Fix R11-01: select_related so all report.attempt.user.xxx accesses below
+    # read from the pre-fetched JOIN row instead of issuing lazy-load queries.
+    report = get_object_or_404(
+        Report.objects.select_related('attempt__user'),
+        id=report_id, attempt__user=request.user,
+    )
     
     try:
         from reportlab.lib.pagesizes import letter, A4
@@ -148,7 +158,15 @@ def download_report_pdf(request, report_id):
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="ESG_Report_{report.attempt.user.company_name}_{report.generated_at.strftime("%Y%m%d")}.pdf"'
+        # Fix R11-02: sanitize filename — company_name could contain " or \n which
+        # would break the Content-Disposition header or enable header-injection.
+        safe_company = (
+            (report.attempt.user.company_name or 'report')
+            .replace('"', "'").replace('\n', '').replace('\r', '').replace('/', '-')
+        )
+        response['Content-Disposition'] = (
+            f'attachment; filename="ESG_Report_{safe_company}_{report.generated_at.strftime("%Y%m%d")}.pdf"'
+        )
         
         return response
         

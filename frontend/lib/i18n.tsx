@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 /* ============================================================
    Translations — English + Türkçe
@@ -45,6 +45,8 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   courses_level_adv:     { en: 'Advanced',    tr: 'İleri' },
   courses_results:       { en: 'results',     tr: 'sonuç' },
   courses_empty:         { en: 'No courses found in this category.', tr: 'Bu kategoride kurs bulunamadı.' },
+  // Fix R4-H-02: distinct error message when the courses API call fails
+  courses_load_error:    { en: 'Courses could not be loaded. Please try again later.', tr: 'Kurslar yüklenemedi. Lütfen daha sonra tekrar deneyin.' },
 
   course_1_t: { en: 'ISO 26000 Fundamentals',          tr: 'ISO 26000 Temelleri' },
   course_1_d: { en: 'A comprehensive introduction to the international social responsibility standard.', tr: 'Uluslararası sosyal sorumluluk standardına kapsamlı bir giriş.' },
@@ -102,7 +104,20 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   foot_priv:       { en: 'Privacy',     tr: 'Gizlilik' },
   foot_terms:      { en: 'Terms',       tr: 'Şartlar' },
   foot_cookies:    { en: 'Cookies',     tr: 'Çerezler' },
-  foot_copy:       { en: '© 2026 Sustindex · Academia Danışmanlık', tr: '© 2026 Sustindex · Academia Danışmanlık' },
+  // Fix L-05: use {year} placeholder — evaluated by t() at render time so the
+  // year is always current even in long-running server processes.
+  // (Template literals in object literals are evaluated once at module load time,
+  //  which would show the wrong year after midnight on 31 Dec.)
+  foot_copy: {
+    en: '© {year} Sustindex · Academia Danışmanlık',
+    tr: '© {year} Sustindex · Academia Danışmanlık',
+  },
+
+  /* Shared error messages */
+  // Fix R5-M-06: HTTP 429 throttle response needs user-friendly copy
+  err_throttle:  { en: 'Too many attempts. Please wait a moment before trying again.', tr: 'Çok fazla deneme. Lütfen bir süre bekleyip tekrar deneyin.' },
+  // Fix R5-L-08: loading state shared key
+  t_loading_auth: { en: 'LOADING…', tr: 'YÜKLENİYOR…' },
 
   /* Login */
   login_eyebrow:  { en: 'Welcome back',             tr: 'Tekrar hoş geldiniz' },
@@ -191,6 +206,26 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   surv_6_t:  { en: 'Annual Disclosure Pack', tr: 'Yıllık Açıklama Paketi' },
   surv_6_d:  { en: 'GRI-aligned annual disclosure for public reporting requirements.', tr: 'Kamu raporlama gereksinimleri için GRI uyumlu yıllık açıklama.' },
   surv_6_tag:{ en: 'Reporting',  tr: 'Raporlama' },
+
+  /* ── Sector-selection modal (branching questionnaire) ────────────────────── */
+  surv_sector_title: {
+    en: 'Select your industry sector',
+    tr: 'Sektörünüzü seçin',
+  },
+  surv_sector_desc: {
+    en: 'Choose the sector that best describes your organization. Common questions will be shown to everyone; sector-specific questions will then be added for your chosen sector.',
+    tr: 'Organizasyonunuzu en iyi tanımlayan sektörü seçin. Ortak sorular herkese gösterilir; seçtiğiniz sektöre özgü sorular ayrıca eklenir.',
+  },
+  surv_sector_universal:    { en: 'General (no specific sector)',     tr: 'Genel (belirli bir sektör yok)' },
+  surv_sector_agri:         { en: 'Agriculture & Food',               tr: 'Tarım & Gıda' },
+  surv_sector_finance:      { en: 'Financial Services',               tr: 'Finans Hizmetleri' },
+  surv_sector_construction: { en: 'Construction & Real Estate',       tr: 'İnşaat & Gayrimenkul' },
+  surv_sector_manufacturing:{ en: 'Manufacturing & Industry',         tr: 'İmalat & Sanayi' },
+  surv_sector_health:       { en: 'Healthcare & Life Sciences',       tr: 'Sağlık & Yaşam Bilimleri' },
+  surv_sector_tech:         { en: 'Technology & Digital',             tr: 'Teknoloji & Dijital' },
+  surv_sector_retail:       { en: 'Retail & Trade',                   tr: 'Perakende & Ticaret' },
+  surv_sector_confirm:      { en: 'Continue to Assessment',           tr: 'Değerlendirmeye Devam Et' },
+  surv_sector_cancel:       { en: 'Cancel',                           tr: 'İptal' },
 
   /* Questionnaire */
   q_autosaved: { en: 'Auto-saved 2s ago', tr: '2 saniye önce otomatik kaydedildi' },
@@ -305,6 +340,105 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   about_phone:  { en: 'Phone',        tr: 'Telefon' },
   about_fax:    { en: 'Fax',          tr: 'Faks' },
   about_parent: { en: 'Parent company', tr: 'Ana şirket' },
+
+  /* Profile */
+  // Fix R4-L-04: client-side email validation message
+  profile_email_invalid: {
+    en: 'Please enter a valid email address.',
+    tr: 'Lütfen geçerli bir e-posta adresi girin.',
+  },
+
+  /* ── Forgot Password (R13-02) ────────────────────────────────────────────── */
+  fp_back_login:    { en: '← Back to Login',          tr: '← Girişe Dön' },
+  fp_eyebrow:       { en: 'Password Reset',            tr: 'Şifre Sıfırlama' },
+  fp_title:         { en: 'Forgot your password?',     tr: 'Şifreni mi unuttun?' },
+  fp_desc:          {
+    en: "Enter the email address associated with your account and we'll send you a reset link.",
+    tr: 'Hesabınla ilişkili e-posta adresini gir; sıfırlama bağlantısını göndereceğiz.',
+  },
+  fp_email_label:   { en: 'Email Address',             tr: 'E-posta Adresi' },
+  fp_sending:       { en: 'Sending…',                  tr: 'Gönderiliyor…' },
+  fp_submit:        { en: 'Send Reset Link',            tr: 'Sıfırlama Bağlantısı Gönder' },
+  fp_sent_title:    { en: '✓  Link sent',              tr: '✓  Bağlantı gönderildi' },
+  // {email} is replaced at runtime via t('fp_sent_body', { email }) — see R13-05.
+  fp_sent_body:     {
+    en: 'A reset link was sent to {email} (if an account exists). Check your inbox — it may take a minute.',
+    tr: '{email} adresine bir sıfırlama bağlantısı gönderildi (hesap mevcutsa). Gelen kutunuzu kontrol edin.',
+  },
+  fp_spam_hint:     {
+    en: "If it doesn't arrive, check your spam folder or try again.",
+    tr: 'E-posta gelmezse spam klasörünü kontrol edin veya tekrar deneyin.',
+  },
+  fp_try_different: { en: 'Try a Different Email',     tr: 'Farklı E-posta ile Tekrar Dene' },
+  fp_return_login:  { en: 'Return to login',           tr: 'Girişe geri dön' },
+  fp_err_required:  { en: 'Email address is required.', tr: 'E-posta adresi gereklidir.' },
+  fp_err_generic:   {
+    en: 'Something went wrong. Please try again.',
+    tr: 'Bir hata oluştu. Lütfen tekrar deneyin.',
+  },
+
+  /* ── Reset Password (R13-03) ─────────────────────────────────────────────── */
+  rp_title:         { en: 'Set a new password',        tr: 'Yeni şifre belirle' },
+  rp_invalid_title: { en: 'Invalid Link',              tr: 'Geçersiz Bağlantı' },
+  rp_invalid_body:  {
+    en: 'This password-reset link is invalid or has expired. Please request a new one.',
+    tr: 'Bu sıfırlama bağlantısı geçersiz veya süresi dolmuş. Lütfen yeni bir bağlantı isteyin.',
+  },
+  rp_req_new_link:  { en: 'Request New Link',          tr: 'Yeni Bağlantı İste' },
+  rp_success_title: { en: '✓  Password changed successfully', tr: '✓  Şifre başarıyla değiştirildi' },
+  rp_success_body:  {
+    en: 'Redirecting you to login in 3 seconds…',
+    tr: '3 saniye içinde giriş sayfasına yönlendirileceksiniz…',
+  },
+  rp_desc:          {
+    en: 'Set a new password for your account. It must be at least 8 characters.',
+    tr: 'Hesabınız için yeni bir şifre belirleyin. Şifreniz en az 8 karakter olmalıdır.',
+  },
+  rp_pw1_label:     { en: 'New Password',              tr: 'Yeni Şifre' },
+  rp_pw2_label:     { en: 'Confirm New Password',      tr: 'Şifreyi Onayla' },
+  rp_saving:        { en: 'Saving…',                   tr: 'Kaydediliyor…' },
+  rp_submit:        { en: 'Update Password',           tr: 'Şifreyi Güncelle' },
+  rp_err_short:     {
+    en: 'Password must be at least 8 characters.',
+    tr: 'Şifre en az 8 karakter olmalıdır.',
+  },
+  rp_err_expired:   {
+    en: 'Reset link is invalid or has expired.',
+    tr: 'Bağlantı geçersiz veya süresi dolmuş.',
+  },
+
+  /* ── History page (R13-04) ───────────────────────────────────────────────── */
+  hist_load_error:       {
+    en: 'Failed to load history. Please refresh the page.',
+    tr: 'Geçmiş yüklenemedi. Lütfen sayfayı yenileyin.',
+  },
+  hist_title_1:          { en: 'Assessment',           tr: 'Değerlendirme' },
+  hist_title_2:          { en: 'History',              tr: 'Geçmişi' },
+  hist_desc:             {
+    en: 'View all your sustainability assessments and results.',
+    tr: 'Tüm sürdürülebilirlik değerlendirmelerinizi görüntüleyin.',
+  },
+  hist_stat_total:       { en: 'Total',                tr: 'Toplam' },
+  hist_stat_completed:   { en: 'Completed',            tr: 'Tamamlanan' },
+  hist_stat_in_progress: { en: 'In Progress',          tr: 'Devam Eden' },
+  hist_stat_avg:         { en: 'Avg Score',            tr: 'Ort. Skor' },
+  hist_filter_completed: { en: 'Completed',            tr: 'Tamamlanan' },
+  hist_filter_progress:  { en: 'In Progress',          tr: 'Devam Eden' },
+  hist_empty_all:        { en: 'No assessments yet.',  tr: 'Henüz değerlendirme yok.' },
+  hist_empty_completed:  {
+    en: 'No completed assessments found.',
+    tr: 'Tamamlanan değerlendirme bulunamadı.',
+  },
+  hist_empty_progress:   {
+    en: 'No in-progress assessments found.',
+    tr: 'Devam eden değerlendirme bulunamadı.',
+  },
+  hist_new_assessment:   { en: 'Start New Assessment', tr: 'Yeni Değerlendirme Başlat' },
+  hist_status_done:      { en: 'Completed',            tr: 'Tamamlandı' },
+  hist_status_ongoing:   { en: 'In Progress',          tr: 'Devam Ediyor' },
+  hist_started:          { en: 'Started:',             tr: 'Başl:' },
+  hist_finished:         { en: 'Finished:',            tr: 'Bitiş:' },
+  hist_view_results:     { en: 'View Results',         tr: 'Sonuçlar' },
 };
 
 /* ============================================================
@@ -313,7 +447,9 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
 interface LangContextType {
   lang: 'en' | 'tr';
   setLang: (l: 'en' | 'tr') => void;
-  t: (key: string) => string;
+  // Fix R13-05: optional `vars` map enables runtime variable substitution,
+  // e.g. t('fp_sent_body', { email: 'user@example.com' }) → replaces {email}.
+  t: (key: string, vars?: Record<string, string>) => string;
 }
 
 const LangCtx = createContext<LangContextType>({
@@ -337,10 +473,30 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem('sx_lang', l); } catch {}
   };
 
-  const t = useCallback((key: string): string => {
+  const t = useCallback((key: string, vars?: Record<string, string>): string => {
     const entry = TRANSLATIONS[key];
     if (!entry) return key;
-    return entry[lang] || entry.en || key;
+    let raw = entry[lang] || entry.en || key;
+    // Fix L-05: replace {year} at call time so foot_copy is always the current
+    // calendar year, not the year the module was first loaded.
+    if (raw.includes('{year}')) raw = raw.replace('{year}', String(new Date().getFullYear()));
+    // Fix R13-05: replace arbitrary {name} placeholders with caller-supplied vars.
+    // e.g. t('fp_sent_body', { email: 'a@b.com' }) → expands {email} in the string.
+    if (vars) {
+      for (const [k, v] of Object.entries(vars)) {
+        raw = raw.split(`{${k}}`).join(v);
+      }
+    }
+    return raw;
+  }, [lang]);
+
+  // Fix H-4: keep <html lang="..."> in sync with the active language so that
+  // screen readers, browser translation prompts, and SEO crawlers see the
+  // correct language code rather than the hardcoded "en" in layout.tsx.
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('lang', lang);
+    }
   }, [lang]);
 
   return <LangCtx.Provider value={{ lang, setLang, t }}>{children}</LangCtx.Provider>;

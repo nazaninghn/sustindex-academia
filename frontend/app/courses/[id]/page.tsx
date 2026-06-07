@@ -13,10 +13,12 @@ import { emitDataChange } from '@/lib/events';
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 interface Attachment {
-  id:          number;
-  title:       string;
-  file:        string;
-  uploaded_at: string;
+  id:           number;
+  title:        string;
+  file:         string;
+  // Fix R6-03: authenticated download URL added by LessonAttachmentSerializer
+  download_url: string;
+  uploaded_at:  string;
 }
 
 interface Lesson {
@@ -38,7 +40,8 @@ interface Course {
   level:              string;
   level_display:      string;
   icon_emoji:         string;
-  duration_hours:     number;
+  // Fix R6-10: Django CharField serializes as string, not number
+  duration_hours:     string;
   total_lessons:      number;
   completed_lessons:  number;
   progress_percentage:number;
@@ -200,9 +203,14 @@ export default function CourseDetailPage() {
                 <h1 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 10, lineHeight: 1.25 }}>
                   {course.title_display}
                 </h1>
-                <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.65 }}>
-                  {course.description_display}
-                </p>
+                {/* Fix R9-04: description is a CKEditor RichTextField — it contains HTML.
+                    Rendering as a plain text child shows raw <p>, <strong> tags.
+                    sanitizeHtml strips XSS vectors before passing to the DOM. */}
+                <div
+                  className="prose"
+                  style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.65 }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(course.description_display) }}
+                />
               </div>
             </div>
 
@@ -377,7 +385,7 @@ export default function CourseDetailPage() {
                               {lesson.attachments.map((att) => (
                                 <a
                                   key={att.id}
-                                  href={att.file}
+                                  href={att.download_url || att.file}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{ fontSize: 12, color: 'var(--olive-deep)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}

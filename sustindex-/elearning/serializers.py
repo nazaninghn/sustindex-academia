@@ -41,9 +41,20 @@ class ElearningMixin:
 
 
 class LessonAttachmentSerializer(serializers.ModelSerializer):
+    # Fix R6-03: expose the authenticated download URL so frontend components
+    # use the API endpoint (with JWT auth) instead of the raw /media/ path.
+    download_url = serializers.SerializerMethodField()
+
     class Meta:
         model = LessonAttachment
-        fields = ['id', 'title', 'file', 'uploaded_at']
+        fields = ['id', 'title', 'file', 'uploaded_at', 'download_url']
+
+    def get_download_url(self, obj) -> str:
+        request = self.context.get('request')
+        path = f'/api/v1/lesson-attachments/{obj.pk}/download/'
+        if request:
+            return request.build_absolute_uri(path)
+        return path
 
 
 class LessonSerializer(ElearningMixin, serializers.ModelSerializer):
@@ -77,7 +88,10 @@ class LessonSerializer(ElearningMixin, serializers.ModelSerializer):
 
 class CourseSerializer(ElearningMixin, serializers.ModelSerializer):
     lessons            = LessonSerializer(many=True, read_only=True)
-    total_lessons      = serializers.IntegerField(source='lessons.count', read_only=True)
+    # Fix R5-H-04: `source='lessons.count'` always issues a COUNT(*) SQL query,
+    # bypassing the prefetch_related('lessons') cache set up by the viewset.
+    # SerializerMethodField with len(list(...)) hits the cache instead.
+    total_lessons      = serializers.SerializerMethodField()
     completed_lessons  = serializers.SerializerMethodField()
     progress_percentage = serializers.SerializerMethodField()
     title_display      = serializers.SerializerMethodField()
@@ -94,6 +108,10 @@ class CourseSerializer(ElearningMixin, serializers.ModelSerializer):
             'is_active', 'created_at',
             'lessons', 'total_lessons', 'completed_lessons', 'progress_percentage',
         ]
+
+    def get_total_lessons(self, obj) -> int:
+        # len(list(...)) hits the prefetch_related cache; .count() always queries.
+        return len(list(obj.lessons.all()))
 
     def get_title_display(self, obj):
         lang = self._lang()

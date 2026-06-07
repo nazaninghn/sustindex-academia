@@ -63,4 +63,6 @@ class MembershipHistory(models.Model):
         ordering = ['-start_date']
     
     def __str__(self):
-        return f"{self.user.username} - {self.membership_type}"
+        # Fix R13-01: self.user.username fires a SELECT per admin row (FK lazy-load).
+        # Use local fields only — zero extra DB queries.
+        return f"Membership #{self.pk} ({self.membership_type})"

@@ -21,10 +21,29 @@ export default function AppNav() {
 
   // Close menu on route change
   useEffect(() => { setOpen(false); }, [path]);
-  // Lock body scroll when open
+  // Fix M-27: iOS Safari ignores overflow:hidden on body without position:fixed.
+  // Store and restore the scroll position so the page doesn't jump on close.
   useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    if (open) {
+      const scrollY = window.scrollY;
+      document.body.style.overflow  = 'hidden';
+      document.body.style.position  = 'fixed';
+      document.body.style.width     = '100%';
+      document.body.style.top       = `-${scrollY}px`;
+    } else {
+      const scrollY = parseInt(document.body.style.top || '0', 10) * -1;
+      document.body.style.overflow  = '';
+      document.body.style.position  = '';
+      document.body.style.width     = '';
+      document.body.style.top       = '';
+      window.scrollTo(0, scrollY);
+    }
+    return () => {
+      document.body.style.overflow  = '';
+      document.body.style.position  = '';
+      document.body.style.width     = '';
+      document.body.style.top       = '';
+    };
   }, [open]);
 
   const items: [string, string][] = [
@@ -99,9 +118,11 @@ export default function AppNav() {
           </Link>
           <div style={{ width: 1, height: 22, background: 'var(--line)', flexShrink: 0 }} />
           {/* Logout button — desktop */}
+          {/* Fix R4-M-06: aria-label so screen readers announce the action */}
           <button
             onClick={handleLogout}
             title={t('nav_logout')}
+            aria-label={t('nav_logout')}
             style={{
               background: 'none', border: '1px solid var(--line)',
               cursor: 'pointer', borderRadius: 6,
@@ -135,10 +156,12 @@ export default function AppNav() {
         {/* Mobile controls: lang + hamburger */}
         <div className="appnav-mobile-controls" style={{ display: 'none', alignItems: 'center', gap: 10 }}>
           <LangToggle />
+          {/* Fix R5-L-02: aria-controls links the button to the drawer for screen readers */}
           <button
             onClick={() => setOpen(!open)}
             aria-label={open ? 'Close menu' : 'Open menu'}
             aria-expanded={open}
+            aria-controls="mobile-nav-drawer"
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               padding: 6, display: 'flex', flexDirection: 'column',
@@ -169,9 +192,9 @@ export default function AppNav() {
 
       {/* ── Mobile drawer ── */}
       {open && (
-        <div style={{
+        <div id="mobile-nav-drawer" style={{
           position: 'fixed', top: 57, left: 0, right: 0, bottom: 0,
-          background: 'var(--cream)', zIndex: 49,
+          background: 'var(--cream)', zIndex: 51, /* Fix L-16: must exceed header z-index:50 */
           display: 'flex', flexDirection: 'column',
           padding: '0 24px 32px',
           overflowY: 'auto',
@@ -222,6 +245,7 @@ export default function AppNav() {
           {/* Logout — mobile drawer */}
           <button
             onClick={handleLogout}
+            aria-label={t('nav_logout')}
             style={{
               marginTop: 8,
               display: 'flex', alignItems: 'center', gap: 10,

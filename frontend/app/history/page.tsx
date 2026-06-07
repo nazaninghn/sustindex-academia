@@ -25,7 +25,9 @@ interface Attempt {
 export default function HistoryPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
-  const { lang } = useLang();
+  // Fix R13-04: use only `t` — all strings now go through t() for consistent
+  // bilingual i18n. Raw lang === 'tr' ? … : … ternaries have been removed.
+  const { t } = useLang();
   const [attempts,   setAttempts]   = useState<Attempt[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [loadError,  setLoadError]  = useState(false);
@@ -58,7 +60,7 @@ export default function HistoryPage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
-          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
+          {t('t_loading_auth')}
         </span>
       </div>
     );
@@ -74,7 +76,7 @@ export default function HistoryPage() {
         <main className="wrap" style={{ padding: '64px 32px', textAlign: 'center' }}>
           <div style={{ background: '#FFF5F3', border: '1px solid var(--danger)', padding: '18px 24px', display: 'inline-block' }}>
             <p style={{ fontSize: 13, color: 'var(--danger)' }}>
-              {lang === 'tr' ? 'Geçmiş yüklenemedi. Lütfen sayfayı yenileyin.' : 'Failed to load history. Please refresh the page.'}
+              {t('hist_load_error')}
             </p>
           </div>
         </main>
@@ -82,14 +84,14 @@ export default function HistoryPage() {
     );
   }
 
-  const completed = attempts.filter((a) => a.is_completed);
+  const completed  = attempts.filter((a) => a.is_completed);
   const inProgress = attempts.filter((a) => !a.is_completed);
-  const avgScore = completed.length > 0
+  const avgScore   = completed.length > 0
     ? Math.round(completed.reduce((s, a) => s + a.total_score, 0) / completed.length)
     : 0;
 
   const visible = attempts.filter((a) => {
-    if (filter === 'completed') return a.is_completed;
+    if (filter === 'completed')   return a.is_completed;
     if (filter === 'in-progress') return !a.is_completed;
     return true;
   });
@@ -108,29 +110,27 @@ export default function HistoryPage() {
               fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.08em',
               display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
             }}>
-              ← {lang === 'tr' ? 'Panele Dön' : 'Back to Dashboard'}
+              ← {t('course_back_dash')}
             </span>
           </Link>
           <h1 style={{ fontSize: 36, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginTop: 14, marginBottom: 6 }}>
-            {lang === 'tr' ? 'Değerlendirme ' : 'Assessment '}
+            {t('hist_title_1')}{' '}
             <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>
-              {lang === 'tr' ? 'Geçmişi' : 'History'}
+              {t('hist_title_2')}
             </em>
           </h1>
           <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>
-            {lang === 'tr'
-              ? 'Tüm sürdürülebilirlik değerlendirmelerinizi görüntüleyin.'
-              : 'View all your sustainability assessments and results.'}
+            {t('hist_desc')}
           </p>
         </div>
 
         {/* Stats strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 32 }}>
           {[
-            { label: lang === 'tr' ? 'Toplam' : 'Total',       value: attempts.length },
-            { label: lang === 'tr' ? 'Tamamlanan' : 'Completed', value: completed.length },
-            { label: lang === 'tr' ? 'Devam Eden' : 'In Progress', value: inProgress.length },
-            { label: lang === 'tr' ? 'Ort. Skor' : 'Avg Score', value: avgScore > 0 ? `${avgScore}%` : '—' },
+            { label: t('hist_stat_total'),       value: attempts.length },
+            { label: t('hist_stat_completed'),   value: completed.length },
+            { label: t('hist_stat_in_progress'), value: inProgress.length },
+            { label: t('hist_stat_avg'),         value: avgScore > 0 ? `${avgScore}%` : '—' },
           ].map(({ label, value }) => (
             <div key={label} style={{
               background: 'var(--paper)', border: '1px solid var(--line)',
@@ -157,9 +157,9 @@ export default function HistoryPage() {
         }}>
           <div style={{ display: 'flex', gap: 4 }}>
             {([
-              ['all',         lang === 'tr' ? 'Tümü' : 'All',             attempts.length],
-              ['completed',   lang === 'tr' ? 'Tamamlanan' : 'Completed', completed.length],
-              ['in-progress', lang === 'tr' ? 'Devam Eden' : 'In Progress', inProgress.length],
+              ['all',         t('courses_filter_all'),      attempts.length],
+              ['completed',   t('hist_filter_completed'),   completed.length],
+              ['in-progress', t('hist_filter_progress'),    inProgress.length],
             ] as [string, string, number][]).map(([k, l, count]) => (
               <button key={k} onClick={() => setFilter(k as typeof filter)} style={{
                 padding: '6px 14px', borderRadius: 999,
@@ -175,7 +175,7 @@ export default function HistoryPage() {
             ))}
           </div>
           <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-            {visible.length} {lang === 'tr' ? 'sonuç' : 'results'}
+            {visible.length} {t('courses_results')}
           </span>
         </div>
 
@@ -188,12 +188,14 @@ export default function HistoryPage() {
             <p style={{ fontSize: 28, fontWeight: 300, letterSpacing: '-0.02em', marginBottom: 8 }}>0</p>
             <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 24 }}>
               {filter === 'all'
-                ? (lang === 'tr' ? 'Henüz değerlendirme yok.' : 'No assessments yet.')
-                : (lang === 'tr' ? `${filter === 'completed' ? 'Tamamlanan' : 'Devam eden'} değerlendirme bulunamadı.` : `No ${filter} assessments found.`)}
+                ? t('hist_empty_all')
+                : filter === 'completed'
+                  ? t('hist_empty_completed')
+                  : t('hist_empty_progress')}
             </p>
             <Link href="/surveys" style={{ textDecoration: 'none' }}>
               <button className="btn btn-primary">
-                {lang === 'tr' ? 'Yeni Değerlendirme Başlat' : 'Start New Assessment'} <Icon.arrow />
+                {t('hist_new_assessment')} <Icon.arrow />
               </button>
             </Link>
           </div>
@@ -223,15 +225,13 @@ export default function HistoryPage() {
                         color: attempt.is_completed ? 'var(--olive-deep)' : 'var(--amber)',
                         background: attempt.is_completed ? 'var(--olive-pale)' : 'rgba(217,148,68,0.08)',
                       }}>
-                        {attempt.is_completed
-                          ? (lang === 'tr' ? 'Tamamlandı' : 'Completed')
-                          : (lang === 'tr' ? 'Devam Ediyor' : 'In Progress')}
+                        {attempt.is_completed ? t('hist_status_done') : t('hist_status_ongoing')}
                       </span>
                     </div>
                     <div style={{ display: 'flex', gap: 20, fontSize: 11.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                      <span>{lang === 'tr' ? 'Başl:' : 'Started:'} {new Date(attempt.started_at).toLocaleDateString()}</span>
+                      <span>{t('hist_started')} {new Date(attempt.started_at).toLocaleDateString()}</span>
                       {attempt.is_completed && attempt.completed_at && (
-                        <span>{lang === 'tr' ? 'Bitiş:' : 'Finished:'} {new Date(attempt.completed_at).toLocaleDateString()}</span>
+                        <span>{t('hist_finished')} {new Date(attempt.completed_at).toLocaleDateString()}</span>
                       )}
                     </div>
 
@@ -277,14 +277,14 @@ export default function HistoryPage() {
                       </div>
                       <Link href={`/results/${attempt.id}`} style={{ textDecoration: 'none' }}>
                         <button className="btn btn-primary btn-sm">
-                          {lang === 'tr' ? 'Sonuçlar' : 'View Results'} <Icon.arrow />
+                          {t('hist_view_results')} <Icon.arrow />
                         </button>
                       </Link>
                     </div>
                   ) : (
                     <Link href={`/questionnaire/${attempt.id}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
                       <button className="btn btn-outline btn-sm">
-                        {lang === 'tr' ? 'Devam Et' : 'Continue'} <Icon.arrow />
+                        {t('courses_resume')} <Icon.arrow />
                       </button>
                     </Link>
                   )}

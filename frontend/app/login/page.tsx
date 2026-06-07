@@ -32,8 +32,13 @@ export default function LoginPage() {
       router.push('/dashboard');
     } catch (err: unknown) {
       // L1: narrow err from unknown before property access.
-      const e = err as { response?: { data?: { detail?: string } } };
-      setError(e.response?.data?.detail || t('login_fail'));
+      const e = err as { response?: { status?: number; data?: { detail?: string } } };
+      // Fix R5-M-06: distinguish HTTP 429 throttle from generic auth failure
+      if (e.response?.status === 429) {
+        setError(t('err_throttle'));
+      } else {
+        setError(e.response?.data?.detail || t('login_fail'));
+      }
     } finally {
       setLoading(false);
     }
@@ -41,9 +46,10 @@ export default function LoginPage() {
 
   // Don't flash the login form while the auth state is still being determined.
   // All hooks are above this point — safe to early-return here.
+  // Fix R5-L-08: use t() so the loading label is bilingual
   if (authLoading) return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>LOADING…</span>
+      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>{t('t_loading_auth')}</span>
     </div>
   );
 
@@ -170,7 +176,9 @@ export default function LoginPage() {
           fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.08em',
           textTransform: 'uppercase', fontFamily: "'IBM Plex Sans', sans-serif",
         }}>
-          <span>© 2026 Sustindex</span>
+          {/* Fix L-04: use i18n key so year is always current and
+              the copy matches the rest of the site */}
+          <span>{t('foot_copy')}</span>
           <div style={{ display: 'flex', gap: 14 }}>
             <span>{t('login_secure')}</span><span>·</span>
             <span>{t('login_iso')}</span><span>·</span>

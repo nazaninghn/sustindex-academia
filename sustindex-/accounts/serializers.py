@@ -8,13 +8,16 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 
+        fields = ['id', 'username', 'email', 'first_name', 'last_name',
                   'membership_type', 'company_name', 'phone', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        # Fix H-01: lock privilege fields so no code path (including an indirect
+        # call to update()) can accidentally allow a user to escalate themselves.
+        read_only_fields = ['id', 'created_at', 'membership_type', 'is_staff', 'is_superuser']
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
+    # Fix L-18: max_length=128 prevents multi-megabyte bcrypt DoS attempts.
+    password = serializers.CharField(write_only=True, min_length=8, max_length=128)
     password_confirm = serializers.CharField(write_only=True)
     
     class Meta:
@@ -23,20 +26,39 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
                   'first_name', 'last_name', 'company_name', 'phone']
     
     def validate_email(self, value):
-        # Fix F: Django's AbstractUser doesn't enforce unique emails — do it here.
-        # Instance-aware: exclude the current user so a PATCH that re-submits the
-        # same email (or an admin edit) doesn't trigger a false uniqueness error.
-        if value:
-            qs = User.objects.filter(email__iexact=value)
-            if self.instance:
-                qs = qs.exclude(pk=self.instance.pk)
-            if qs.exists():
-                raise serializers.ValidationError("A user with this email already exists.")
-        return value
+        # Fix C-03: reject blank / whitespace-only emails before the uniqueness check.
+        # The original `if value:` silently accepted "" and " " as valid emails,
+        # letting multiple accounts share an empty email address.
+        if not value or not value.strip():
+            raise serializers.ValidationError("Email is required.")
+        qs = User.objects.filter(email__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value.strip().lower()
 
     def validate(self, data):
         if data['password'] != data['password_confirm']:
             raise serializers.ValidationError("Passwords do not match.")
+        # Fix C-04: run Django's AUTH_PASSWORD_VALIDATORS at registration time.
+        # Previously only change_password and reset_password did this, leaving
+        # registration open to weak passwords like "password" or "12345678".
+        # Fix R5-M-02: pass a temporary User instance so UserAttributeSimilarity-
+        # Validator can compare the password against username/email.  Without a
+        # user object that validator is skipped entirely.
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        temp_user = User(
+            username=data.get('username', ''),
+            email=data.get('email', ''),
+            first_name=data.get('first_name', ''),
+            last_name=data.get('last_name', ''),
+        )
+        try:
+            validate_password(data['password'], temp_user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({'password': list(exc.messages)})
         return data
     
     def create(self, validated_data):
@@ -63,5 +85,9 @@ class MembershipHistorySerializer(serializers.ModelSerializer):
         model = MembershipHistory
         # L2: explicit field list — prevents accidental exposure if new
         # sensitive fields are added to the model in the future.
-        fields = ['id', 'user', 'membership_type', 'start_date', 'end_date', 'is_active']
+        # Fix R7-15: removed `user` FK from non-staff output — get_queryset() already
+        # scopes records to the requesting user, so exposing the user PK is redundant
+        # for regular users and a minor privacy concern (leaks internal user IDs to
+        # the frontend).  Staff can access the user via the admin interface.
+        fields = ['id', 'membership_type', 'start_date', 'end_date', 'is_active']
         read_only_fields = ['id', 'start_date']

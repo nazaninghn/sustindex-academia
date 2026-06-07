@@ -9,6 +9,7 @@ import AppNav from '@/components/AppNav';
 import { useLang } from '@/lib/i18n';
 import { Icon } from '@/components/shared';
 import { emitDataChange } from '@/lib/events';
+import logger from '@/lib/logger';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -65,7 +66,8 @@ export default function ProfilePage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
-          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
+          {/* Fix R8-A: use shared i18n key — consistent with login, register, surveys, courses */}
+          {t('t_loading_auth')}
         </span>
       </div>
     );
@@ -127,9 +129,19 @@ export default function ProfilePage() {
   };
 
   const handleSave = async () => {
-    setSaving(true);
     setSaveError('');
     setSaveSuccess(false);
+
+    // Fix R4-L-04: validate email format client-side before hitting the API.
+    // The server validates too, but catching it here gives instant feedback.
+    const emailVal = formData.email?.trim() ?? '';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailVal && !emailRegex.test(emailVal)) {
+      setSaveError(t('profile_email_invalid'));
+      return;
+    }
+
+    setSaving(true);
     try {
       await userAPI.updateProfile(formData);
       setIsEditing(false);
@@ -139,11 +151,19 @@ export default function ProfilePage() {
       if (saveSuccessTimer.current) clearTimeout(saveSuccessTimer.current);
       saveSuccessTimer.current = setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
-      console.error('Failed to update profile:', error);
+      // Fix R4-H-04: environment-gated logger — silent in production
+      logger.error('Failed to update profile:', error);
+      // Fix R6-06: surface structured API error messages (e.g. {'email': [...]})
+      // instead of always showing a generic fallback.
+      const errData = (error as { response?: { data?: Record<string, unknown> } }).response?.data;
+      const firstMsg = errData && typeof errData === 'object'
+        ? Object.values(errData).flat().find((v): v is string => typeof v === 'string')
+        : null;
       setSaveError(
-        lang === 'tr'
+        firstMsg ||
+        (lang === 'tr'
           ? 'Profil güncellenemedi. Lütfen tekrar deneyin.'
-          : 'Failed to update profile. Please try again.'
+          : 'Failed to update profile. Please try again.')
       );
     } finally {
       setSaving(false);
@@ -528,7 +548,11 @@ export default function ProfilePage() {
                       e.currentTarget.style.color = 'var(--danger)';
                     }}
                   >
-                    {lang === 'tr' ? 'Tüm Cihazlardan Çıkış Yap' : 'Logout from All Devices'}
+                    {/* Fix L-07: relabelled from "Logout from All Devices" — there is no
+                        server-side "revoke all sessions" endpoint, so the old label was
+                        misleading.  This only blacklists the current refresh token and
+                        clears local storage on this device. */}
+                    {lang === 'tr' ? 'Bu Cihazdan Çıkış Yap' : 'Log Out of This Device'}
                   </button>
                 </div>
               </>

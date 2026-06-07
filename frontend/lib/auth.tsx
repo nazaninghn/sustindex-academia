@@ -1,8 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import axios from 'axios';
-import api, { API_URL } from '@/lib/api';  // Fix CRITICAL: use singleton so the 401-refresh interceptor fires
+import api from '@/lib/api';  // Fix H-05 / CRITICAL: use singleton so the 401-refresh interceptor fires
 import { getToken, storeTokens, clearTokens } from '@/lib/token-storage';
 
 /* ─── Types ───────────────────────────────────────────────── */
@@ -78,14 +77,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    *                  false          → tokens live in sessionStorage (cleared when tab closes).
    */
   const login = async (username: string, password: string, remember = true) => {
-    const { data: tokens } = await axios.post(`${API_URL}/api/v1/auth/token/`, { username, password });
+    // Fix H-05: use shared api instance (not bare axios) so the Accept-Language
+    // header is sent and the 401-refresh interceptor is active for these calls.
+    const { data: tokens } = await api.post('/api/v1/auth/token/', { username, password });
     storeTokens(tokens.access, tokens.refresh, remember);
     const { data: userData } = await me();
     setUser(userData);
   };
 
   const register = async (data: RegisterPayload) => {
-    const { data: res } = await axios.post(`${API_URL}/api/v1/users/register/`, data);
+    // Fix H-05: same — use shared api instance instead of bare axios.
+    const { data: res } = await api.post('/api/v1/users/register/', data);
     // Registration always remembers (user explicitly created an account)
     storeTokens(res.access, res.refresh, true);
     const { data: userData } = await me();

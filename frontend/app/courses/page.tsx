@@ -54,12 +54,18 @@ function SkeletonCard() {
    Courses Page
    ═══════════════════════════════════════════════════════════════ */
 export default function CoursesPage() {
-  const { t } = useLang();
+  // Fix R7-12: destructure `lang` as well — it is used on line ~349 for the
+  // duration unit suffix ("hr" / "sa") but was missing from the destructure,
+  // causing a TypeScript ReferenceError at runtime.
+  const { t, lang } = useLang();
   const { user, isLoading: authLoading } = useAuth();  // Fix C
   const router = useRouter();
   const [filter, setFilter] = useState('all');
   const [courses, setCourses] = useState<ApiCourse[]>([]);
   const [loading, setLoading] = useState(true);
+  // Fix R4-H-02: track load failure as a distinct state — empty array is ambiguous
+  // (could mean "no courses" or "fetch failed"). Shows a proper error message instead.
+  const [loadError, setLoadError] = useState(false);
 
   // Fix C: redirect unauthenticated users instead of showing empty page
   useEffect(() => {
@@ -74,14 +80,15 @@ export default function CoursesPage() {
         const list: ApiCourse[] = Array.isArray(data) ? data : (data?.results ?? []);
         setCourses(list);
       })
-      .catch(() => setCourses([]))
+      .catch(() => { setLoadError(true); setCourses([]); })
       .finally(() => setLoading(false));
   }, [user]);
 
   if (authLoading) return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
-        LOADING…
+        {/* Fix R7-14: use i18n key instead of hardcoded English string */}
+        {t('t_loading_auth')}
       </span>
     </div>
   );
@@ -215,6 +222,15 @@ export default function CoursesPage() {
           <div className="courses-page-grid">
             {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
           </div>
+        ) : loadError ? (
+          <div style={{
+            background: 'var(--paper)', border: '1px solid var(--line)',
+            padding: '64px 40px', textAlign: 'center',
+          }}>
+            <p style={{ fontSize: 13, color: 'var(--danger)' }}>
+              {t('courses_load_error')}
+            </p>
+          </div>
         ) : visible.length === 0 ? (
           <div style={{
             background: 'var(--paper)', border: '1px solid var(--line)',
@@ -226,12 +242,19 @@ export default function CoursesPage() {
           </div>
         ) : (
           <div className="courses-page-grid">
+            {/* Fix R5-M-07: role + tabIndex + onKeyDown for full keyboard accessibility */}
+            {/* Fix R7-05: moved comment outside map() return — JSX comments inside a
+                return(...) expression are syntax errors (creates two adjacent root nodes). */}
             {visible.map((c, idx) => {
               const status = getStatus(c);
               return (
                 <div
                   key={c.id}
-                  onClick={() => router.push(`/courses/${c.id}`)}  // Fix U: was not navigating
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/courses/${c.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/courses/${c.id}`); } }}
+                  aria-label={c.title_display}
                   style={{
                     background: 'var(--paper)', border: '1px solid var(--line)',
                     padding: 26, display: 'flex', flexDirection: 'column',
@@ -325,10 +348,11 @@ export default function CoursesPage() {
                         }}>{c.total_lessons}</span>
                         <span style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 4 }}>{t('courses_modules')}</span>
                       </div>
+                      {/* Fix R5-L-04: append unit so "4" becomes "4 hr" / "4 sa" */}
                       <span style={{
                         fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
                         fontSize: 20, letterSpacing: '-0.03em',
-                      }}>{c.duration_hours}</span>
+                      }}>{c.duration_hours}{' '}<span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{lang === 'tr' ? 'sa' : 'hr'}</span></span>
                     </div>
                     {/* Fix BUG-23: button had no onClick — click bubbled to outer div causing
                         unclear semantics. Now button stopPropagates and navigates explicitly. */}

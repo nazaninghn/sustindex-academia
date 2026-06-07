@@ -10,7 +10,9 @@ import { Icon } from '@/components/shared';
 
 /* ── Inner component (must be wrapped in Suspense for useSearchParams) ──────── */
 function ResetPasswordForm() {
-  const { lang }       = useLang();
+  // Fix R13-03: destructure `t` — all strings now go through t() for consistent
+  // bilingual i18n instead of raw lang === 'tr' ? … : … ternaries.
+  const { t }          = useLang();
   const router         = useRouter();
   const searchParams   = useSearchParams();
 
@@ -31,11 +33,11 @@ function ResetPasswordForm() {
     setError('');
 
     if (pw1 !== pw2) {
-      setError(lang === 'tr' ? 'Şifreler eşleşmiyor.' : 'Passwords do not match.');
+      setError(t('reg_pw_mismatch'));   // reuses existing key
       return;
     }
     if (pw1.length < 8) {
-      setError(lang === 'tr' ? 'Şifre en az 8 karakter olmalıdır.' : 'Password must be at least 8 characters.');
+      setError(t('rp_err_short'));
       return;
     }
 
@@ -50,7 +52,7 @@ function ResetPasswordForm() {
       const detail = e?.response?.data?.detail;
       setError(
         (Array.isArray(detail) ? detail.join(' ') : detail) ||
-        (lang === 'tr' ? 'Bağlantı geçersiz veya süresi dolmuş.' : 'Reset link is invalid or has expired.')
+        t('rp_err_expired')
       );
     } finally {
       setLoading(false);
@@ -71,17 +73,15 @@ function ResetPasswordForm() {
       <div>
         <div style={{ background: '#FFF5F3', border: '1px solid var(--danger)', padding: '18px 20px', marginBottom: 24 }}>
           <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--danger)', marginBottom: 4 }}>
-            {lang === 'tr' ? 'Geçersiz Bağlantı' : 'Invalid Link'}
+            {t('rp_invalid_title')}
           </p>
           <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6 }}>
-            {lang === 'tr'
-              ? 'Bu sıfırlama bağlantısı geçersiz veya süresi dolmuş. Lütfen yeni bir bağlantı isteyin.'
-              : 'This password-reset link is invalid or has expired. Please request a new one.'}
+            {t('rp_invalid_body')}
           </p>
         </div>
         <Link href="/forgot-password" style={{ textDecoration: 'none' }}>
           <button className="btn btn-primary" style={{ width: '100%' }}>
-            {lang === 'tr' ? 'Yeni Bağlantı İste' : 'Request New Link'} <Icon.arrow />
+            {t('rp_req_new_link')} <Icon.arrow />
           </button>
         </Link>
       </div>
@@ -93,12 +93,10 @@ function ResetPasswordForm() {
     return (
       <div style={{ background: 'var(--olive-wash)', border: '1px solid var(--olive)', padding: '20px 22px' }}>
         <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--olive-deep)', marginBottom: 6 }}>
-          {lang === 'tr' ? '✓  Şifre başarıyla değiştirildi' : '✓  Password changed successfully'}
+          {t('rp_success_title')}
         </p>
         <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6 }}>
-          {lang === 'tr'
-            ? '3 saniye içinde giriş sayfasına yönlendirileceksiniz…'
-            : 'Redirecting you to login in 3 seconds…'}
+          {t('rp_success_body')}
         </p>
       </div>
     );
@@ -108,9 +106,7 @@ function ResetPasswordForm() {
   return (
     <>
       <p style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 28, lineHeight: 1.6 }}>
-        {lang === 'tr'
-          ? 'Hesabınız için yeni bir şifre belirleyin. Şifreniz en az 8 karakter olmalıdır.'
-          : 'Set a new password for your account. It must be at least 8 characters.'}
+        {t('rp_desc')}
       </p>
 
       {error && (
@@ -119,28 +115,33 @@ function ResetPasswordForm() {
         </div>
       )}
 
+      {/* Fix R8-B: htmlFor/id pairs — labels associated with inputs for WCAG 1.3.1 */}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div className="field">
-          <label>{lang === 'tr' ? 'Yeni Şifre' : 'New Password'}</label>
+          <label htmlFor="rp-pw1">{t('rp_pw1_label')}</label>
           <input
+            id="rp-pw1"
             className="input"
             type="password"
             placeholder="••••••••"
             value={pw1}
             onChange={(e) => setPw1(e.target.value)}
             required
+            autoComplete="new-password"
             autoFocus
           />
         </div>
         <div className="field">
-          <label>{lang === 'tr' ? 'Şifreyi Onayla' : 'Confirm New Password'}</label>
+          <label htmlFor="rp-pw2">{t('rp_pw2_label')}</label>
           <input
+            id="rp-pw2"
             className="input"
             type="password"
             placeholder="••••••••"
             value={pw2}
             onChange={(e) => setPw2(e.target.value)}
             required
+            autoComplete="new-password"
           />
         </div>
 
@@ -150,9 +151,7 @@ function ResetPasswordForm() {
           disabled={loading}
           style={{ padding: '12px 18px', fontSize: 12.5, justifyContent: 'space-between', opacity: loading ? 0.6 : 1 }}
         >
-          {loading
-            ? (lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
-            : (lang === 'tr' ? 'Şifreyi Güncelle' : 'Update Password')}
+          {loading ? t('rp_saving') : t('rp_submit')}
           {!loading && <Icon.arrow />}
         </button>
       </form>
@@ -162,7 +161,8 @@ function ResetPasswordForm() {
 
 /* ── Page shell ─────────────────────────────────────────────────────────────── */
 export default function ResetPasswordPage() {
-  const { lang } = useLang();
+  // Fix R13-03: use t() for consistent i18n — no more lang ternaries in shell.
+  const { t } = useLang();
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', flexDirection: 'column' }}>
@@ -170,7 +170,7 @@ export default function ResetPasswordPage() {
         <div className="wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 32px' }}>
           <Link href="/" style={{ textDecoration: 'none' }}><Logo size={20} /></Link>
           <Link href="/login" style={{ textDecoration: 'none', fontSize: 11.5, color: 'var(--ink-3)' }}>
-            ← {lang === 'tr' ? 'Girişe Dön' : 'Back to Login'}
+            {t('fp_back_login')}
           </Link>
         </div>
       </header>
@@ -178,10 +178,10 @@ export default function ResetPasswordPage() {
       <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
         <div style={{ width: '100%', maxWidth: 380 }}>
           <span className="eyebrow" style={{ marginBottom: 10, display: 'block' }}>
-            {lang === 'tr' ? 'Şifre Sıfırlama' : 'Password Reset'}
+            {t('fp_eyebrow')}
           </span>
           <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 10 }}>
-            {lang === 'tr' ? 'Yeni şifre belirle' : 'Set a new password'}
+            {t('rp_title')}
           </h1>
 
           {/* useSearchParams must be inside Suspense */}

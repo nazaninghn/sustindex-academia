@@ -8,7 +8,8 @@ import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/shared';
 import { attemptAPI } from '@/lib/api';
-import { sanitizeHtml } from '@/lib/utils';
+import { sanitizeHtml, formatBytes } from '@/lib/utils';
+import logger from '@/lib/logger';
 import { emitDataChange } from '@/lib/events';
 
 /* ─── Types ──────────────────────────────────────────────── */
@@ -57,12 +58,18 @@ export default function QuestionnairePage() {
   const { id }   = useParams<{ id: string }>();
   const router   = useRouter();
   const { user, isLoading: authLoading } = useAuth();
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const langRef       = useRef(lang);
   const submitLockRef = useRef(false);
   /* surveyId stored so refreshTexts can re-fetch without re-loading the attempt */
   const surveyIdRef   = useRef<number | null>(null);
+  /* Fix #22: track mount state so refreshTexts never calls setState after unmount */
+  const mountedRef    = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   useEffect(() => { langRef.current = lang; }, [lang]);
 
   /* ── Data state ── */
@@ -95,13 +102,15 @@ export default function QuestionnairePage() {
     try {
       const { surveyAPI } = await import('@/lib/api');
       const survey = await surveyAPI.getSurvey(sid);
+      // Fix #22: abort if the component was unmounted while the fetch was in flight
+      if (!mountedRef.current) return;
       setSurveyName(survey.name || '');
       const qs: Question[] = (survey.questions || []).sort(
         (a: Question, b: Question) => a.order - b.order
       );
       setQuestions(qs);
     } catch { /* non-fatal — keep showing previous texts */ }
-  }, []); // no deps — reads surveyIdRef directly
+  }, []); // no deps — reads surveyIdRef/mountedRef directly
 
   /* Re-fetch question texts whenever language changes (after initial load) */
   useEffect(() => {
@@ -115,7 +124,8 @@ export default function QuestionnairePage() {
 
       const { surveyAPI } = await import('@/lib/api');
       if (!attempt.survey) {
-        setError(langRef.current === 'tr' ? 'Ankete bagli deneme bulunamadi.' : 'Attempt has no associated survey.');
+        /* Fix L-3: correct Turkish diacritics */
+        setError(langRef.current === 'tr' ? 'Ankete bağlı deneme bulunamadı.' : 'Attempt has no associated survey.');
         return;
       }
       /* Save survey ID so refreshTexts can use it on lang switch */
@@ -145,7 +155,8 @@ export default function QuestionnairePage() {
       const firstUnanswered = qs.findIndex((q: Question) => !preAnswers[q.id]);
       setCurrentIdx(firstUnanswered >= 0 ? firstUnanswered : qs.length - 1);
     } catch (err) {
-      console.error('Failed to load questionnaire:', err);
+      // Fix R4-H-04: environment-gated logger — silent in production
+      logger.error('Failed to load questionnaire:', err);
       setError(langRef.current === 'tr' ? 'Yüklenemedi.' : 'Failed to load.');
     } finally {
       setLoading(false);
@@ -166,7 +177,9 @@ export default function QuestionnairePage() {
   const textAns     = q ? (textAnswers[q.id]  || '') : '';
   const files       = q ? (pendingFiles[q.id] || []) : [];
 
-  const answeredCount = Object.keys(answers).length;
+  // Fix R5-M-01: count only questions where at least one choice has been selected
+  // (not every key in `answers` — empty arrays count as "answered" otherwise).
+  const answeredCount = Object.values(answers).filter((sel) => sel.length > 0).length;
   const progress      = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
 
   const isTextType  = q?.question_type === 'text' || q?.choices?.length === 0;
@@ -232,6 +245,12 @@ export default function QuestionnairePage() {
       } else if (textAns.trim() || note.trim()) {
         const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
         answerId = res?.id ?? null;
+      } else if (!hasChoices && !isTextType && q) {
+        // Fix C-07: "no-choice, non-text" question — canSubmit is true because
+        // the question has no required inputs, but we still need to create/update
+        // an answer record (with empty payload) so progress is recorded server-side.
+        const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
+        answerId = res?.id ?? null;
       }
 
       if (answerId && files.length > 0) {
@@ -244,6 +263,11 @@ export default function QuestionnairePage() {
           setError(lang === 'tr'
             ? `Bazı belgeler yüklenemedi: ${failedUploads.join(', ')}`
             : `Some documents failed to upload: ${failedUploads.join(', ')}`);
+          // Fix H-06: do NOT complete the attempt when uploads failed on the
+          // last question — the user must retry or acknowledge before we mark
+          // the assessment complete.  Without this return, evidence files were
+          // silently lost while the questionnaire appeared successfully submitted.
+          return;
         }
       }
 
@@ -255,7 +279,8 @@ export default function QuestionnairePage() {
         setCurrentIdx((i) => i + 1);
       }
     } catch (err) {
-      console.error('Failed to save answer:', err);
+      // Fix R4-H-04: environment-gated logger — silent in production
+      logger.error('Failed to save answer:', err);
       setError(lang === 'tr' ? 'Kaydedilemedi, tekrar dene.' : 'Could not save — please retry.');
     } finally {
       setSaving(false);
@@ -269,13 +294,44 @@ export default function QuestionnairePage() {
     if (targetIdx === currentIdx) return;
     if (q && (selection.length > 0 || note.trim() || textAns.trim())) {
       try {
-        if (hasChoices && q.allow_multiple && selection.length > 0)
-          await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
-        else if (hasChoices && selection.length > 0)
-          await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
-        else if (textAns.trim() || note.trim())
-          await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
+        let answerId: number | null = null;
+        if (hasChoices && q.allow_multiple && selection.length > 0) {
+          const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
+          answerId = res?.id ?? null;
+        } else if (hasChoices && selection.length > 0) {
+          const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
+          answerId = res?.id ?? null;
+        } else if (textAns.trim() || note.trim()) {
+          const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
+          answerId = res?.id ?? null;
+        }
+        // Fix M-6: upload pending files when jumping — previously they were
+        // silently discarded, leaving evidence permanently lost.
+        // Fix R4-M-04: surface upload failures with a user confirmation so they
+        // can decide whether to abort and retry rather than silently losing evidence.
+        if (answerId && files.length > 0) {
+          const failedUploads: string[] = [];
+          for (const file of files) {
+            try { await attemptAPI.uploadDocument(answerId, file); }
+            catch { failedUploads.push(file.name); }
+          }
+          if (failedUploads.length > 0) {
+            const proceed = window.confirm(
+              lang === 'tr'
+                ? `${failedUploads.length} dosya yüklenemedi: ${failedUploads.join(', ')}.\nYine de devam etmek istiyor musunuz? Dosyalar kaydedilmeyecek.`
+                : `${failedUploads.length} file(s) failed to upload: ${failedUploads.join(', ')}.\nProceed anyway? Those files will not be saved.`
+            );
+            if (!proceed) return;  // stay on current question so user can retry
+          }
+        }
       } catch { /* non-fatal */ }
+    }
+    // Fix R5-M-04: always clear pending files for the current question when
+    // jumping away, regardless of whether the answer or upload succeeded.
+    // Previously, if answerId was null (submit failed), files were never cleared
+    // and persisted as stale state on the question when the user returned.
+    if (q) {
+      setPendingFiles((prev) => { const next = { ...prev }; delete next[q.id]; return next; });
     }
     setCurrentIdx(targetIdx);
   };
@@ -316,7 +372,8 @@ export default function QuestionnairePage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {lang === 'tr' ? 'YÜKLENIYOR…' : 'LOADING…'}
+          {/* Fix R11-05: use shared i18n key — consistent with all other pages */}
+          {t('t_loading_auth')}
         </span>
       </div>
     );
@@ -326,10 +383,11 @@ export default function QuestionnairePage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
         <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>
-          {error || (lang === 'tr' ? 'Soru bulunamadi.' : 'No questions found.')}
+          {/* Fix L-3: correct Turkish diacritics */}
+          {error || (lang === 'tr' ? 'Soru bulunamadı.' : 'No questions found.')}
         </p>
         <Link href="/surveys" style={{ textDecoration: 'none' }}>
-          <button className="btn btn-outline">{lang === 'tr' ? '← Anketlere Don' : '← Back to Surveys'}</button>
+          <button className="btn btn-outline">{lang === 'tr' ? '← Anketlere Dön' : '← Back to Surveys'}</button>
         </Link>
       </div>
     );
@@ -365,7 +423,7 @@ export default function QuestionnairePage() {
             >
               {exitSaving
                 ? (lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
-                : (lang === 'tr' ? 'Kaydet & Cik' : 'Save & Exit')}
+                : (lang === 'tr' ? 'Kaydet & Çık' : 'Save & Exit')}
             </button>
           </div>
         </div>
@@ -406,19 +464,22 @@ export default function QuestionnairePage() {
               fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em',
               marginTop: 10,
             }}>
-              {lang === 'tr' ? '↳ Birden fazla secenegi isaretleyebilirsiniz' : '↳ Multiple answers allowed — select all that apply'}
+              {lang === 'tr' ? '↳ Birden fazla seçeneği işaretleyebilirsiniz' : '↳ Multiple answers allowed — select all that apply'}
             </p>
           )}
+          {/* Fix R7-04: use authenticated DRF attachment endpoint — raw q.attachment
+              is a /media/ URL that bypasses Django auth and exposes the file to anyone
+              with the link.  The /attachment/ action enforces IsAuthenticated. */}
           {q.attachment && (
             <a
-              href={q.attachment} target="_blank" rel="noreferrer"
+              href={`/api/v1/questions/${q.id}/attachment/`} target="_blank" rel="noreferrer"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12,
                 fontSize: 11, color: 'var(--olive-deep)', textDecoration: 'none',
                 fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em',
               }}
             >
-              <PaperclipIcon /> {lang === 'tr' ? 'Ek dosyayi goruntule' : 'View attachment'}
+              <PaperclipIcon /> {lang === 'tr' ? 'Ek dosyayı görüntüle' : 'View attachment'}
             </a>
           )}
         </div>
@@ -484,13 +545,13 @@ export default function QuestionnairePage() {
               color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
               display: 'block', marginBottom: 8,
             }}>
-              {lang === 'tr' ? 'Yanitiniz' : 'Your Answer'}
+              {lang === 'tr' ? 'Yanıtınız' : 'Your Answer'}
             </label>
             <textarea
               value={textAns}
               onChange={(e) => setTextAnswers({ ...textAnswers, [q.id]: e.target.value })}
               rows={4}
-              placeholder={lang === 'tr' ? 'Yanitinizi buraya yazin…' : 'Type your answer here…'}
+              placeholder={lang === 'tr' ? 'Yanıtınızı buraya yazın…' : 'Type your answer here…'}
               style={{
                 width: '100%', padding: '14px 16px',
                 background: 'var(--paper)', border: '1px solid var(--line)',
@@ -521,7 +582,8 @@ export default function QuestionnairePage() {
             color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
             margin: 0,
           }}>
-            {lang === 'tr' ? 'Not & Kanit (isteğe bağlı)' : 'Notes & Evidence (optional)'}
+            {/* Fix L-02: 'Kanit' → 'Kanıt' (dotless ı, U+0131) */}
+            {lang === 'tr' ? 'Not & Kanıt (isteğe bağlı)' : 'Notes & Evidence (optional)'}
           </p>
 
           {/* Notes textarea */}
@@ -560,7 +622,7 @@ export default function QuestionnairePage() {
               color: 'var(--ink-4)', letterSpacing: '0.08em',
               display: 'block', marginBottom: 6,
             }}>
-              {lang === 'tr' ? 'Kanit Belgesi Yukle' : 'Upload Evidence'}
+              {lang === 'tr' ? 'Kanıt Belgesi Yükle' : 'Upload Evidence'}
             </label>
 
             <button
@@ -577,7 +639,7 @@ export default function QuestionnairePage() {
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--ink-3)'; }}
             >
               <PaperclipIcon />
-              {lang === 'tr' ? 'Dosya sec veya surukle' : 'Choose file or drag & drop'}
+              {lang === 'tr' ? 'Dosya seç veya sürükle' : 'Choose file or drag & drop'}
             </button>
             <input
               ref={fileInputRef}
@@ -600,14 +662,16 @@ export default function QuestionnairePage() {
                     <span style={{ flex: 1, fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {file.name}
                     </span>
+                    {/* Fix L-03: use shared formatBytes() from utils.ts — eliminates
+                        the inline duplicate and ensures consistent formatting site-wide */}
                     <span style={{ fontSize: 10, color: 'var(--ink-4)', flexShrink: 0 }}>
-                      {file.size < 1024 * 1024
-                        ? `${Math.round(file.size / 1024)} KB`
-                        : `${(file.size / 1024 / 1024).toFixed(1)} MB`}
+                      {formatBytes(file.size)}
                     </span>
                     <button
                       type="button"
                       onClick={() => removeFile(idx)}
+                      /* Fix R5-L-03: aria-label so screen readers announce the action */
+                      aria-label={lang === 'tr' ? 'Dosyayı kaldır' : 'Remove file'}
                       style={{
                         background: 'none', border: 'none', cursor: 'pointer',
                         color: 'var(--ink-4)', fontSize: 13, lineHeight: 1, padding: '0 2px',
@@ -643,7 +707,7 @@ export default function QuestionnairePage() {
             disabled={isFirst}
             style={{ opacity: isFirst ? 0.3 : 1 }}
           >
-            {lang === 'tr' ? '← Onceki' : '← Previous'}
+            {lang === 'tr' ? '← Önceki' : '← Previous'}
           </button>
 
           {/* Dot progress */}

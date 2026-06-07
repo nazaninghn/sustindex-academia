@@ -66,7 +66,16 @@ try:
     import rest_framework_simplejwt
     import corsheaders
     import drf_spectacular
-    OPTIONAL_APPS.extend(['rest_framework', 'rest_framework_simplejwt', 'corsheaders', 'drf_spectacular'])
+    # Fix L-6: token_blacklist is a sub-app of simplejwt — it must be listed
+    # conditionally here, not unconditionally in INSTALLED_APPS, or Django will
+    # throw AppRegistryNotReady / ModuleNotFoundError when simplejwt isn't installed.
+    OPTIONAL_APPS.extend([
+        'rest_framework',
+        'rest_framework_simplejwt',
+        'rest_framework_simplejwt.token_blacklist',
+        'corsheaders',
+        'drf_spectacular',
+    ])
     REST_FRAMEWORK_INSTALLED = True
 except ImportError:
     REST_FRAMEWORK_INSTALLED = False
@@ -87,10 +96,6 @@ INSTALLED_APPS = [
     'ckeditor',
     'import_export',
     'simple_history',
-    # Fix G: required for BLACKLIST_AFTER_ROTATION=True — without this, old
-    # refresh tokens remain valid after rotation (security hole).
-    'rest_framework_simplejwt.token_blacklist',
-
     # Local apps
     'accounts',
     'questionnaire',
@@ -100,12 +105,20 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
-# Add CORS middleware only if installed
+# Fix R7-09: CorsMiddleware MUST come before WhiteNoiseMiddleware.
+# WhiteNoise serves static files and returns early — if CorsMiddleware is
+# added after WhiteNoise in the chain it never runs for static-asset requests,
+# so cross-origin requests for /static/ assets fail with missing CORS headers.
 if REST_FRAMEWORK_INSTALLED:
     MIDDLEWARE.append('corsheaders.middleware.CorsMiddleware')
+
+MIDDLEWARE.extend([
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    # Fix R6-15: inject Content-Security-Policy on every response.
+    'sustindex.middleware.ContentSecurityPolicyMiddleware',
+])
 
 MIDDLEWARE.extend([
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -235,9 +248,18 @@ MEDIA_ROOT = BASE_DIR / 'media'
 AUTH_USER_MODEL = 'accounts.User'
 
 # CKEditor
+# Fix R5-L-06: replaced 'full' toolbar (all plugins) with an explicit allow-list
+# to minimise the content-injection attack surface while still covering the
+# formatting operations admins legitimately need.
 CKEDITOR_CONFIGS = {
     'default': {
-        'toolbar': 'full',
+        'toolbar': 'Custom',
+        'toolbar_Custom': [
+            ['Bold', 'Italic', 'Underline'],
+            ['NumberedList', 'BulletedList'],
+            ['Link', 'Unlink'],
+            ['RemoveFormat', 'Source'],
+        ],
         'height': 300,
         'width': '100%',
     },
@@ -255,8 +277,12 @@ if REST_FRAMEWORK_INSTALLED:
             'rest_framework_simplejwt.authentication.JWTAuthentication',
             'rest_framework.authentication.SessionAuthentication',
         ],
+        # Fix R6-12: default to IsAuthenticated so new viewsets are opt-in for
+        # public access rather than accidentally exposing read endpoints to
+        # unauthenticated users.  AllowAny / IsAuthenticatedOrReadOnly must be
+        # set explicitly on the few endpoints that genuinely need it.
         'DEFAULT_PERMISSION_CLASSES': [
-            'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+            'rest_framework.permissions.IsAuthenticated',
         ],
         'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
         'PAGE_SIZE': 20,
@@ -269,17 +295,24 @@ if REST_FRAMEWORK_INSTALLED:
             'rest_framework.throttling.UserRateThrottle',
         ],
         'DEFAULT_THROTTLE_RATES': {
-            'anon':     '200/day',    # General anonymous API access
-            'user':     '2000/day',   # Authenticated user API access
-            'login':    '5/minute',   # POST /api/v1/auth/token/
-            'register': '5/hour',     # POST /api/v1/users/register/
+            'anon':           '200/day',   # General anonymous API access
+            'user':           '2000/day',  # Authenticated user API access
+            'login':          '5/minute',  # POST /api/v1/auth/token/
+            'register':       '5/hour',    # POST /api/v1/users/register/
+            # Fix R4-C-01: limit password-reset requests to prevent email flooding
+            # and brute-force token guessing.
+            'password_reset': '5/hour',    # POST forgot_password / reset_password
         },
     }
 
     # JWT Settings
+    # Fix H-04: reduce ACCESS_TOKEN_LIFETIME to 5 minutes.
+    # Blacklisting only invalidates refresh tokens; stateless access tokens remain
+    # valid until expiry even after password change.  A short lifetime limits the
+    # exposure window after a token is compromised or a password is changed.
     from datetime import timedelta
     SIMPLE_JWT = {
-        'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+        'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
         'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
         'ROTATE_REFRESH_TOKENS': True,
         'BLACKLIST_AFTER_ROTATION': True,
@@ -297,6 +330,14 @@ if REST_FRAMEWORK_INSTALLED:
         CORS_ALLOWED_ORIGINS += [o.strip() for o in _extra_cors.split(',') if o.strip()]
 
     CORS_ALLOW_CREDENTIALS = True
+
+    # Fix R4-H-05: explicitly list allowed request headers so browsers send
+    # Accept-Language (used by DRF serializers to localise names) and the
+    # standard Authorization + Content-Type headers without CORS pre-flight rejection.
+    from corsheaders.defaults import default_headers as _cors_default_headers
+    CORS_ALLOW_HEADERS = list(_cors_default_headers) + [
+        'accept-language',   # language preference (TR / EN)
+    ]
 
     # API Documentation
     SPECTACULAR_SETTINGS = {
@@ -323,6 +364,66 @@ DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@sustindex.co
 
 # URL of the Next.js frontend — used in password-reset emails.
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+
+# ── CSRF trusted origins ───────────────────────────────────────────────────
+# Fix R5-L-07: Django 4.x requires CSRF_TRUSTED_ORIGINS when the app runs
+# behind a reverse proxy (Render, nginx) — without it, POST/PATCH/DELETE
+# requests from the production frontend fail with HTTP 403 CSRF verification.
+_csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+CSRF_TRUSTED_ORIGINS = (
+    [o.strip() for o in _csrf_origins.split(',') if o.strip()]
+    if _csrf_origins
+    else [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'https://sustindex-academia.vercel.app',
+    ]
+)
+# Allow extra origins via env var for staging/feature deploys.
+_extra_csrf = os.environ.get('CSRF_EXTRA_ORIGINS', '')
+if _extra_csrf:
+    CSRF_TRUSTED_ORIGINS += [o.strip() for o in _extra_csrf.split(',') if o.strip()]
+
+# ── Logging ────────────────────────────────────────────────────────────────
+# Fix R4-L-03: configure Django's logging so application errors reach the
+# console (picked up by Render / Docker log collectors) and, in production,
+# so WARNING+ messages from the root logger are never silently discarded.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name}: {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class':     'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level':    'WARNING',
+    },
+    'loggers': {
+        'django': {
+            'handlers':  ['console'],
+            'level':     'INFO' if DEBUG else 'WARNING',
+            'propagate': False,
+        },
+        # Application loggers — always at DEBUG in dev, WARNING in prod.
+        'accounts':      {'handlers': ['console'], 'level': 'DEBUG' if DEBUG else 'WARNING', 'propagate': False},
+        'questionnaire': {'handlers': ['console'], 'level': 'DEBUG' if DEBUG else 'WARNING', 'propagate': False},
+        'elearning':     {'handlers': ['console'], 'level': 'DEBUG' if DEBUG else 'WARNING', 'propagate': False},
+        'reports':       {'handlers': ['console'], 'level': 'DEBUG' if DEBUG else 'WARNING', 'propagate': False},
+    },
+}
 
 # Security settings for production
 if not DEBUG:

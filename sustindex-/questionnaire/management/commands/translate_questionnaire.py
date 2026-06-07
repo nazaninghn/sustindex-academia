@@ -13,8 +13,10 @@ Skips items that already have a translation (unless --force).
 Saves in batches and prints progress.
 """
 
+import re
 import time
 import logging
+from typing import Optional
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
@@ -23,8 +25,21 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE  = 50    # DB save batch
 RATE_DELAY  = 0.25  # seconds between API calls — avoids Google rate-limit
 
+# Fix #17: pre-compiled pattern to strip HTML tags before translation.
+# Question.text uses CKEditor RichTextField which may contain <p>, <strong>,
+# <br> etc. — passing raw HTML to the translator produces garbled output.
+_HTML_TAG_RE = re.compile(r'<[^>]+>')
 
-def _translate(text: str) -> str | None:
+
+def _strip_html(html: str) -> str:
+    """Remove HTML tags and collapse whitespace — returns plain text."""
+    text = _HTML_TAG_RE.sub(' ', html)
+    return ' '.join(text.split())
+
+
+# Fix #15: `str | None` union syntax requires Python ≥ 3.10.
+# Use typing.Optional for compatibility with Python 3.8/3.9.
+def _translate(text: str) -> Optional[str]:
     """Translate English text to Turkish. Returns None on failure."""
     try:
         from deep_translator import GoogleTranslator
@@ -90,7 +105,11 @@ class Command(BaseCommand):
         batch = []
 
         for q in qs.iterator():
-            source = (q.text_en or q.text or '').strip()
+            # Fix #17: strip HTML tags before translating — Question.text is a
+            # RichTextField that may contain <p>/<strong>/<br> markup which
+            # confuses the translator and produces garbled output.
+            raw = (q.text_en or q.text or '').strip()
+            source = _strip_html(raw) if raw else ''
             if not source:
                 skip += 1
                 continue
@@ -135,7 +154,9 @@ class Command(BaseCommand):
         batch = []
 
         for c in qs.iterator():
-            source = (c.text_en or c.text or '').strip()
+            # Choices use CharField (no HTML), but still strip just in case.
+            raw = (c.text_en or c.text or '').strip()
+            source = _strip_html(raw) if raw else ''
             if not source:
                 skip += 1
                 continue

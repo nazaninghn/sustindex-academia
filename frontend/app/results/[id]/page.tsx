@@ -1,29 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AppNav from '@/components/AppNav';
 import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/shared';
-import { attemptAPI } from '@/lib/api';
-import { sanitizeHtml } from '@/lib/utils';
+import { attemptAPI, documentDownloadUrl } from '@/lib/api';
+// Fix M-04/M-05: import gradeColor and priorityColor from the single source of
+// truth in utils.ts so colours are consistent across dashboard, history, and
+// results pages, and so Turkish priority labels ('Yüksek' etc.) are handled.
+import { sanitizeHtml, gradeColor, priorityColor } from '@/lib/utils';
 
-/* ─── Colour helpers ─────────────────────────────────────── */
-function gradeColor(g: string): string {
-  if (!g) return 'var(--ink-3)';
-  if (g.startsWith('A')) return '#2d6a4f';
-  if (g.startsWith('B')) return '#52796f';
-  if (g.startsWith('C')) return '#b5835a';
-  return '#c1121f';
-}
+/* ─── Colour helpers (page-specific — not in shared utils) ── */
 function scoreColor(pct: number): string {
-  if (pct >= 80) return '#2d6a4f';
-  if (pct >= 60) return '#52796f';
-  if (pct >= 40) return '#b5835a';
+  if (pct >= 80) return 'var(--olive-deep)';
+  if (pct >= 60) return '#4a7c6f';
+  if (pct >= 40) return 'var(--amber)';
   if (pct >= 20) return '#e07b39';
-  return '#c1121f';
+  return 'var(--danger)';
 }
 function scoreLabel(pct: number, lang: string): string {
   if (pct >= 80) return lang === 'tr' ? 'Mükemmel' : 'Excellent';
@@ -33,15 +29,16 @@ function scoreLabel(pct: number, lang: string): string {
   return lang === 'tr' ? 'Kritik' : 'Critical';
 }
 function effortColor(e: string): string {
-  if (e === 'Low')    return '#52796f';
-  if (e === 'Medium') return '#b5835a';
-  return '#c1121f';
+  if (e === 'Low')    return 'var(--olive-deep)';
+  if (e === 'Medium') return 'var(--amber)';
+  if (e === 'High')   return 'var(--danger)';
+  // Fix R5-M-05: unknown/future effort values return neutral grey instead of
+  // misleadingly rendering as danger-red.
+  return 'var(--ink-3)';
 }
-function priorityColor(p: string): string {
-  if (p === 'High')   return '#c1121f';
-  if (p === 'Medium') return '#b5835a';
-  return '#52796f';
-}
+// Fix M-05: removed local priorityColor — imported from utils.ts above.
+// The local version only handled English labels; utils.ts also matches Turkish
+// ('Yüksek', 'Orta') via case-insensitive substring matching.
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface CategoryScore {
@@ -94,8 +91,9 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
       <text x={cx} y={cy - 4} textAnchor="middle"
         fontFamily="'IBM Plex Sans', sans-serif" fontWeight="300" fontSize="30"
         letterSpacing="-2" fill="var(--ink)">{score}</text>
+      {/* Fix L-4: IBM Plex Mono should fall back to monospace, not sans-serif */}
       <text x={cx} y={cy + 16} textAnchor="middle"
-        fontFamily="'IBM Plex Mono', sans-serif" fontWeight="700" fontSize="14"
+        fontFamily="'IBM Plex Mono', monospace" fontWeight="700" fontSize="14"
         fill={color}>{grade}</text>
     </svg>
   );
@@ -107,7 +105,8 @@ function MiniGauge({ label, value, color }: { label: string; value: number; colo
     <div style={{ flex: 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{label}</span>
-        <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 12, color }}>{Math.round(value)}</span>
+        {/* Fix L-19: cap displayed value at 100 to match the bar cap — prevents "102" label with a maxed-out bar */}
+        <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 12, color }}>{Math.min(Math.round(value), 100)}</span>
       </div>
       <div style={{ height: 4, background: 'var(--line)', borderRadius: 2 }}>
         <div style={{ width: `${Math.min(value, 100)}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 1s ease' }} />
@@ -122,8 +121,13 @@ function MiniGauge({ label, value, color }: { label: string; value: number; colo
 export default function ResultsPage() {
   const { id }   = useParams<{ id: string }>();
   const router   = useRouter();
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const { user, isLoading: authLoading } = useAuth();
+
+  // Fix #27: keep a ref so async callbacks always read the latest lang
+  // without re-running the fetch effect on every language change.
+  const langRef = useRef(lang);
+  useEffect(() => { langRef.current = lang; }, [lang]);
 
   const [attempt,    setAttempt]    = useState<Attempt | null>(null);
   const [loading,    setLoading]    = useState(true);
@@ -138,7 +142,7 @@ export default function ResultsPage() {
     if (user && id) {
       attemptAPI.getAttempt(Number(id))
         .then((data: Attempt) => setAttempt(data))
-        .catch(() => setFetchError(lang === 'tr' ? 'Değerlendirme yüklenemedi.' : 'Failed to load assessment.'))
+        .catch(() => setFetchError(langRef.current === 'tr' ? 'Değerlendirme yüklenemedi.' : 'Failed to load assessment.'))
         .finally(() => setLoading(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,7 +158,8 @@ export default function ResultsPage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {lang === 'tr' ? 'YÜKLENIYOR…' : 'LOADING…'}
+          {/* Fix R9-06: use shared i18n key — consistent with all other app pages */}
+          {t('t_loading_auth')}
         </span>
       </div>
     );
@@ -205,10 +210,12 @@ export default function ResultsPage() {
     };
     return labels[key]?.[lang] ?? key;
   };
+  // Fix M-04: use CSS variables instead of hardcoded hex so pillar colours
+  // stay in sync with the design token system and respect theme overrides.
   const pillarColor = (key: string) => {
-    if (key === 'environmental') return '#2d6a4f';
-    if (key === 'social')        return '#52796f';
-    return '#1e3a5f';
+    if (key === 'environmental') return 'var(--olive-deep)';
+    if (key === 'social')        return 'var(--olive)';
+    return 'var(--ink-2)';
   };
 
   return (
@@ -229,7 +236,9 @@ export default function ResultsPage() {
               </button>
             </Link>
             <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
-              <Icon.download /> {lang === 'tr' ? 'PDF İndir' : 'Export PDF'}
+              {/* Fix R6-18 / L-11: window.print() opens the browser print dialog.
+                  PDF export via jspdf/html2canvas was removed (R5-L-01). */}
+              <Icon.download /> {lang === 'tr' ? 'Yazdır / PDF Kaydet' : 'Print / Save as PDF'}
             </button>
           </div>
         </div>
@@ -271,6 +280,7 @@ export default function ResultsPage() {
                   {' '}GRI Universal · SASB · TCFD
                 </span>
               </div>
+              {/* Fix R4-M-05: guard totalQ > 0 so division never produces NaN% */}
               {totalQ > 0 && (
                 <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
                   {answeredCnt}/{totalQ} {lang === 'tr' ? 'soru yanıtlandı' : 'questions answered'} ·{' '}
@@ -315,7 +325,10 @@ export default function ResultsPage() {
         {/* ══════════════════════════════════════
             E / S / G PILLAR SCORES
             ══════════════════════════════════════ */}
-        {pillars && (pillars.environmental > 0 || pillars.social > 0 || pillars.governance > 0) && (
+        {/* Fix H-08: show pillar section whenever pillar data exists — the old condition
+            hid the whole section when all three pillars scored 0, which is confusing
+            (user doesn't know if it's missing data or genuinely zero score). */}
+        {pillars && (
           <div className="print-section" style={{
             marginTop: 24, padding: '20px 24px',
             background: 'var(--paper)', border: '1px solid var(--line)',
@@ -471,7 +484,9 @@ export default function ResultsPage() {
                 </p>
               </div>
               <button className="btn btn-primary btn-sm" onClick={() => window.print()} style={{ flexShrink: 0 }}>
-                <Icon.download /> {lang === 'tr' ? 'PDF İndir' : 'Export PDF'}
+                {/* Fix L-11: window.print() opens the browser print dialog, not a real PDF.
+    Relabel honestly — jspdf/html2canvas are in package.json for a future upgrade. */}
+<Icon.download /> {lang === 'tr' ? 'Yazdır / PDF Kaydet' : 'Print / Save as PDF'}
               </button>
             </div>
           </div>
@@ -636,8 +651,14 @@ export default function ResultsPage() {
                       { days: 180, label: lang === 'tr' ? '180 Gün' : '180 Days' },
                       { days: 365, label: lang === 'tr' ? '12 Ay'   : '12 Months'},
                     ].map(({ days, label: lbl }) => {
-                      const bucket = recs.filter((r) => (r.timeline_days ?? 90) <= days &&
-                        (days === 90 || (r.timeline_days ?? 90) > days / 2));
+                      // Fix #26: use explicit lower bounds so items at exactly
+                      // the bucket boundary (e.g. 180 days) don't fall through.
+                      // Old logic used days/2 which excluded td=180 from the 365 bucket.
+                      const lowerBound: Record<number, number> = { 90: 0, 180: 90, 365: 180 };
+                      const bucket = recs.filter((r) => {
+                        const td = r.timeline_days ?? 90;
+                        return td <= days && td > (lowerBound[days] ?? 0);
+                      });
                       return (
                         <div key={days} style={{ borderTop: '2px solid var(--line)', paddingTop: 12 }}>
                           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', marginBottom: 8, letterSpacing: '0.06em' }}>
@@ -714,8 +735,11 @@ export default function ResultsPage() {
                         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
                           {lang === 'tr' ? 'Belgeler' : 'Documents'} ({ans.documents!.length})
                         </span>
+                        {/* Fix R5-H-03: use authenticated download URL so the file is served
+                            through ownership verification instead of the public /media/ path.
+                            Fix R6-18: moved comment outside map() to fix invalid JSX syntax. */}
                         {ans.documents?.map((doc) => (
-                          <a key={doc.id} href={doc.file} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                          <a key={doc.id} href={documentDownloadUrl(doc.id)} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                             <div style={{
                               display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
                               background: 'var(--cream)', border: '1px solid var(--line)', transition: 'border-color 0.15s',
