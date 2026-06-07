@@ -142,7 +142,12 @@ class Category(models.Model):
         # Fix H-04: run clean() on every save so weight validation fires even
         # for bulk admin operations (queryset.update() bypasses clean() entirely,
         # but individual .save() calls do run this).
-        if 'update_fields' not in kwargs:
+        # Fix MED-01: also run full_clean() when update_fields includes any weight
+        # field — the old guard skipped validation for partial saves, allowing
+        # invalid weight sums to be stored via update_fields=['environmental_weight'].
+        update_fields = kwargs.get('update_fields')
+        weight_fields = {'environmental_weight', 'social_weight', 'governance_weight'}
+        if update_fields is None or weight_fields & set(update_fields):
             self.full_clean()
         super().save(*args, **kwargs)
 
@@ -333,8 +338,10 @@ class QuestionnaireAttempt(models.Model):
         ordering = ['-started_at']
     
     def __str__(self):
-        survey_name = self.survey.name if self.survey else 'No Survey'
-        return f"{self.user.username} - {survey_name} - {self.started_at.strftime('%Y-%m-%d')}"
+        # Fix LOW-03: avoid lazy-loading self.survey.name and self.user.username
+        # on every admin list row (2 extra queries per row → N+1 in admin).
+        # Use PK only — zero extra DB queries.
+        return f"Attempt #{self.pk}"
     
     def calculate_score(self):
         """

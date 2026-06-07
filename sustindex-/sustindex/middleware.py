@@ -32,22 +32,30 @@ class SecurityHeadersMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
+        # Fix HIGH-03: build the CSP header once at startup using FRONTEND_URL /
+        # BACKEND_URL from settings so the dev frontend (:3000) and backend (:8000)
+        # are both included in connect-src.  The old 'self' alone blocked all XHR
+        # from the Next.js dev server to the Django API.
+        from django.conf import settings as _s
+        _frontend = getattr(_s, 'FRONTEND_URL', 'http://localhost:3000')
+        _backend  = getattr(_s, 'BACKEND_URL',  'http://localhost:8000')
+        self._csp_header = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "font-src 'self'; "
+            f"connect-src 'self' {_frontend} {_backend}; "
+            "frame-ancestors 'none'; "
+            "object-src 'none';"
+        )
 
     def __call__(self, request):
         response = self.get_response(request)
 
         # Don't override if a view has already set its own CSP header.
         if 'Content-Security-Policy' not in response:
-            response['Content-Security-Policy'] = (
-                "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline'; "
-                "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data: blob:; "
-                "font-src 'self'; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'; "
-                "object-src 'none';"
-            )
+            response['Content-Security-Policy'] = self._csp_header
 
         if 'Referrer-Policy' not in response:
             response['Referrer-Policy'] = 'strict-origin-when-cross-origin'

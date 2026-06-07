@@ -228,8 +228,11 @@ export default function SurveysPage() {
   const [retryKey,        setRetryKey]        = useState(0);       // increment to re-trigger the fetch effect
   const [starting,        setStarting]        = useState<number | null>(null);
   const [startErr,        setStartErr]        = useState('');
-  // Sector modal: pendingSurveyId is set when user clicks Start; cleared when modal closes.
+  // Sector modal: pendingSurveyId (state) drives the modal open/closed;
+  // pendingSurveyRef (ref) holds the value for handleSectorConfirm so the
+  // callback doesn't need pendingSurveyId in its dependency array (Fix LOW-04).
   const [pendingSurveyId, setPendingSurveyId] = useState<number | null>(null);
+  const pendingSurveyRef  = useRef<number | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -260,15 +263,19 @@ export default function SurveysPage() {
   const handleStart = (surveyId: number) => {
     if (starting !== null || submitLockRef.current) return;
     setStartErr('');
+    pendingSurveyRef.current = surveyId;   // Fix LOW-04: store in ref (no stale-closure risk)
     setPendingSurveyId(surveyId);
   };
 
   /* Step 2 — user picks a sector in the modal and clicks "Continue" */
+  // Fix LOW-04: read surveyId from the ref instead of from state so this callback
+  // never needs pendingSurveyId or starting in its dependency array, eliminating
+  // the stale-closure risk that caused occasional "null surveyId" bugs on rapid clicks.
   const handleSectorConfirm = useCallback(async (sector: string) => {
-    const surveyId = pendingSurveyId;
+    const surveyId = pendingSurveyRef.current;
+    pendingSurveyRef.current = null;
     setPendingSurveyId(null);  // close modal immediately so UX is snappy
-    if (surveyId === null) return;
-    if (starting !== null || submitLockRef.current) return;
+    if (surveyId === null || submitLockRef.current) return;
     submitLockRef.current = true;
     setStarting(surveyId);
     setStartErr('');
@@ -284,10 +291,11 @@ export default function SurveysPage() {
     } finally {
       submitLockRef.current = false;
     }
-  }, [pendingSurveyId, starting, router, t]);
+  }, [router, t]);
 
   /* Modal cancel — just dismiss without starting */
   const handleSectorCancel = useCallback(() => {
+    pendingSurveyRef.current = null;
     setPendingSurveyId(null);
   }, []);
 

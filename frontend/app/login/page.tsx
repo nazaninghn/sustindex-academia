@@ -15,7 +15,7 @@ export default function LoginPage() {
 
   // M4: redirect already-authenticated users away from the login page.
   useEffect(() => {
-    if (!authLoading && user) router.push('/dashboard');
+    if (!authLoading && user) router.replace('/dashboard');
   }, [authLoading, user, router]);
 
   const [formData, setFormData] = useState({ username: '', password: '' });
@@ -29,7 +29,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(formData.username, formData.password, remember);
-      router.push('/dashboard');
+      router.replace('/dashboard');
     } catch (err: unknown) {
       // L1: narrow err from unknown before property access.
       const e = err as { response?: { status?: number; data?: { detail?: string } } };

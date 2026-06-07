@@ -56,6 +56,10 @@ api.interceptors.response.use(
 
     const refresh = getToken('refresh_token');
     if (!refresh) {
+      // Fix CRIT-02: flush the queue before redirecting so any requests that
+      // stacked up in failedQueue while isRefreshing=true are rejected cleanly
+      // rather than being left as unresolved promises (memory leak + hung UX).
+      flushQueue(error, null);
       if (typeof window !== 'undefined') {
         clearTokens();
         window.location.href = '/login';
@@ -107,8 +111,11 @@ export const attemptAPI = {
     return data;
   },
 
-  getAttempt: async (id: number) => {
-    const { data } = await api.get(`/api/v1/attempts/${id}/`);
+  // Fix HIGH-06: accept an optional AbortSignal so callers (results page) can
+  // cancel the request when the component unmounts, preventing state updates
+  // on an already-unmounted component.
+  getAttempt: async (id: number, signal?: AbortSignal) => {
+    const { data } = await api.get(`/api/v1/attempts/${id}/`, signal ? { signal } : {});
     return data;
   },
 

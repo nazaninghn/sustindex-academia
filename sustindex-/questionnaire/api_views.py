@@ -44,12 +44,33 @@ class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
     # Fix PERF: list uses SurveyListSerializer (no nested questions/choices) to
     # avoid loading 1000+ rows per request on the surveys page.
     # Detail endpoint still uses the full SurveySerializer with all questions.
-    queryset = (
-        Survey.objects.filter(is_active=True)
-        .prefetch_related('questions__choices', 'sessions')
-    )
+    queryset = Survey.objects.filter(is_active=True)
     serializer_class = SurveySerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.action == 'list':
+            # Fix MED-06: annotate with question counts in a single query so
+            # SurveyListSerializer.get_question_count() can read pre-computed
+            # values from the instance instead of issuing 2-3 extra queries per
+            # survey (N×3 queries → 1 query for the whole list).
+            from django.db.models import Count, Q
+            return Survey.objects.filter(is_active=True).annotate(
+                _active_total=Count(
+                    'questions',
+                    filter=Q(questions__is_active=True),
+                    distinct=True,
+                ),
+                _sector_total=Count(
+                    'questions',
+                    filter=Q(questions__is_active=True) & ~Q(questions__sector=''),
+                    distinct=True,
+                ),
+            )
+        return (
+            Survey.objects.filter(is_active=True)
+            .prefetch_related('questions__choices', 'sessions')
+        )
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -87,7 +108,9 @@ class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
     def sessions(self, request, pk=None):
         survey = self.get_object()
         sessions = survey.sessions.filter(is_active=True).select_related('survey')
-        serializer = SurveySessionSerializer(sessions, many=True)
+        # Fix HIGH-07: pass context so the serializer can build absolute URLs for
+        # any file/hyperlink fields and access the authenticated request.
+        serializer = SurveySessionSerializer(sessions, many=True, context={'request': request})
         return Response(serializer.data)
 
 
@@ -283,7 +306,13 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
-        attempt = self.get_object()
+        # Fix HIGH-05: scope to request.user regardless of staff status to prevent
+        # IDOR — a staff user should not be able to complete another user's attempt
+        # via this endpoint (admin operations belong in the admin panel).
+        attempt = get_object_or_404(
+            self._base_queryset().filter(user=request.user),
+            pk=pk,
+        )
         if attempt.is_completed:
             return Response(
                 {'error': 'Attempt already completed'},

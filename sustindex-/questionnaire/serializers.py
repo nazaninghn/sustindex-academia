@@ -170,6 +170,11 @@ def _effective_question_count(survey):
     return total_active
 
 
+# Fix MED-06: GRI defines exactly 8 sector standards in this system.
+# Used to compute per-company question count from annotated sector totals.
+_NUM_GRI_SECTORS = 8
+
+
 class SurveyListSerializer(serializers.ModelSerializer):
     """
     Lightweight serializer for GET /api/v1/surveys/ (list).
@@ -177,6 +182,11 @@ class SurveyListSerializer(serializers.ModelSerializer):
     Returns `question_count` that reflects the per-company effective count:
       • For combined surveys (any sector-tagged questions): universal + 8 (one sector).
       • For plain surveys: total active questions.
+
+    Fix MED-06: when SurveyViewSet annotates the queryset with _active_total and
+    _sector_total (done for the list action), get_question_count() reads those
+    pre-computed integers from the instance instead of issuing 2-3 extra queries
+    per survey (N×3 queries → 1 query for the whole list).
     """
     question_count = serializers.SerializerMethodField()
 
@@ -189,6 +199,14 @@ class SurveyListSerializer(serializers.ModelSerializer):
         ]
 
     def get_question_count(self, obj):
+        active_total = getattr(obj, '_active_total', None)
+        sector_total = getattr(obj, '_sector_total', None)
+        if active_total is not None and sector_total is not None:
+            if sector_total > 0:
+                per_sector = sector_total // _NUM_GRI_SECTORS
+                return active_total - sector_total + per_sector
+            return active_total
+        # Fallback for calls outside the list action (e.g. tests, management commands)
         return _effective_question_count(obj)
 
     def to_representation(self, instance):

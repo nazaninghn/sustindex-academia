@@ -22,7 +22,10 @@ def generate_report(request, attempt_id):
 
     # Fix BC: was attempt.calculate_esg_scores() — method does not exist.
     # calculate_scores() is the correct name; it saves sub-scores and returns the dict.
-    scores = attempt.calculate_scores()
+    # Fix CRIT-03: pass save=False so we don't overwrite the frozen scores on a
+    # completed attempt.  The report is generated from the fresh calculation but
+    # the stored score record (which was locked at completion time) is preserved.
+    scores = attempt.calculate_scores(save=False)
     esg_scores = {
         'total':         scores['total_percentage'],
         'grade':         scores['grade'],
@@ -281,14 +284,6 @@ def get_total_documents_count(attempt):
     from questionnaire.models import UserDocument
     return UserDocument.objects.filter(answer__attempt=attempt).count()
 
-def get_category_documents_count(attempt, category):
-    """Get number of uploaded documents for a specific category"""
-    from questionnaire.models import UserDocument
-    return UserDocument.objects.filter(
-        answer__attempt=attempt,
-        answer__question__category=category
-    ).count()
-
 def get_component_grade(score):
     """Determine grade for each component"""
     if score >= 80:
@@ -309,16 +304,18 @@ def get_component_grade(score):
 @login_required
 def reports_dashboard(request):
     """User reports dashboard"""
-    user_reports = (
+    # Fix HIGH-04: evaluate the queryset once so the template render and
+    # .count() don't issue two separate SQL queries for the same data.
+    reports_list = list(
         Report.objects
         .filter(attempt__user=request.user)
         .select_related('attempt__user', 'attempt__survey')
         .order_by('-generated_at')
     )
-    
+
     context = {
-        'reports': user_reports,
-        'total_reports': user_reports.count()
+        'reports':       reports_list,
+        'total_reports': len(reports_list),
     }
     
     return render(request, 'reports/dashboard.html', context)

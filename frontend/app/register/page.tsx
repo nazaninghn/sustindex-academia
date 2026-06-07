@@ -43,7 +43,7 @@ export default function RegisterPage() {
 
   // M4: redirect already-authenticated users away from the register page.
   useEffect(() => {
-    if (!authLoading && user) router.push('/dashboard');
+    if (!authLoading && user) router.replace('/dashboard');
   }, [authLoading, user, router]);
 
   const [formData, setFormData] = useState({
@@ -66,7 +66,7 @@ export default function RegisterPage() {
     try {
       // Send all fields including password_confirm — backend validates them server-side too
       await register(formData);
-      router.push('/dashboard');
+      router.replace('/dashboard');
     } catch (err: unknown) {
       // L1: narrow err from unknown before property access.
       const e = err as { response?: { status?: number; data?: { username?: string[]; email?: string[]; password?: string[]; password_confirm?: string[]; non_field_errors?: string[]; detail?: string } } };

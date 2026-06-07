@@ -207,10 +207,13 @@ class Command(BaseCommand):
                 # Use queryset.update() for existing → skips full_clean safely.
                 # Use direct save(skip_validation=True) for new → avoids cross-survey
                 # FK checks that would fail during construction.
+                # Fix MED-02: use first() directly instead of exists()+first()
+                # which issued two separate SELECT queries for the same row.
                 qs_match = Question.objects.filter(
                     survey=combined, category=cat, order=src_q.order
                 )
-                if qs_match.exists():
+                q = qs_match.first()
+                if q:
                     qs_match.update(
                         text=src_q.text,
                         text_en=src_q.text_en or src_q.text,
@@ -220,7 +223,6 @@ class Command(BaseCommand):
                         allow_multiple=src_q.allow_multiple,
                         sector='',
                     )
-                    q = qs_match.first()
                 else:
                     q = Question(
                         survey=combined, category=cat, order=src_q.order,
@@ -289,10 +291,12 @@ class Command(BaseCommand):
 
             for i, src_q in enumerate(src_qs, 1):
                 order = base + i
+                # Fix MED-02: first() instead of exists()+first() — saves one query per question.
                 qs_match = Question.objects.filter(
                     survey=combined, category=sector_cat, order=order
                 )
-                if qs_match.exists():
+                q = qs_match.first()
+                if q:
                     qs_match.update(
                         text=src_q.text,
                         text_en=src_q.text_en or src_q.text,
@@ -302,7 +306,6 @@ class Command(BaseCommand):
                         allow_multiple=src_q.allow_multiple,
                         sector=sector_code,
                     )
-                    q = qs_match.first()
                 else:
                     q = Question(
                         survey=combined, category=sector_cat, order=order,

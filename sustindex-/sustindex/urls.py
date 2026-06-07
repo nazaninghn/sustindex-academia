@@ -49,8 +49,15 @@ except (ImportError, AttributeError):
 # Fix M-22: import via django.conf.settings, not directly from the settings module.
 # Importing from the module creates a circular-import risk and bypasses Django's
 # settings loading machinery (lazy settings, env overrides, test settings).
+# Fix CRIT-01: fall back to checking INSTALLED_APPS when REST_FRAMEWORK_INSTALLED is
+# not explicitly set (the default was False which silently disabled all API routes).
 from django.conf import settings as _settings
-REST_FRAMEWORK_INSTALLED = getattr(_settings, 'REST_FRAMEWORK_INSTALLED', False)
+_rf_explicit = getattr(_settings, 'REST_FRAMEWORK_INSTALLED', None)
+REST_FRAMEWORK_INSTALLED = (
+    _rf_explicit
+    if _rf_explicit is not None
+    else 'rest_framework' in getattr(_settings, 'INSTALLED_APPS', [])
+)
 
 # Admin panel settings
 admin.site.site_header = "Sustindex Admin Panel"

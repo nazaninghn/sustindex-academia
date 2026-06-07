@@ -142,10 +142,15 @@ class UserViewSet(viewsets.ModelViewSet):
 
         # Fix H-12: blacklist all existing refresh tokens so a stolen token
         # can't be used to generate new access tokens after a password change.
+        # Fix MED-07: use bulk_create(ignore_conflicts=True) instead of a
+        # get_or_create loop — reduces N×(SELECT+INSERT) to 1 SELECT + 1 INSERT.
         try:
             from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
-            for token in OutstandingToken.objects.filter(user=request.user):
-                BlacklistedToken.objects.get_or_create(token=token)
+            tokens = list(OutstandingToken.objects.filter(user=request.user))
+            BlacklistedToken.objects.bulk_create(
+                [BlacklistedToken(token=t) for t in tokens],
+                ignore_conflicts=True,
+            )
         except Exception:
             pass  # token_blacklist app not installed — skip silently
 
@@ -251,12 +256,15 @@ class UserViewSet(viewsets.ModelViewSet):
 
         # Fix H-05: blacklist all existing refresh tokens so stolen tokens
         # remain invalid even within their 7-day lifetime after a reset.
-        # Fix R4-M-03: renamed loop variable from `token` to `outstanding_token`
-        # to avoid shadowing the `token` parameter extracted from request.data above.
+        # Fix MED-07: use bulk_create(ignore_conflicts=True) instead of a
+        # get_or_create loop — reduces N×(SELECT+INSERT) to 1 SELECT + 1 INSERT.
         try:
             from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
-            for outstanding_token in OutstandingToken.objects.filter(user=user):
-                BlacklistedToken.objects.get_or_create(token=outstanding_token)
+            tokens = list(OutstandingToken.objects.filter(user=user))
+            BlacklistedToken.objects.bulk_create(
+                [BlacklistedToken(token=t) for t in tokens],
+                ignore_conflicts=True,
+            )
         except Exception:
             pass  # token_blacklist app not installed — skip silently
 

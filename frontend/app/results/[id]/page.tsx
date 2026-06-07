@@ -141,7 +141,9 @@ export default function ResultsPage() {
   useEffect(() => {
     if (!user || !id) return;
     const controller = new AbortController();
-    attemptAPI.getAttempt(Number(id))
+    // Fix HIGH-06: pass controller.signal so the request is cancelled when the
+    // component unmounts, preventing setState calls on an already-unmounted component.
+    attemptAPI.getAttempt(Number(id), controller.signal)
       .then((data: Attempt) => {
         if (!controller.signal.aborted) setAttempt(data);
       })

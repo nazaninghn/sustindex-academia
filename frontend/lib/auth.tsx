@@ -116,6 +116,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     clearTokens();   // clears both localStorage and sessionStorage
     setUser(null);
+    // Fix MED-03: redirect to login immediately so the user can't stay on a
+    // protected page after logout.  Use replace() so the login page replaces
+    // the current history entry — pressing Back won't return to the protected page.
+    if (typeof window !== 'undefined') {
+      window.location.replace('/login');
+    }
   };
 
   return (

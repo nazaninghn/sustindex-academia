@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -247,6 +247,14 @@ export default function DashboardPage() {
   const [loading,     setLoading]     = useState(true);
   const [hasLoadErr,  setHasLoadErr]  = useState(false);
 
+  // Fix MED-05: track mounted state so async callbacks don't call setState
+  // on an unmounted component (avoids React "can't perform state update" warnings).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
@@ -257,15 +265,16 @@ export default function DashboardPage() {
     setHasLoadErr(false);
     attemptAPI.getMyAttempts()
       .then((data: DashAttempt[] | { results: DashAttempt[] }) => {
+        if (!mountedRef.current) return;
         const list = Array.isArray(data) ? data : (data?.results ?? []);
         setAttempts(list);
       })
       .catch(() => {
         // Fix #14: surface the error so users know a load failure happened.
         // Use a boolean flag so lang is not a dependency (avoids refetch on toggle).
-        setHasLoadErr(true);
+        if (mountedRef.current) setHasLoadErr(true);
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (mountedRef.current) setLoading(false); });
   }, [user]);
 
   /* Initial load */
