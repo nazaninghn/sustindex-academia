@@ -153,8 +153,9 @@ def _s(v):
     return str(v).strip()
 
 def _n(v, d=0):
+    # Fix L-5: bare except: catches SystemExit/KeyboardInterrupt — use specific types.
     try: return int(float(v))
-    except: return d
+    except (TypeError, ValueError): return d
 
 def _find_header(ws, col_b_val):
     for i, row in enumerate(ws.iter_rows(min_row=1, max_row=20, values_only=True), 1):

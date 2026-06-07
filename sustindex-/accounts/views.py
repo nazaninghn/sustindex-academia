@@ -37,8 +37,10 @@ def profile_setup(request):
 @login_required
 def dashboard(request):
     # Calculate stats for dashboard
-    completed_count = request.user.attempts.filter(is_completed=True).count()
-    last_attempt = request.user.attempts.filter(is_completed=True).first()
+    # Fix L-7: single query — evaluate once, derive both values from the same list.
+    completed_attempts = list(request.user.attempts.filter(is_completed=True).order_by('-completed_at'))
+    completed_count = len(completed_attempts)
+    last_attempt    = completed_attempts[0] if completed_attempts else None
     last_score = last_attempt.total_score if last_attempt else 0
     
     # Get latest ESG scores if available

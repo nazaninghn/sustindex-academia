@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -134,6 +134,11 @@ class UserViewSet(viewsets.ModelViewSet):
 
         request.user.set_password(new_password)
         request.user.save(update_fields=['password'])
+
+        # Fix H-4: update the session auth hash so a session-authenticated user
+        # is not immediately logged out after changing their own password.
+        # (JWT users are unaffected — their tokens are blacklisted below.)
+        update_session_auth_hash(request, request.user)
 
         # Fix H-12: blacklist all existing refresh tokens so a stolen token
         # can't be used to generate new access tokens after a password change.

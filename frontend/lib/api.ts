@@ -20,7 +20,13 @@ api.interceptors.request.use((config) => {
     let lang = 'en';
     try { lang = (typeof window !== 'undefined' && localStorage.getItem('sx_lang')) || 'en'; } catch { /* ignore */ }
     config.headers['Accept-Language'] = lang;
-    config.params = { ...(config.params || {}), lang };
+    // Fix M-2: only append ?lang= on safe/read methods (GET, HEAD, OPTIONS).
+    // Appending it to POST/PUT/PATCH/DELETE mutations is redundant (Accept-Language
+    // header already carries the preference) and risks confusing backend URL routing.
+    const method = (config.method || 'get').toUpperCase();
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      config.params = { ...(config.params || {}), lang };
+    }
   }
   return config;
 });

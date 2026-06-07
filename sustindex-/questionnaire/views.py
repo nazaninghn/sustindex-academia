@@ -4,6 +4,9 @@ from django.utils import timezone
 from django.http import JsonResponse
 from django.db import transaction
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Fix C-03: use magic-bytes MIME validation (same approach as api_views.py).
 # Content-Type header is set by the browser and trivially spoofable.
@@ -227,9 +230,11 @@ def questionnaire_result(request, attempt_id):
         defaults={'generated_at': timezone.now()}
     )
 
-    # Fix M-1: prefetch documents so the count loop is cache-hit only.
+    # Fix H-5: use len() on the prefetched relation, NOT .count() — .count()
+    # always fires a SQL COUNT query and completely bypasses the prefetch cache,
+    # producing one extra query per answer (N+1 with 184 Qs in GRI survey).
     documents_count = sum(
-        answer.documents.count()
+        len(answer.documents.all())
         for answer in attempt.answers.prefetch_related('documents').all()
     )
     attempt.documents_count = documents_count
@@ -317,8 +322,11 @@ def upload_document(request):
             'file_url':    document.file.url if document.file else None,
         })
 
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        # Fix C-2: never expose raw exception messages (file paths, SQL, stack traces)
+        # to the client — log server-side and return a generic safe message.
+        logger.exception('upload_document: unexpected error for user=%s', request.user.id)
+        return JsonResponse({'success': False, 'error': 'An unexpected error occurred. Please try again.'})
 
 
 @login_required
@@ -334,5 +342,7 @@ def delete_document(request, document_id):
         )
         document.delete()
         return JsonResponse({'success': True})
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        # Fix C-2: same — log server-side, return generic message to client.
+        logger.exception('delete_document: unexpected error for user=%s', request.user.id)
+        return JsonResponse({'success': False, 'error': 'An unexpected error occurred. Please try again.'})

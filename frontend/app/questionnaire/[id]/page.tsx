@@ -7,7 +7,7 @@ import Logo from '@/components/Logo';
 import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/shared';
-import { attemptAPI } from '@/lib/api';
+import { attemptAPI, API_URL } from '@/lib/api';
 import { sanitizeHtml, formatBytes } from '@/lib/utils';
 import logger from '@/lib/logger';
 import { emitDataChange } from '@/lib/events';
@@ -215,10 +215,20 @@ export default function QuestionnairePage() {
     }
   };
 
+  const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
   const addFiles = (newFiles: FileList | null) => {
     if (!newFiles || !q) return;
-    const arr = Array.from(newFiles);
-    setPendingFiles({ ...pendingFiles, [q.id]: [...files, ...arr] });
+    const oversized: string[] = [];
+    const valid = Array.from(newFiles).filter((f) => {
+      if (f.size > MAX_FILE_BYTES) { oversized.push(f.name); return false; }
+      return true;
+    });
+    if (oversized.length) {
+      setError(lang === 'tr'
+        ? `Bu dosyalar 10 MB sınırını aşıyor: ${oversized.join(', ')}`
+        : `These files exceed the 10 MB limit: ${oversized.join(', ')}`);
+    }
+    if (valid.length) setPendingFiles({ ...pendingFiles, [q.id]: [...files, ...valid] });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -472,7 +482,7 @@ export default function QuestionnairePage() {
               with the link.  The /attachment/ action enforces IsAuthenticated. */}
           {q.attachment && (
             <a
-              href={`/api/v1/questions/${q.id}/attachment/`} target="_blank" rel="noreferrer"
+              href={`${API_URL}/api/v1/questions/${q.id}/attachment/`} target="_blank" rel="noreferrer"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12,
                 fontSize: 11, color: 'var(--olive-deep)', textDecoration: 'none',

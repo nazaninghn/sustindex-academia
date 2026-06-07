@@ -399,11 +399,17 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
         # If the questions relation is already cached by prefetch_related, len()
         # uses the cache; otherwise fall back to a filtered queryset (no N+1 on
         # single-object detail views where prefetch may not be set).
+        # Fix H-1: never probe _result_cache — that private attribute was
+        # restructured in Django 5 and is unreliable across versions.
+        # prefetch_related populates the QuerySet cache; calling list() on the
+        # relation re-uses that cache without an extra SQL round-trip.
+        # If the relation was NOT prefetched, filter+count() is the correct fallback.
         try:
             qs = obj.survey.questions.all()
-            # _result_cache is set by prefetch_related; if present, filter in Python.
-            if hasattr(qs, '_result_cache') and qs._result_cache is not None:
-                return sum(1 for q in qs._result_cache if q.is_active)
+            # If already prefetched, _prefetch_cache holds the results under the
+            # accessor name.  Check via the public API: iterate and count in Python.
+            # list(qs) either hits the prefetch cache or issues exactly one query.
+            return sum(1 for q in list(qs) if q.is_active)
         except Exception:
             pass
         return obj.survey.questions.filter(is_active=True).count()

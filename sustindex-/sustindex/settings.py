@@ -429,7 +429,8 @@ LOGGING = {
 
 # Security settings for production
 if not DEBUG:
-    SECURE_BROWSER_XSS_FILTER = True
+    # Fix M-3: SECURE_BROWSER_XSS_FILTER was removed in Django 4.0 — it is a no-op
+    # in Django 5 and modern browsers no longer support the XSS auditor header anyway.
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
     SECURE_HSTS_SECONDS = 31536000
