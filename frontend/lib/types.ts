@@ -47,9 +47,21 @@ export interface DocumentResponse {
 }
 
 export interface Recommendation {
-  category: string;
-  priority: string;
-  suggestion: string;
+  category:       string;
+  priority:       string;
+  /** Legacy field — prefer description */
+  suggestion?:    string;
+  /** Legacy fields for backward compat */
+  text?:          string;
+  recommendation?: string;
+  /** Current fields */
+  title?:         string;
+  description?:   string;
+  gri_standard?:  string;
+  quick_win?:     string;
+  timeline_days?: number;
+  effort?:        string;
+  score_pct?:     number;
 }
 
 export interface CompleteAttemptResponse {

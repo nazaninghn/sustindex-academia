@@ -139,12 +139,20 @@ export default function ResultsPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (user && id) {
-      attemptAPI.getAttempt(Number(id))
-        .then((data: Attempt) => setAttempt(data))
-        .catch(() => setFetchError(langRef.current === 'tr' ? 'Değerlendirme yüklenemedi.' : 'Failed to load assessment.'))
-        .finally(() => setLoading(false));
-    }
+    if (!user || !id) return;
+    const controller = new AbortController();
+    attemptAPI.getAttempt(Number(id))
+      .then((data: Attempt) => {
+        if (!controller.signal.aborted) setAttempt(data);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted)
+          setFetchError(langRef.current === 'tr' ? 'Değerlendirme yüklenemedi.' : 'Failed to load assessment.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, id]);
 
@@ -197,9 +205,11 @@ export default function ResultsPage() {
     : '—';
 
   const evidenceAnswers = answersArr.filter((a) => a.notes || (a.documents?.length ?? 0) > 0);
-  const highPriorityRecs = recs.filter((r) => r.priority === 'High');
-  const mediumRecs       = recs.filter((r) => r.priority === 'Medium');
-  const lowRecs          = recs.filter((r) => r.priority === 'Low');
+  // Normalise to lowercase for comparison so the filter works regardless of
+  // whether the API returns 'High', 'HIGH', or localised 'Yüksek' etc.
+  const highPriorityRecs = recs.filter((r) => r.priority?.toLowerCase() === 'high');
+  const mediumRecs       = recs.filter((r) => r.priority?.toLowerCase() === 'medium');
+  const lowRecs          = recs.filter((r) => r.priority?.toLowerCase() === 'low');
 
   /* ── Pillar label helper ── */
   const pillarLabel = (key: string) => {

@@ -67,7 +67,14 @@ class LessonViewSet(viewsets.ReadOnlyModelViewSet):
                 },
             )
 
-        serializer = LessonProgressSerializer(progress)
+        # Re-fetch with select_related so LessonProgressSerializer can access
+        # lesson.title and lesson.course.title without issuing lazy-load queries.
+        progress = (
+            LessonProgress.objects
+            .select_related('lesson__course')
+            .get(pk=progress.pk)
+        )
+        serializer = LessonProgressSerializer(progress, context={'request': request})
         return Response(serializer.data)
 
 

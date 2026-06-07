@@ -24,10 +24,22 @@ function safeRemove(store: Storage, key: string): void {
   try { store.removeItem(key); } catch { /* ignore */ }
 }
 
+// Namespace keys to avoid collisions with other apps on the same origin.
+const KEY_ACCESS  = 'sustindex_access_token';
+const KEY_REFRESH = 'sustindex_refresh_token';
+
+/** Map the public key name to its namespaced storage key. */
+function storageKey(key: string): string {
+  if (key === 'access_token')  return KEY_ACCESS;
+  if (key === 'refresh_token') return KEY_REFRESH;
+  return key; // pass through any other key unchanged
+}
+
 /** Read a token from whichever store currently holds it. */
 export function getToken(key: string): string | null {
   if (typeof window === 'undefined') return null;
-  return safeGet(localStorage, key) ?? safeGet(sessionStorage, key);
+  const k = storageKey(key);
+  return safeGet(localStorage, k) ?? safeGet(sessionStorage, k);
 }
 
 /**
@@ -37,9 +49,9 @@ export function getToken(key: string): string | null {
 export function setToken(key: string, value: string): void {
   if (typeof window === 'undefined') return;
   const useSession =
-    !safeGet(localStorage, 'refresh_token') &&
-    !!safeGet(sessionStorage, 'refresh_token');
-  safeSet(useSession ? sessionStorage : localStorage, key, value);
+    !safeGet(localStorage, KEY_REFRESH) &&
+    !!safeGet(sessionStorage, KEY_REFRESH);
+  safeSet(useSession ? sessionStorage : localStorage, storageKey(key), value);
 }
 
 /**
@@ -55,14 +67,14 @@ export function storeTokens(
   if (typeof window === 'undefined') return;
   clearTokens(); // avoid stale tokens in either store
   const store = remember ? localStorage : sessionStorage;
-  safeSet(store, 'access_token', access);
-  safeSet(store, 'refresh_token', refresh);
+  safeSet(store, KEY_ACCESS, access);
+  safeSet(store, KEY_REFRESH, refresh);
 }
 
 /** Remove tokens from BOTH stores (logout / expired session). */
 export function clearTokens(): void {
   if (typeof window === 'undefined') return;
-  for (const key of ['access_token', 'refresh_token']) {
+  for (const key of [KEY_ACCESS, KEY_REFRESH]) {
     safeRemove(localStorage, key);
     safeRemove(sessionStorage, key);
   }

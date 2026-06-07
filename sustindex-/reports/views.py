@@ -1,11 +1,16 @@
+import logging
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.template.loader import render_to_string
 from questionnaire.models import QuestionnaireAttempt
 from .models import Report, ReportSection
 import json
+
+logger = logging.getLogger(__name__)
 
 @login_required
 def generate_report(request, attempt_id):
@@ -27,15 +32,16 @@ def generate_report(request, attempt_id):
         'categories':    scores['categories'],
     }
 
-    report, created = Report.objects.get_or_create(
-        attempt=attempt,
-        defaults={'generated_at': timezone.now()}
-    )
-    
-    report.sections.all().delete()
-    
-    create_report_sections(report, attempt, esg_scores)
-    
+    with transaction.atomic():
+        report, created = Report.objects.get_or_create(
+            attempt=attempt,
+            defaults={'generated_at': timezone.now()}
+        )
+
+        report.sections.all().delete()
+
+        create_report_sections(report, attempt, esg_scores)
+
     return redirect('view_report', report_id=report.id)
 
 @login_required
@@ -151,7 +157,7 @@ def download_report_pdf(request, report_id):
             
             for i, rec in enumerate(recommendations, 1):
                 story.append(Paragraph(f"{i}. {rec['category']} ({rec['priority']} Priority)", styles['Heading3']))
-                story.append(Paragraph(rec['suggestion'], styles['Normal']))
+                story.append(Paragraph(rec['description'], styles['Normal']))
                 story.append(Spacer(1, 12))
         
         doc.build(story)
@@ -172,12 +178,13 @@ def download_report_pdf(request, report_id):
         
     except ImportError:
         return JsonResponse({'error': 'PDF generation not available. Please install reportlab.'}, status=500)
-    except Exception as e:
-        return JsonResponse({'error': f'Error generating PDF: {str(e)}'}, status=500)
+    except Exception:
+        logger.exception('PDF generation failed for report %s', report_id)
+        return JsonResponse({'error': 'An error occurred while generating the PDF. Please try again.'}, status=500)
 
 def create_report_sections(report, attempt, esg_scores):
     """Create report sections"""
-    
+
     executive_summary = f"""
     This sustainability assessment evaluates your organization's Environmental, Social, and Governance (ESG) performance.
 
@@ -186,56 +193,82 @@ def create_report_sections(report, attempt, esg_scores):
     • Environmental Score: {esg_scores['environmental'] or 0:.1f}/100
     • Social Score: {esg_scores['social'] or 0:.1f}/100
     • Governance Score: {esg_scores['governance'] or 0:.1f}/100
-    
+
     This assessment is based on internationally recognized ESG frameworks and best practices.
-    
+
     Supporting Documents: {get_total_documents_count(attempt)} files uploaded as evidence.
     """
-    
+
     ReportSection.objects.create(
         report=report,
         title="Executive Summary",
         content=executive_summary,
         order=1
     )
-    
-    from questionnaire.models import Category
+
+    from questionnaire.models import Category, UserDocument
+
     # Fix BE: was Category.objects.all() — loaded ALL categories from every survey.
     # Now scoped to the attempt's survey (or falls back to questions' implied survey).
     if attempt.survey:
-        categories = Category.objects.filter(
+        categories = list(Category.objects.filter(
             survey=attempt.survey
-        ).order_by('order')
+        ).order_by('order'))
     else:
-        categories = Category.objects.filter(
+        categories = list(Category.objects.filter(
             questions__is_active=True
-        ).distinct().order_by('order')
+        ).distinct().order_by('order'))
+
+    # Fix N+1: build a {category_id: percentage} lookup from the already-computed
+    # category breakdown that was passed in via esg_scores['categories'], so we
+    # never call category.get_category_score(attempt) (3 DB queries per category).
+    score_by_cat_id = {
+        c['id']: c['percentage']
+        for c in (esg_scores.get('categories') or [])
+    }
+
+    # Fix N+1: batch-count documents per category in a single query instead of
+    # one COUNT per category in the loop.
+    from django.db.models import Count
+    doc_counts_qs = (
+        UserDocument.objects
+        .filter(answer__attempt=attempt)
+        .values('answer__question__category_id')
+        .annotate(cnt=Count('id'))
+    )
+    doc_count_by_cat_id = {row['answer__question__category_id']: row['cnt'] for row in doc_counts_qs}
 
     for i, category in enumerate(categories, 2):
-        category_score = category.get_category_score(attempt)
-        documents_count = get_category_documents_count(attempt, category)
-        
+        # Use pre-computed score; fall back to per-category DB call only when the
+        # breakdown data is unavailable (e.g. called from a non-standard code path).
+        if category.id in score_by_cat_id:
+            category_score = score_by_cat_id[category.id]
+        else:
+            category_score = category.get_category_score(attempt)
+
+        documents_count = doc_count_by_cat_id.get(category.id, 0)
+
         content = f"""
         Category: {category.name}
         Score: {category_score:.1f}/100
         Supporting Documents: {documents_count} files
-        
+
         {category.description}
-        
+
         Performance Analysis:
         """
-        
+
         if category_score >= 70:
             content += "Excellent performance in this category. Continue current practices and look for opportunities to share best practices."
         elif category_score >= 50:
             content += "Good performance with room for improvement. Focus on addressing gaps identified in the assessment."
         else:
             content += "Significant improvement needed. This should be a priority area for your sustainability initiatives."
-        
+
         # Add document details if available
         if documents_count > 0:
             content += f"\n\nEvidence provided: {documents_count} supporting documents were submitted for questions in this category, demonstrating commitment to transparency and documentation."
-        
+
         ReportSection.objects.create(
             report=report,
             title=f"{category.name} Analysis",
@@ -276,7 +309,12 @@ def get_component_grade(score):
 @login_required
 def reports_dashboard(request):
     """User reports dashboard"""
-    user_reports = Report.objects.filter(attempt__user=request.user).order_by('-generated_at')
+    user_reports = (
+        Report.objects
+        .filter(attempt__user=request.user)
+        .select_related('attempt__user', 'attempt__survey')
+        .order_by('-generated_at')
+    )
     
     context = {
         'reports': user_reports,

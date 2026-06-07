@@ -12,7 +12,11 @@ class UserSerializer(serializers.ModelSerializer):
                   'membership_type', 'company_name', 'phone', 'created_at']
         # Fix H-01: lock privilege fields so no code path (including an indirect
         # call to update()) can accidentally allow a user to escalate themselves.
-        read_only_fields = ['id', 'created_at', 'membership_type', 'is_staff', 'is_superuser']
+        # Note: is_staff and is_superuser are intentionally NOT in `fields` so
+        # they are never serialized to API clients.  They are omitted from
+        # read_only_fields here because listing a field as read-only when it is
+        # not in `fields` has no effect and is misleading.
+        read_only_fields = ['id', 'created_at', 'membership_type']
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):

@@ -74,14 +74,21 @@ function CoursesStrip() {
 
   useEffect(() => {
     if (!user) return;
+    const controller = new AbortController();
     elearningAPI
       .getCourses()
       .then((data: StripCourse[] | { results: StripCourse[] }) => {
+        if (controller.signal.aborted) return;
         const list: StripCourse[] = Array.isArray(data) ? data : (data?.results ?? []);
         setCourses(list.slice(0, 4));
       })
-      .catch(() => { setStripError(true); setCourses([]); })
-      .finally(() => setStripLoading(false));
+      .catch(() => {
+        if (!controller.signal.aborted) { setStripError(true); setCourses([]); }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStripLoading(false);
+      });
+    return () => controller.abort();
   }, [user]);
 
   return (

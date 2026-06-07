@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.exceptions import PermissionDenied, ValidationError as DRFValidationError
+from django.conf import settings as django_settings
 from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
@@ -237,20 +238,27 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             # Fix H-2: enforce membership-gating at the API layer so direct API
             # calls can't bypass the attempt limits enforced in the template view.
-            # Silver tier: max 1 completed assessment; Gold: unlimited.
+            # Limits are read from settings.ATTEMPT_LIMITS (same source as the
+            # template view) so the two enforcement points stay in sync.
             # select_for_update locks the rows so a concurrent request is blocked
             # until this transaction commits, eliminating the race condition.
-            if user.membership_type == 'silver':
+            _attempt_limits = getattr(
+                django_settings, 'ATTEMPT_LIMITS',
+                {'free': 3, 'silver': 1, 'gold': None},
+            )
+            _limit = _attempt_limits.get(user.membership_type)
+            if _limit is not None:
                 completed_count = (
                     QuestionnaireAttempt.objects
                     .select_for_update()
                     .filter(user=user, is_completed=True)
                     .count()
                 )
-                if completed_count >= 1:
+                if completed_count >= _limit:
                     raise PermissionDenied(
-                        'Your Silver membership allows 1 completed assessment. '
-                        'Upgrade to Gold for unlimited access.'
+                        f'Your {user.membership_type.capitalize()} membership '
+                        f'allows {_limit} completed assessment(s). '
+                        'Upgrade your membership for more access.'
                     )
 
             survey = serializer.validated_data.get('survey')

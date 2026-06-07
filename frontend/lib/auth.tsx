@@ -55,10 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = getToken('access_token');
     if (!token) { setIsLoading(false); return; }
+    let active = true;
     me()
-      .then(({ data }) => setUser(data))
-      .catch(() => clearTokens())
-      .finally(() => setIsLoading(false));
+      .then(({ data }) => { if (active) setUser(data); })
+      .catch(() => { if (active) clearTokens(); })
+      .finally(() => { if (active) setIsLoading(false); });
+    return () => { active = false; };
   }, []);
 
   /* Re-fetch user from server (call after profile update) */

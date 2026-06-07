@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -37,24 +37,26 @@ export default function HistoryPage() {
     if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
-  // Fix B: wrap in useCallback so the effect dependency is stable
-  const loadAttempts = useCallback(async () => {
-    try {
-      const data = await attemptAPI.getMyAttempts();
-      if (Array.isArray(data)) setAttempts(data);
-      else if (data && Array.isArray(data.results)) setAttempts(data.results);
-      else setAttempts([]);
-    } catch {
-      setLoadError(true);
-      setAttempts([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []); // no external deps — setAttempts/setLoading are stable
-
   useEffect(() => {
-    if (user) loadAttempts();
-  }, [user, loadAttempts]); // Fix B: loadAttempts now in deps
+    if (!user) return;
+    let active = true;
+    (async () => {
+      try {
+        const data = await attemptAPI.getMyAttempts();
+        if (!active) return;
+        if (Array.isArray(data)) setAttempts(data);
+        else if (data && Array.isArray(data.results)) setAttempts(data.results);
+        else setAttempts([]);
+      } catch {
+        if (!active) return;
+        setLoadError(true);
+        setAttempts([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [user]);
 
   if (authLoading || loading) {
     return (

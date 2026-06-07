@@ -420,7 +420,9 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
             # accessor name.  Check via the public API: iterate and count in Python.
             # list(qs) either hits the prefetch cache or issues exactly one query.
             return sum(1 for q in list(qs) if q.is_active)
-        except Exception:
+        except (AttributeError, TypeError):
+            # survey.questions accessor missing (should not happen in practice)
+            # or list() on a non-iterable — fall back to a filtered count.
             pass
         return obj.survey.questions.filter(is_active=True).count()
 
