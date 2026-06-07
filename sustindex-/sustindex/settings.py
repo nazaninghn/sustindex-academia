@@ -267,7 +267,9 @@ CKEDITOR_CONFIGS = {
 
 # Login/Logout redirects
 LOGIN_REDIRECT_URL = 'dashboard'
-LOGOUT_REDIRECT_URL = 'home'
+# Fix: 'home' URL name does not exist in urls.py (the view is commented out).
+# Redirect admin logouts to /admin/ login instead of raising NoReverseMatch 500.
+LOGOUT_REDIRECT_URL = '/admin/'
 LOGIN_URL = 'login'
 
 # REST Framework Configuration (only if installed)

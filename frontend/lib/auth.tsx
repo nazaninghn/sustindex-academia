@@ -77,6 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    *                  false          → tokens live in sessionStorage (cleared when tab closes).
    */
   const login = async (username: string, password: string, remember = true) => {
+    // Fix: clear stale tokens before login for the same reason as register —
+    // an expired token in storage would cause SimpleJWT to return 401 on
+    // the /auth/token/ endpoint before it even checks the credentials.
+    clearTokens();
     // Fix H-05: use shared api instance (not bare axios) so the Accept-Language
     // header is sent and the 401-refresh interceptor is active for these calls.
     const { data: tokens } = await api.post('/api/v1/auth/token/', { username, password });
@@ -86,7 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (data: RegisterPayload) => {
-    // Fix H-05: same — use shared api instance instead of bare axios.
+    // Fix: clear any stale/expired tokens before the call.
+    // The api interceptor adds Authorization: Bearer <token> to every request;
+    // if an old token is in storage, SimpleJWT raises 401 AuthenticationFailed
+    // even on AllowAny endpoints like /register/.
+    clearTokens();
     const { data: res } = await api.post('/api/v1/users/register/', data);
     // Registration always remembers (user explicitly created an account)
     storeTokens(res.access, res.refresh, true);
