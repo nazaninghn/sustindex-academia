@@ -460,14 +460,18 @@ const LangCtx = createContext<LangContextType>({
 });
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
-  // Fix BUG-18: localStorage is unavailable during SSR — guard with typeof window
-  // to prevent hydration mismatch when the user has a stored language preference.
-  const [lang, setLangState] = useState<'en' | 'tr'>(() => {
+  // Fix FE-H4: always start with 'en' to match the server render — avoids hydration mismatch.
+  // After mount, read localStorage and update if the user has a stored preference.
+  const [lang, setLangState] = useState<'en' | 'tr'>('en');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
     try {
-      if (typeof window === 'undefined') return 'en';
-      return (localStorage.getItem('sx_lang') as 'en' | 'tr') || 'en';
-    } catch { return 'en'; }
-  });
+      const stored = localStorage.getItem('sx_lang') as 'en' | 'tr' | null;
+      if (stored === 'en' || stored === 'tr') setLangState(stored);
+    } catch {}
+  }, []);
 
   const setLang = (l: 'en' | 'tr') => {
     setLangState(l);

@@ -265,6 +265,14 @@ CKEDITOR_CONFIGS = {
     },
 }
 
+# Maximum completed questionnaire attempts per membership tier.
+# Set to None for unlimited.
+ATTEMPT_LIMITS = {
+    'free':   3,
+    'silver': 1,
+    'gold':   None,  # unlimited
+}
+
 # Login/Logout redirects
 LOGIN_REDIRECT_URL = 'dashboard'
 # Fix: 'home' URL name does not exist in urls.py (the view is commented out).

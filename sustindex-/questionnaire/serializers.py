@@ -6,10 +6,20 @@ from .models import (
 
 
 class ChoiceSerializer(serializers.ModelSerializer):
+    # Fix L-3: hide score from non-staff users — exposing it allows
+    # respondents to game the questionnaire by selecting the highest-scoring option.
+    score = serializers.SerializerMethodField()
+
     class Meta:
         model = Choice
         fields = ['id', 'text', 'text_tr', 'text_en', 'score', 'order']
-    
+
+    def get_score(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_staff:
+            return obj.score
+        return None
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')

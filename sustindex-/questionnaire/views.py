@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.http import JsonResponse
 from django.db import transaction
+from django.conf import settings as django_settings
 import json
 import logging
 
@@ -16,6 +17,19 @@ try:
 except ImportError:
     _magic = None           # type: ignore
     _MAGIC_AVAILABLE = False
+
+# Fix L-8: module-level set so both questionnaire_page (batch upload) and
+# upload_document (single upload) share the same allowlist without duplication.
+ALLOWED_UPLOAD_MIME_TYPES = {
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+}
 
 from .models import (
     Survey, SurveySession, Category, Question, Choice,
@@ -39,7 +53,11 @@ def start_questionnaire(request):
     user = request.user
     attempts_count = QuestionnaireAttempt.objects.filter(user=user, is_completed=True).count()
 
-    if user.membership_type == 'silver' and attempts_count >= 1:
+    # Fix BE-C1: apply per-tier attempt limits; free users were previously
+    # unrestricted.  Limits are configurable via settings.ATTEMPT_LIMITS.
+    attempt_limits = getattr(django_settings, 'ATTEMPT_LIMITS', {'free': 3, 'silver': 1, 'gold': None})
+    limit = attempt_limits.get(user.membership_type)
+    if limit is not None and attempts_count >= limit:
         return render(request, 'questionnaire/limit_reached.html')
 
     survey = Survey.objects.filter(is_active=True).first()
@@ -157,13 +175,23 @@ def questionnaire_page(request, attempt_id):
                 )
 
             for file in files:
-                if file.size <= 10 * 1024 * 1024:   # 10 MB limit
-                    UserDocument.objects.create(
-                        answer=answer,
-                        title=file.name,
-                        file=file,
-                        file_size=file.size,
-                    )
+                if file.size > 10 * 1024 * 1024:
+                    continue  # silently skip oversized files (limit already enforced client-side)
+                # Fix L-8: validate MIME type on the batch upload path — same check as
+                # the dedicated upload_document endpoint.
+                if _MAGIC_AVAILABLE:
+                    header = file.read(2048); file.seek(0)
+                    if _magic.from_buffer(header, mime=True) not in ALLOWED_UPLOAD_MIME_TYPES:
+                        continue
+                else:
+                    if file.content_type not in ALLOWED_UPLOAD_MIME_TYPES:
+                        continue
+                UserDocument.objects.create(
+                    answer=answer,
+                    title=file.name,
+                    file=file,
+                    file_size=file.size,
+                )
 
         # Return JSON progress save
         if is_ajax:
@@ -272,26 +300,17 @@ def upload_document(request):
         if uploaded_file.size > 10 * 1024 * 1024:
             return JsonResponse({'success': False, 'error': 'File size too large (max 10MB)'})
 
-        allowed_types = {
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'image/jpeg',
-            'image/jpg',
-            'image/png',
-        }
-        # Fix C-03: use magic-bytes check when python-magic is installed;
+        # Fix C-03 / L-8: use the shared module-level MIME allowlist.
+        # Magic-bytes check when python-magic is installed;
         # fall back to the (spoofable) Content-Type header otherwise.
         if _MAGIC_AVAILABLE:
             header = uploaded_file.read(2048)
             uploaded_file.seek(0)
             detected_mime = _magic.from_buffer(header, mime=True)
-            if detected_mime not in allowed_types:
+            if detected_mime not in ALLOWED_UPLOAD_MIME_TYPES:
                 return JsonResponse({'success': False, 'error': f'File type not supported: {detected_mime}'})
         else:
-            if uploaded_file.content_type not in allowed_types:
+            if uploaded_file.content_type not in ALLOWED_UPLOAD_MIME_TYPES:
                 return JsonResponse({'success': False, 'error': 'File type not supported'})
 
         attempt  = get_object_or_404(QuestionnaireAttempt, id=attempt_id, user=request.user)
