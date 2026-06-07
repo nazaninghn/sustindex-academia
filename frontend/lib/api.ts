@@ -206,6 +206,17 @@ export const surveyAPI = {
     const { data } = await api.get(`/api/v1/surveys/${id}/`);
     return data;
   },
+  /**
+   * Fetch questions for a survey, filtered by the attempt's selected sector.
+   * The backend returns: universal questions (sector='') + questions matching
+   * the attempt's sector.  For a combined survey this gives 172+8 = 180 Qs.
+   * Without `attemptId` it returns ALL active questions (unfiltered).
+   */
+  getQuestions: async (surveyId: number, attemptId?: number) => {
+    const params = attemptId ? { attempt: attemptId } : {};
+    const { data } = await api.get(`/api/v1/surveys/${surveyId}/questions/`, { params });
+    return data as unknown[];
+  },
 };
 
 /* ════════════════════════════════════════════════════════

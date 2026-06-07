@@ -101,16 +101,21 @@ export default function QuestionnairePage() {
     if (!sid) return;
     try {
       const { surveyAPI } = await import('@/lib/api');
-      const survey = await surveyAPI.getSurvey(sid);
+      // Use the same sector-filtered endpoint so language refresh doesn't
+      // accidentally inflate the question list back to 236.
+      const [survey, filteredQs] = await Promise.all([
+        surveyAPI.getSurvey(sid),
+        surveyAPI.getQuestions(sid, Number(id)),
+      ]);
       // Fix #22: abort if the component was unmounted while the fetch was in flight
       if (!mountedRef.current) return;
       setSurveyName(survey.name || '');
-      const qs: Question[] = (survey.questions || []).sort(
+      const qs: Question[] = (filteredQs as unknown as Question[]).sort(
         (a: Question, b: Question) => a.order - b.order
       );
       setQuestions(qs);
     } catch { /* non-fatal — keep showing previous texts */ }
-  }, []); // no deps — reads surveyIdRef/mountedRef directly
+  }, [id]); // id is stable for the lifetime of this page
 
   /* Re-fetch question texts whenever language changes (after initial load) */
   useEffect(() => {
@@ -131,10 +136,16 @@ export default function QuestionnairePage() {
       /* Save survey ID so refreshTexts can use it on lang switch */
       surveyIdRef.current = attempt.survey;
 
-      const survey = await surveyAPI.getSurvey(attempt.survey);
+      // Fetch survey name AND sector-filtered questions in parallel.
+      // getQuestions(?attempt=id) returns only universal + the attempt's chosen
+      // sector Qs — so 172+8=180 for the combined survey, not all 236.
+      const [survey, filteredQs] = await Promise.all([
+        surveyAPI.getSurvey(attempt.survey),
+        surveyAPI.getQuestions(attempt.survey, Number(id)),
+      ]);
       setSurveyName(survey.name || '');
 
-      const qs: Question[] = (survey.questions || []).sort(
+      const qs: Question[] = (filteredQs as unknown as Question[]).sort(
         (a: Question, b: Question) => a.order - b.order
       );
       setQuestions(qs);
@@ -595,13 +606,17 @@ export default function QuestionnairePage() {
 
                   <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>{choiceText}</span>
 
-                  <span style={{
-                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-                    opacity: isSel ? 0.65 : 0.4, letterSpacing: '0.04em',
-                    flexShrink: 0, fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {String(choice.score).padStart(3, '0')} {lang === 'tr' ? 'puan' : 'pts'}
-                  </span>
+                  {/* Score is hidden from non-staff by the backend (anti-gaming).
+                      Only render it when a non-null value is returned. */}
+                  {choice.score !== null && choice.score !== undefined && (
+                    <span style={{
+                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
+                      opacity: isSel ? 0.65 : 0.4, letterSpacing: '0.04em',
+                      flexShrink: 0, fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {String(choice.score).padStart(3, '0')} {lang === 'tr' ? 'puan' : 'pts'}
+                    </span>
+                  )}
                 </button>
               );
             })}
