@@ -64,13 +64,12 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      // Strip UI-only field before sending to API
-      const { password_confirm: _pc, ...payload } = formData;
-      await register(payload);
+      // Send all fields including password_confirm — backend validates them server-side too
+      await register(formData);
       router.push('/dashboard');
     } catch (err: unknown) {
       // L1: narrow err from unknown before property access.
-      const e = err as { response?: { status?: number; data?: { username?: string[]; email?: string[]; password?: string[]; detail?: string } } };
+      const e = err as { response?: { status?: number; data?: { username?: string[]; email?: string[]; password?: string[]; password_confirm?: string[]; non_field_errors?: string[]; detail?: string } } };
       // Fix R5-M-06: surface HTTP 429 throttle clearly
       if (e.response?.status === 429) {
         setError(t('err_throttle'));
@@ -82,6 +81,8 @@ export default function RegisterPage() {
           // AUTH_PASSWORD_VALIDATORS (e.g. "too common", "too short") so the
           // user knows exactly what to fix rather than seeing a generic message.
           e.response?.data?.password?.[0] ||
+          e.response?.data?.password_confirm?.[0] ||
+          e.response?.data?.non_field_errors?.[0] ||
           e.response?.data?.detail ||
           t('reg_fail')
         );

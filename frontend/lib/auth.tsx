@@ -17,14 +17,14 @@ export interface User {
 }
 
 export interface RegisterPayload {
-  username:     string;
-  email:        string;
-  password:     string;
-  first_name?:  string;
-  last_name?:   string;
-  company_name?: string;
-  phone?:       string;
-  // NOTE: password_confirm must be stripped before calling register()
+  username:         string;
+  email:            string;
+  password:         string;
+  password_confirm: string;
+  first_name?:      string;
+  last_name?:       string;
+  company_name?:    string;
+  phone?:           string;
 }
 
 interface AuthContextType {
