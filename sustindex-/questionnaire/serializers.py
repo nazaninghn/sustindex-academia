@@ -149,16 +149,81 @@ class SurveySessionSerializer(serializers.ModelSerializer):
         return obj.is_open()
 
 
+def _effective_question_count(survey):
+    """
+    Return the per-company effective question count for a survey.
+    For combined surveys (any sector-tagged questions): universal + 8 (one sector).
+    For plain surveys: total active questions.
+    """
+    total_active = survey.questions.filter(is_active=True).count()
+    sector_total = survey.questions.filter(is_active=True).exclude(sector='').count()
+    if sector_total > 0:
+        distinct_sectors = (
+            survey.questions.filter(is_active=True)
+            .exclude(sector='')
+            .values_list('sector', flat=True)
+            .distinct()
+            .count()
+        )
+        per_sector = sector_total // distinct_sectors if distinct_sectors > 0 else 0
+        return total_active - sector_total + per_sector
+    return total_active
+
+
+class SurveyListSerializer(serializers.ModelSerializer):
+    """
+    Lightweight serializer for GET /api/v1/surveys/ (list).
+    Does NOT embed questions or choices — avoids loading 1000+ rows per request.
+    Returns `question_count` that reflects the per-company effective count:
+      • For combined surveys (any sector-tagged questions): universal + 8 (one sector).
+      • For plain surveys: total active questions.
+    """
+    question_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Survey
+        fields = [
+            'id', 'name', 'name_tr', 'name_en',
+            'description', 'description_tr', 'description_en',
+            'is_active', 'allow_multiple_attempts', 'question_count',
+        ]
+
+    def get_question_count(self, obj):
+        return _effective_question_count(obj)
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        request = self.context.get('request')
+        if request:
+            lang = (
+                request.query_params.get('lang')
+                or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
+            )
+            if lang == 'tr':
+                if instance.name_tr:        rep['name']        = instance.name_tr
+                if instance.description_tr: rep['description'] = instance.description_tr
+            elif lang == 'en':
+                if instance.name_en:        rep['name']        = instance.name_en
+                if instance.description_en: rep['description'] = instance.description_en
+        return rep
+
+
 class SurveySerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
     sessions = SurveySessionSerializer(many=True, read_only=True)
     total_questions = serializers.IntegerField(source='get_total_questions', read_only=True)
-    
+    # Also expose the per-user effective count on the detail endpoint
+    question_count  = serializers.SerializerMethodField()
+
     class Meta:
         model = Survey
-        fields = ['id', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 
-                  'is_active', 'created_at', 'updated_at', 'allow_multiple_attempts', 
-                  'show_results_immediately', 'total_questions', 'questions', 'sessions']
+        fields = ['id', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en',
+                  'is_active', 'created_at', 'updated_at', 'allow_multiple_attempts',
+                  'show_results_immediately', 'total_questions', 'question_count', 'questions', 'sessions']
+
+    def get_question_count(self, obj):
+        """Delegate to SurveyListSerializer logic (shared via module-level helper)."""
+        return _effective_question_count(obj)
     
     def to_representation(self, instance):
         representation = super().to_representation(instance)

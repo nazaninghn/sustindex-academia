@@ -164,7 +164,11 @@ interface Survey {
   id: number;
   name: string; name_en?: string; name_tr?: string;
   description?: string; description_en?: string; description_tr?: string;
+  /** Per-company effective count: universal + 8 sector (returned by SurveyListSerializer). */
   question_count?: number;
+  /** Raw total used by SurveySerializer detail endpoint. */
+  total_questions?: number;
+  /** Fallback when neither field is present (e.g. cached old API response). */
   questions?: { id: number }[];
   estimated_time?: string;
   category?: string;   // env | soc | gov — may not come from API
@@ -287,8 +291,11 @@ export default function SurveysPage() {
     setPendingSurveyId(null);
   }, []);
 
+  // question_count → new smart field (per-company count, e.g. 180 for Combined).
+  // total_questions → raw total (includes all sector questions).
+  // questions.length → legacy fallback for old API responses.
   const qCount = (s: Survey) =>
-    s.question_count ?? s.questions?.length ?? 0;
+    s.question_count ?? s.total_questions ?? s.questions?.length ?? 0;
 
   // Category filter — only shown if surveys have a category field
   const hasCats = surveys.some((s) => s.category);

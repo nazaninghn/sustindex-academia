@@ -13,7 +13,7 @@ from .models import (
     QuestionnaireAttempt, Answer, UserDocument
 )
 from .serializers import (
-    SurveySerializer, SurveySessionSerializer, CategorySerializer,
+    SurveySerializer, SurveyListSerializer, SurveySessionSerializer, CategorySerializer,
     QuestionSerializer, ChoiceSerializer, QuestionnaireAttemptSerializer,
     QuestionnaireAttemptCreateSerializer, QuestionnaireAttemptListSerializer,
     AnswerSerializer, AnswerCreateSerializer, UserDocumentSerializer
@@ -39,16 +39,22 @@ _ALLOWED_CONTENT_TYPES = {
 
 
 class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
-    # Fix N: prefetch nested relations up-front — avoids N+1 when serializing
-    # questions and their choices in a single request.
-    # Fix R5-H-02: require authentication — survey content (including choice
-    # scores) must not be accessible to anonymous users.
+    # Fix R5-H-02: require authentication — survey content must not be accessible
+    # to anonymous users.
+    # Fix PERF: list uses SurveyListSerializer (no nested questions/choices) to
+    # avoid loading 1000+ rows per request on the surveys page.
+    # Detail endpoint still uses the full SurveySerializer with all questions.
     queryset = (
         Survey.objects.filter(is_active=True)
         .prefetch_related('questions__choices', 'sessions')
     )
     serializer_class = SurveySerializer
     permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return SurveyListSerializer
+        return SurveySerializer
 
     @action(detail=True, methods=['get'])
     def questions(self, request, pk=None):
