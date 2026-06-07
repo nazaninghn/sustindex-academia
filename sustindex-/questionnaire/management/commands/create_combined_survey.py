@@ -1,21 +1,17 @@
 """
 Management command: create_combined_survey
 
-Builds ONE "GRI Complete Assessment" survey that implements the hierarchical
-branching structure requested by the client:
+Builds ONE "GRI Complete Assessment" survey following the phased GRI hierarchy:
 
-    ┌──────────────────────────────────────┐
-    │   GRI Universal Core  (184 questions) │  ← shown to ALL respondents
-    │   Governance (56) + Environmental (48)│
-    │   Social (52) + Economic & Rep. (28)  │
-    └──────────────────┬───────────────────┘
-                       │
-              [Sector-selection modal]
+    Phase 1 — GRI 1: Foundation           (32 questions)  ALL respondents
+    Phase 2 — GRI 2: General Disclosures  (80 questions)  ALL respondents
+    Phase 3 — GRI 3: Material Topics      (60 questions)  ALL respondents
+                           │
+                  [Sector-selection modal]
           ┌────┬────┬────┬────┬────┬────┬────┬────┐
         agri energy fin  mfg  con  health tech retail
           └────┴────┴────┴────┴────┴────┴────┴────┘
-                       │  (8 questions each)
-                  user sees only their sector's 8 Qs
+    Phase 4 — Sector Standard              (8 questions)  ONE sector per company
 
 Usage
 -----
@@ -26,13 +22,13 @@ Usage
 Flags
 -----
   --clear             Delete and fully rebuild the combined survey.
-  --hide-components   Set the 12 individual GRI surveys to is_active=False
+  --hide-components   Set the 11 individual GRI surveys to is_active=False
                       so only the combined survey appears on the surveys page.
 
 Prerequisites
 -------------
   Run import_gri_questionnaire first:
-    python manage.py import_gri_questionnaire path/to/GRI_Questionnaire_v3_FIXED.xlsx
+    python manage.py import_gri_questionnaire path/to/GRI_Questionnaire_v4_STRUCTURED.xlsx
 """
 
 from django.core.management.base import BaseCommand, CommandError
@@ -43,33 +39,40 @@ from questionnaire.models import Survey, Category, Question, Choice
 # ── Source survey names (created by import_gri_questionnaire) ─────────────
 
 CORE_CONFIGS = [
+    # Phase 1 — GRI 1: Foundation
+    # Covers: GRI Standards application, responsible claims, due diligence,
+    # reporting principles (accuracy, completeness, comparability, context,
+    # stakeholder inclusiveness). 8 criteria × 4 layers = 32 questions.
     {
-        'survey_name': 'GRI: Governance & Strategy',
-        'cat_name':    'Governance & Strategy',
-        'cat_name_tr': 'Yönetişim & Strateji',
-        'order': 1, 'max_score': 280,
-        'env_w': 0.0, 'soc_w': 0.0, 'gov_w': 1.0,
+        'survey_name': 'GRI 1: Foundation',
+        'cat_name':    'Foundation',
+        'cat_name_tr': 'Temel',
+        'order': 1, 'max_score': 160,
+        'env_w': 0.10, 'soc_w': 0.10, 'gov_w': 0.80,
     },
+    # Phase 2 — GRI 2: General Disclosures
+    # Covers: organisational profile, entities, reporting period, assurance,
+    # activities & value chain, workforce, governance structure, nominations,
+    # board oversight, strategy & policy commitments, stakeholder engagement.
+    # 20 criteria × 4 layers = 80 questions.
     {
-        'survey_name': 'GRI: Environmental Performance',
-        'cat_name':    'Environmental Performance',
-        'cat_name_tr': 'Çevresel Performans',
-        'order': 2, 'max_score': 240,
-        'env_w': 1.0, 'soc_w': 0.0, 'gov_w': 0.0,
+        'survey_name': 'GRI 2: General Disclosures',
+        'cat_name':    'General Disclosures',
+        'cat_name_tr': 'Genel Açıklamalar',
+        'order': 2, 'max_score': 400,
+        'env_w': 0.15, 'soc_w': 0.15, 'gov_w': 0.70,
     },
+    # Phase 3 — GRI 3: Material Topics
+    # Covers: impact identification, materiality process, management approach
+    # (policy, boundary, actions, tracking, remediation, grievances, engagement),
+    # supply chain, human rights, GRI content index.
+    # 15 criteria × 4 layers = 60 questions.
     {
-        'survey_name': 'GRI: Social Performance',
-        'cat_name':    'Social Performance',
-        'cat_name_tr': 'Sosyal Performans',
-        'order': 3, 'max_score': 260,
-        'env_w': 0.0, 'soc_w': 1.0, 'gov_w': 0.0,
-    },
-    {
-        'survey_name': 'GRI: Economic & Reporting',
-        'cat_name':    'Economic & Reporting',
-        'cat_name_tr': 'Ekonomik & Raporlama',
-        'order': 4, 'max_score': 140,
-        'env_w': 0.0, 'soc_w': 0.0, 'gov_w': 1.0,
+        'survey_name': 'GRI 3: Material Topics',
+        'cat_name':    'Material Topics',
+        'cat_name_tr': 'Önemli Konular',
+        'order': 3, 'max_score': 300,
+        'env_w': 0.33, 'soc_w': 0.34, 'gov_w': 0.33,
     },
 ]
 
@@ -95,14 +98,20 @@ SECTOR_ORDER_BASE = {
 COMBINED_NAME    = 'GRI Complete Assessment'
 COMBINED_NAME_TR = 'GRI Kapsamlı Değerlendirme'
 COMBINED_DESC    = (
-    'GRI Universal Core (184 questions across Governance, Environmental, '
-    'Social, and Economic pillars) plus 8 sector-specific questions for '
-    'your chosen industry. Select your sector when starting the assessment.'
+    'Phased GRI Universal Standards assessment: '
+    'Phase 1 — GRI 1 Foundation (32 questions), '
+    'Phase 2 — GRI 2 General Disclosures (80 questions), '
+    'Phase 3 — GRI 3 Material Topics (60 questions), '
+    'Phase 4 — Sector Standard (8 questions for your chosen industry). '
+    'Total: 180 questions. Select your sector when starting the assessment.'
 )
 COMBINED_DESC_TR = (
-    'Yönetişim, Çevresel, Sosyal ve Ekonomik boyutlarda 184 evrensel GRI sorusu '
-    'artı seçilen sektöre ait 8 sektörel soru. Değerlendirmeye başlarken '
-    'sektörünüzü seçin.'
+    'Aşamalı GRI Evrensel Standartları değerlendirmesi: '
+    'Aşama 1 — GRI 1 Temel (32 soru), '
+    'Aşama 2 — GRI 2 Genel Açıklamalar (80 soru), '
+    'Aşama 3 — GRI 3 Önemli Konular (60 soru), '
+    'Aşama 4 — Sektör Standardı (sektörünüze özel 8 soru). '
+    'Toplam: 180 soru. Değerlendirmeye başlarken sektörünüzü seçin.'
 )
 
 ALL_GRI_NAMES = (
@@ -343,14 +352,14 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'\n╔══════════════════════════════════════════════════════════╗\n'
             f'  DONE — GRI Complete Assessment built successfully\n'
-            f'  Survey pk      : {combined.pk}\n'
-            f'  Universal Qs   : {universal_count}  (shown to ALL respondents)\n'
-            f'  Sector-specific: {sector_count}  ({sector_count // 8} sectors × 8 Qs each)\n'
-            f'  Total in survey: {total_in_survey}\n'
-            f'  New this run   : {total_q} questions, {total_c} choices\n\n'
+            f'  Survey pk        : {combined.pk}\n'
+            f'  Phase 1-3 (core) : {universal_count}  (GRI 1+2+3, shown to ALL respondents)\n'
+            f'  Phase 4 (sector) : {sector_count}  ({sector_count // 8} sectors \xd7 8 Qs each)\n'
+            f'  Total in survey  : {total_in_survey}\n'
+            f'  New this run     : {total_q} questions, {total_c} choices\n\n'
             f'  Next steps:\n'
             f'  1. Visit /admin/questionnaire/survey/ to verify\n'
-            f'  2. Run with --hide-components to hide the 12 individual surveys\n'
+            f'  2. Run with --hide-components to hide the 11 individual surveys\n'
             f'     python manage.py create_combined_survey --hide-components\n'
             f'╚══════════════════════════════════════════════════════════╝'
         ))

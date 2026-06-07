@@ -204,6 +204,24 @@ export default function QuestionnairePage() {
       : q.category_name
     : '';
 
+  /**
+   * Detect GRI phase from the category name so we can show a progress indicator.
+   * Category names set by import_gri_questionnaire / create_combined_survey:
+   *   "Foundation"          → Phase 1 (GRI 1)
+   *   "General Disclosures" → Phase 2 (GRI 2)
+   *   "Material Topics"     → Phase 3 (GRI 3)
+   *   "Sector Supplement"   → Phase 4 (Sector Standard)
+   */
+  const GRI_PHASES = [
+    { match: 'Foundation',          num: 1, label: lang === 'tr' ? 'GRI 1 · Temel'             : 'GRI 1 · Foundation'           },
+    { match: 'General Disclosures', num: 2, label: lang === 'tr' ? 'GRI 2 · Genel Açıklamalar' : 'GRI 2 · General Disclosures' },
+    { match: 'Material Topics',     num: 3, label: lang === 'tr' ? 'GRI 3 · Önemli Konular'    : 'GRI 3 · Material Topics'     },
+    { match: 'Sector',              num: 4, label: lang === 'tr' ? 'Sektör Standardı'           : 'Sector Standard'             },
+  ] as const;
+  const currentPhase = q
+    ? GRI_PHASES.find(({ match }) => q.category_name?.includes(match)) ?? null
+    : null;
+
   /* ── Handlers ── */
   const toggleChoice = (choiceId: number) => {
     if (!q) return;
@@ -444,6 +462,49 @@ export default function QuestionnairePage() {
 
       {/* ─── Main content ──────────────────────────────── */}
       <main className="wrap-narrow" style={{ paddingTop: 52, paddingBottom: 80 }}>
+
+        {/* GRI phase stepper — shown only when phase info is available */}
+        {currentPhase && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 0,
+            marginBottom: 28, overflowX: 'auto',
+          }}>
+            {GRI_PHASES.map((phase, i) => {
+              const isActive = phase.num === currentPhase.num;
+              const isDone   = phase.num < currentPhase.num;
+              return (
+                <div key={phase.num} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    padding: '5px 10px',
+                    background: isActive ? 'var(--ink)' : 'transparent',
+                    border: `1px solid ${isActive ? 'var(--ink)' : isDone ? 'var(--ink-3)' : 'var(--line)'}`,
+                    opacity: isDone ? 0.55 : 1,
+                  }}>
+                    <span style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: 9, letterSpacing: '0.1em',
+                      color: isActive ? 'var(--paper)' : isDone ? 'var(--ink-3)' : 'var(--ink-4)',
+                    }}>
+                      {isDone ? '✓' : String(phase.num).padStart(2, '0')}
+                    </span>
+                    <span style={{
+                      fontSize: 11, fontWeight: isActive ? 600 : 400,
+                      color: isActive ? 'var(--paper)' : isDone ? 'var(--ink-3)' : 'var(--ink-4)',
+                    }}>
+                      {phase.label}
+                    </span>
+                  </div>
+                  {i < GRI_PHASES.length - 1 && (
+                    <span style={{
+                      fontSize: 12, color: 'var(--line)', padding: '0 4px', flexShrink: 0,
+                    }}>›</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Category pill + counter */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 36 }}>

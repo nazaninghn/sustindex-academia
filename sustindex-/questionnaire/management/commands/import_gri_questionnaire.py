@@ -1,18 +1,21 @@
 """
-Import GRI Standards Competency Assessment v3 from Excel into the database.
+Import GRI Standards Assessment v4 (Structured) from Excel into the database.
 
 Usage
 -----
-  python manage.py import_gri_questionnaire "C:/path/to/GRI_Questionnaire_v3_FIXED.xlsx"
+  python manage.py import_gri_questionnaire "C:/path/to/GRI_Questionnaire_v4_STRUCTURED.xlsx"
   python manage.py import_gri_questionnaire "C:/path/to/file.xlsx" --clear
 
 What it creates
 ---------------
-  12 separate Surveys (one per section/sector):
-    - GRI: Governance & Strategy          (56 questions)
-    - GRI: Environmental Performance      (48 questions)
-    - GRI: Social Performance             (52 questions)
-    - GRI: Economic & Reporting           (28 questions)
+  11 separate Surveys following the actual GRI Universal Standards hierarchy:
+
+  Core (phased — all companies complete all three):
+    - GRI 1: Foundation                   (32 questions,  160 pts max)
+    - GRI 2: General Disclosures          (80 questions,  400 pts max)
+    - GRI 3: Material Topics              (60 questions,  300 pts max)
+
+  Sector Standards (company picks ONE):
     - GRI Sector: Agriculture & Food      (8 questions)
     - GRI Sector: Energy & Utilities      (8 questions)
     - GRI Sector: Financial Services      (8 questions)
@@ -32,47 +35,41 @@ from questionnaire.models import Survey, Category, Question, Choice
 
 
 # ── Section config ─────────────────────────────────────────────────────────
+# Follows the actual GRI Universal Standards hierarchy:
+#   GRI 1 Foundation → GRI 2 General Disclosures → GRI 3 Material Topics
+# Phased completion: every company works through all three core phases in order
+# before selecting their sector-specific standard.
 
 CORE_SECTIONS = [
     {
-        'sheet':         'Governance & Strategy',
-        'survey_name':   'GRI: Governance & Strategy',
-        'survey_name_tr':'GRI: Yonetisim & Strateji',
-        'survey_desc':   'GRI 2, 3, 205, 206, 207 — 14 criteria x 4 PDCA layers = 56 questions, 280 pts max.',
-        'cat_name':      'Governance & Strategy',
-        'cat_name_tr':   'Yonetisim & Strateji',
-        'max_score':     280,
-        'env_w': 0.0, 'soc_w': 0.0, 'gov_w': 1.0,
+        'sheet':         'GRI 1 — Foundation',
+        'survey_name':   'GRI 1: Foundation',
+        'survey_name_tr':'GRI 1: Temel',
+        'survey_desc':   'GRI 1:2021 Foundation — 8 criteria \xd7 4 layers (Policy/Implementation/Measurement/Results) = 32 questions, 160 pts max.',
+        'cat_name':      'Foundation',
+        'cat_name_tr':   'Temel',
+        'max_score':     160,
+        'env_w': 0.10, 'soc_w': 0.10, 'gov_w': 0.80,
     },
     {
-        'sheet':         'Environmental Performance',
-        'survey_name':   'GRI: Environmental Performance',
-        'survey_name_tr':'GRI: Cevresel Performans',
-        'survey_desc':   'GRI 302-306, 308, 304 — 12 criteria x 4 PDCA layers = 48 questions, 240 pts max.',
-        'cat_name':      'Environmental Performance',
-        'cat_name_tr':   'Cevresel Performans',
-        'max_score':     240,
-        'env_w': 1.0, 'soc_w': 0.0, 'gov_w': 0.0,
+        'sheet':         'GRI 2 — General Disclosures',
+        'survey_name':   'GRI 2: General Disclosures',
+        'survey_name_tr':'GRI 2: Genel A\xe7ıklamalar',
+        'survey_desc':   'GRI 2:2021 General Disclosures — 20 criteria \xd7 4 layers = 80 questions, 400 pts max.',
+        'cat_name':      'General Disclosures',
+        'cat_name_tr':   'Genel A\xe7ıklamalar',
+        'max_score':     400,
+        'env_w': 0.15, 'soc_w': 0.15, 'gov_w': 0.70,
     },
     {
-        'sheet':         'Social Performance',
-        'survey_name':   'GRI: Social Performance',
-        'survey_name_tr':'GRI: Sosyal Performans',
-        'survey_desc':   'GRI 401, 403-409, 413, 414, 416-418 — 13 criteria x 4 PDCA layers = 52 questions, 260 pts max.',
-        'cat_name':      'Social Performance',
-        'cat_name_tr':   'Sosyal Performans',
-        'max_score':     260,
-        'env_w': 0.0, 'soc_w': 1.0, 'gov_w': 0.0,
-    },
-    {
-        'sheet':         'Economic & Reporting',
-        'survey_name':   'GRI: Economic & Reporting',
-        'survey_name_tr':'GRI: Ekonomik & Raporlama',
-        'survey_desc':   'GRI 201-205, 207 / TCFD / CSRD — 7 criteria x 4 PDCA layers = 28 questions, 140 pts max.',
-        'cat_name':      'Economic & Reporting',
-        'cat_name_tr':   'Ekonomik & Raporlama',
-        'max_score':     140,
-        'env_w': 0.0, 'soc_w': 0.0, 'gov_w': 1.0,
+        'sheet':         'GRI 3 — Material Topics',
+        'survey_name':   'GRI 3: Material Topics',
+        'survey_name_tr':'GRI 3: \xd6nemli Konular',
+        'survey_desc':   'GRI 3:2021 Material Topics — 15 criteria \xd7 4 layers = 60 questions, 300 pts max.',
+        'cat_name':      'Material Topics',
+        'cat_name_tr':   '\xd6nemli Konular',
+        'max_score':     300,
+        'env_w': 0.33, 'soc_w': 0.34, 'gov_w': 0.33,
     },
 ]
 

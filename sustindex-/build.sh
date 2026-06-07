@@ -50,7 +50,9 @@ EOF
 echo ""
 echo "Importing GRI questionnaire data..."
 # Fix #18: use absolute path derived from SCRIPT_DIR so this works from any CWD.
-python manage.py import_gri_questionnaire "$SCRIPT_DIR/data/GRI_Questionnaire_v3_FIXED.xlsx"
+# v4 file follows the actual GRI hierarchy: GRI 1 Foundation → GRI 2 General
+# Disclosures → GRI 3 Material Topics → Sector Standard.
+python manage.py import_gri_questionnaire "$SCRIPT_DIR/data/GRI_Questionnaire_v4_STRUCTURED.xlsx"
 
 echo ""
 echo "Translating questionnaire to Turkish..."

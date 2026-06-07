@@ -13,9 +13,12 @@ import logger from '@/lib/logger';
    Sector selection modal
    ═══════════════════════════════════════════════════════════════ */
 
-/** Sector options: value='' is the "General / no sector" option. */
+/**
+ * Sector options — GRI Sector Standards require every company to select
+ * one sector.  The "General / no sector" option was removed because GRI 3
+ * Material Topics are always assessed in the context of a sector standard.
+ */
 const SECTORS: { value: string; key: string }[] = [
-  { value: '',             key: 'surv_sector_universal'     },
   { value: 'agri',         key: 'surv_sector_agri'          },
   { value: 'energy',       key: 'surv_sector_energy'        },
   { value: 'finance',      key: 'surv_sector_finance'       },
@@ -32,8 +35,9 @@ interface SectorModalProps {
 }
 
 function SectorModal({ onConfirm, onCancel }: SectorModalProps) {
-  const { t } = useLang();
-  const [selected, setSelected] = useState('');
+  const { t, lang } = useLang();
+  // No pre-selection — user must actively choose a sector (GRI requirement).
+  const [selected, setSelected] = useState<string | null>(null);
 
   // Close on Escape
   useEffect(() => {
@@ -70,13 +74,15 @@ function SectorModal({ onConfirm, onCancel }: SectorModalProps) {
             fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
             color: 'var(--ink-4)', display: 'block', marginBottom: 8,
           }}>
-            GRI · Sector disclosure
+            GRI · Phase 4 — Sector Standard
           </span>
           <h2 style={{ fontSize: 22, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>
             {t('surv_sector_title')}
           </h2>
           <p style={{ fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.65 }}>
-            {t('surv_sector_desc')}
+            {lang === 'tr'
+              ? 'GRI Sektör Standartları, her şirketin ilgili sektör için materyel konuları raporlamasını gerektirir. Lütfen şirketinizin ana faaliyet alanına en uygun sektörü seçin.'
+              : 'GRI Sector Standards require every organisation to report on material topics for their relevant sector. Please select the sector that best matches your primary business activities.'}
           </p>
         </div>
 
@@ -86,7 +92,7 @@ function SectorModal({ onConfirm, onCancel }: SectorModalProps) {
             const isSelected = selected === value;
             return (
               <button
-                key={value || 'universal'}
+                key={value}
                 onClick={() => setSelected(value)}
                 style={{
                   padding: '12px 16px',
@@ -121,6 +127,14 @@ function SectorModal({ onConfirm, onCancel }: SectorModalProps) {
         </div>
 
         {/* Actions */}
+        {selected === null && (
+          <p style={{
+            fontSize: 11, color: 'var(--ink-4)', marginBottom: 12,
+            fontFamily: "'IBM Plex Mono', monospace",
+          }}>
+            {lang === 'tr' ? '* Devam etmek için bir sektör seçin.' : '* Select a sector to continue.'}
+          </p>
+        )}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button
             className="btn btn-outline btn-sm"
@@ -130,8 +144,13 @@ function SectorModal({ onConfirm, onCancel }: SectorModalProps) {
           </button>
           <button
             className="btn btn-primary btn-sm"
-            onClick={() => onConfirm(selected)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => selected !== null && onConfirm(selected)}
+            disabled={selected === null}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              opacity: selected === null ? 0.4 : 1,
+              cursor: selected === null ? 'not-allowed' : 'pointer',
+            }}
           >
             {t('surv_sector_confirm')} <Icon.arrow />
           </button>
@@ -250,8 +269,8 @@ export default function SurveysPage() {
     setStarting(surveyId);
     setStartErr('');
     try {
-      // sector='' means "General / no sector" → the backend uses universal-only mode.
-      const attempt = await attemptAPI.startAttempt(surveyId, sector || undefined);
+      // sector is always a non-empty string: sector selection is now required by GRI.
+      const attempt = await attemptAPI.startAttempt(surveyId, sector);
       router.push(`/questionnaire/${attempt.id}`);
     } catch (err: unknown) {
       // Fix R4-H-04: environment-gated logger — silent in production
@@ -364,6 +383,60 @@ export default function SurveysPage() {
             fontFamily: "'IBM Plex Mono', monospace",
           }}>
             {startErr}
+          </div>
+        )}
+
+        {/* ── GRI phased structure info banner ── */}
+        {!loading && !loadErr && surveys.some((s) =>
+          s.name?.includes('GRI') || s.name_en?.includes('GRI')
+        ) && (
+          <div style={{
+            background: 'var(--paper)', border: '1px solid var(--line)',
+            padding: '20px 24px', marginBottom: 18,
+            display: 'flex', flexWrap: 'wrap', gap: 0,
+          }}>
+            <div style={{
+              fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.1em',
+              textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace",
+              width: '100%', marginBottom: 12,
+            }}>
+              GRI Universal Standards · {lang === 'tr' ? 'Değerlendirme sırası' : 'Assessment flow'}
+            </div>
+            {([
+              { phase: '01', label: lang === 'tr' ? 'GRI 1 · Temel'             : 'GRI 1 · Foundation',           q: '32',  desc: lang === 'tr' ? 'GRI gereksinimlerini anlama' : 'Understanding GRI requirements' },
+              { phase: '02', label: lang === 'tr' ? 'GRI 2 · Genel Açıklamalar' : 'GRI 2 · General Disclosures', q: '80',  desc: lang === 'tr' ? 'Şirket profili & yönetişim' : 'Org. profile & governance'        },
+              { phase: '03', label: lang === 'tr' ? 'GRI 3 · Önemli Konular'    : 'GRI 3 · Material Topics',     q: '60',  desc: lang === 'tr' ? 'Materyellik & yönetim yaklaşımı' : 'Materiality & management approach' },
+              { phase: '04', label: lang === 'tr' ? 'Sektör Standardı'           : 'Sector Standard',             q: '8',   desc: lang === 'tr' ? 'Sektörünüze özel konular' : 'Industry-specific topics'          },
+            ] as const).map((step, i, arr) => (
+              <div key={step.phase} style={{ display: 'flex', alignItems: 'stretch', flex: '1 1 160px', minWidth: 0 }}>
+                <div style={{ flex: 1, paddingRight: 16 }}>
+                  <div style={{
+                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+                    color: 'var(--ink-4)', letterSpacing: '0.08em', marginBottom: 4,
+                  }}>
+                    PHASE {step.phase}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
+                    {step.label}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 4, lineHeight: 1.4 }}>
+                    {step.desc}
+                  </div>
+                  <div style={{
+                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+                    color: 'var(--olive-deep)', fontWeight: 500,
+                  }}>
+                    {step.q} {lang === 'tr' ? 'soru' : 'Q'}
+                  </div>
+                </div>
+                {i < arr.length - 1 && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', padding: '0 8px',
+                    color: 'var(--ink-4)', fontSize: 16, flexShrink: 0,
+                  }}>→</div>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
