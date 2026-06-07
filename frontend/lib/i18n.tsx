@@ -218,6 +218,7 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   },
   surv_sector_universal:    { en: 'General (no specific sector)',     tr: 'Genel (belirli bir sektör yok)' },
   surv_sector_agri:         { en: 'Agriculture & Food',               tr: 'Tarım & Gıda' },
+  surv_sector_energy:       { en: 'Energy & Utilities',               tr: 'Enerji & Hizmetler' },
   surv_sector_finance:      { en: 'Financial Services',               tr: 'Finans Hizmetleri' },
   surv_sector_construction: { en: 'Construction & Real Estate',       tr: 'İnşaat & Gayrimenkul' },
   surv_sector_manufacturing:{ en: 'Manufacturing & Industry',         tr: 'İmalat & Sanayi' },

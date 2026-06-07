@@ -17,6 +17,7 @@ import logger from '@/lib/logger';
 const SECTORS: { value: string; key: string }[] = [
   { value: '',             key: 'surv_sector_universal'     },
   { value: 'agri',         key: 'surv_sector_agri'          },
+  { value: 'energy',       key: 'surv_sector_energy'        },
   { value: 'finance',      key: 'surv_sector_finance'       },
   { value: 'construction', key: 'surv_sector_construction'  },
   { value: 'manufacturing',key: 'surv_sector_manufacturing' },

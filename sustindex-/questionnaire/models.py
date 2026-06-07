@@ -206,12 +206,13 @@ class Question(models.Model):
     # a specific value = shown only when the attempt's selected_sector matches.
     SECTOR_CHOICES = [
         ('',             _('Universal (all sectors)')),
-        ('agri',         _('Agriculture')),
+        ('agri',         _('Agriculture & Food')),
+        ('energy',       _('Energy & Utilities')),
         ('finance',      _('Financial Services')),
-        ('construction', _('Construction')),
-        ('manufacturing',_('Manufacturing')),
-        ('health',       _('Healthcare')),
-        ('tech',         _('Technology')),
+        ('construction', _('Construction & Real Estate')),
+        ('manufacturing',_('Manufacturing & Industry')),
+        ('health',       _('Healthcare & Pharma')),
+        ('tech',         _('Technology & IT')),
         ('retail',       _('Retail & Trade')),
     ]
 
