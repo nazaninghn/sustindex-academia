@@ -49,6 +49,29 @@ function loc(
   return obj.text || '';
 }
 
+/**
+ * Strip internal catalogue codes that the import command embeds in the
+ * stored question text so they never reach the end user:
+ *   - Leading  "[GRI2-18-I]  "  →  removed
+ *   - Trailing "  [Implementation]" / "[Results]" / "[Policy]" / "[Measurement]" →  removed
+ *
+ * Works for both plain-text storage (typical import path) and CKEditor HTML
+ * (content edited through the admin panel — handles <p>/<div> wrappers).
+ */
+function cleanQuestionText(raw: string): string {
+  if (!raw) return raw;
+  return raw
+    // HTML: strip code after opening block tag  <p>[GRI2-18-I]  →  <p>
+    .replace(/(<(?:p|div|span)[^>]*>)\s*\[GRI[^\]]*\]\s*/gi, '$1')
+    // Plain text: strip code at start of string
+    .replace(/^\[GRI[^\]]*\]\s*/i, '')
+    // HTML: strip layer tag before closing block tag   [Implementation]</p>  →  </p>
+    .replace(/\s*\[(?:Policy|Implementation|Measurement|Results)\]\s*(<\/(?:p|div|span)>)/gi, '$1')
+    // Plain text: strip layer tag at end of string
+    .replace(/\s*\[(?:Policy|Implementation|Measurement|Results)\]\s*$/i, '')
+    .trim();
+}
+
 /* ─── Paperclip icon ─────────────────────────────────────── */
 function PaperclipIcon() {
   return (
@@ -218,7 +241,7 @@ export default function QuestionnairePage() {
    * returns the correct language in `text`.  loc() is kept as extra safety for
    * cases where text_tr is populated but the API didn't override text.
    * catLabel: always resolved from the stored _tr/_en fields (set by import command). */
-  const qText    = q ? (loc(q, lang) || q.text) : '';
+  const qText    = q ? cleanQuestionText(loc(q, lang) || q.text) : '';
   const catLabel = q
     ? (lang === 'tr' && q.category_name_tr) ? q.category_name_tr
       : (lang === 'en' && q.category_name_en) ? q.category_name_en

@@ -299,10 +299,16 @@ class Command(BaseCommand):
             if q_id and q_id not in ('ID', '#'):
                 if q_id not in questions:
                     order += 1
+                    # Store clean question text: no [q_id] code prefix.
+                    # The layer name is appended in brackets so GRI assessors
+                    # can identify which Policy/Implementation/Measurement/Results
+                    # layer the question belongs to.  The frontend strips both
+                    # the code prefix (already removed here) and the layer suffix
+                    # via cleanQuestionText() when rendering to end users.
                     label = q_text if q_text else q_id
                     if layer_name:
                         label = f'{label}  [{layer_name}]'
-                    questions[q_id] = {'text': f'[{q_id}]  {label}', 'order': order, 'choices': []}
+                    questions[q_id] = {'text': label, 'order': order, 'choices': []}
                 cur_id = q_id
             if cur_id and cur_id in questions:
                 questions[cur_id]['choices'].append({
@@ -360,16 +366,28 @@ class Command(BaseCommand):
                 if new_c: c_count += 1
         return q_count, c_count
 
-    # ── Fix B > A anomalies ────────────────────────────────────────────────
+    # ── Fix score ordering anomalies ───────────────────────────────────────
 
     def _fix_score_anomalies(self, survey):
-        """Swap A and B scores where B > A (Excel data error)."""
+        """Ensure choice scores descend strictly A ≥ B ≥ C ≥ D.
+
+        Re-sorts the scores in descending order across all choices (ordered
+        by the LETTER_ORDER key: A=1, B=2, C=3, D=4) so that the best
+        answer (A) always carries the highest score and the worst (D) the
+        lowest.  The old implementation only swapped A and B, missing
+        anomalies like C > B or D > C.
+        """
         fixed = 0
         for q in Question.objects.filter(survey=survey).prefetch_related('choices'):
-            choices = {c.order: c for c in q.choices.all()}
-            a, b = choices.get(1), choices.get(2)
-            if a and b and b.score > a.score:
-                Choice.objects.filter(pk=a.pk).update(score=b.score)
-                Choice.objects.filter(pk=b.pk).update(score=a.score)
+            # Sort choices by their display order (A=1, B=2, …)
+            ordered = sorted(q.choices.all(), key=lambda c: c.order)
+            if len(ordered) < 2:
+                continue
+            original = [c.score for c in ordered]
+            corrected = sorted(original, reverse=True)   # A gets max, D gets min
+            if original != corrected:
+                for choice, new_score in zip(ordered, corrected):
+                    if choice.score != new_score:
+                        Choice.objects.filter(pk=choice.pk).update(score=new_score)
                 fixed += 1
         return fixed
