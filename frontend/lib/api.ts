@@ -12,6 +12,19 @@ const api = axios.create({
 // ── Request interceptor: attach token + lang ──────────────
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
+    // Fix UPLOAD-01: when the request body is FormData, delete the instance-level
+    // 'Content-Type: application/json' header so the browser/axios can set the
+    // correct 'Content-Type: multipart/form-data; boundary=...' automatically.
+    // axios v1.x is supposed to handle this, but in some versions the instance
+    // default survives the merge and reaches the server unchanged.  If Django
+    // receives 'application/json' instead of 'multipart/form-data' it uses
+    // JSONParser, request.FILES is empty, and perform_create raises HTTP 400
+    // {'file': 'A file is required.'} — which the frontend shows as
+    // "Some documents failed to upload".
+    if (config.data instanceof FormData) {
+      delete (config.headers as Record<string, unknown>)['Content-Type'];
+    }
+
     // Fix: use token-storage helper — reads from both localStorage & sessionStorage
     const token = getToken('access_token');
     if (token) config.headers.Authorization = `Bearer ${token}`;

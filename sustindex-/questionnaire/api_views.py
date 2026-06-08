@@ -519,13 +519,27 @@ class UserDocumentViewSet(viewsets.ModelViewSet):
 
         # Fix O (Round 4): magic-bytes check when python-magic is installed;
         # fall back to Content-Type header check otherwise.
+        # Fix UPLOAD-02: wrap the magic call in try/except to handle the case
+        # where python-magic is importable but libmagic.so is not available at
+        # runtime (e.g. the shared library is missing on the deploy host).
+        # The original 'except ImportError' guard only caught install-time
+        # failures — a runtime MagicException / OSError would bubble up as an
+        # unhandled 500, causing the upload to fail with "Some documents failed
+        # to upload" even for perfectly valid files like a 725 KB PDF.
+        _detected_mime = None
         if _MAGIC_AVAILABLE:
-            header = file.read(2048)
-            file.seek(0)
-            detected_mime = _magic.from_buffer(header, mime=True)
-            if detected_mime not in _ALLOWED_CONTENT_TYPES:
+            try:
+                header = file.read(2048)
+                file.seek(0)
+                _detected_mime = _magic.from_buffer(header, mime=True)
+            except Exception:
+                # libmagic runtime unavailable — fall through to header check
+                pass
+
+        if _detected_mime is not None:
+            if _detected_mime not in _ALLOWED_CONTENT_TYPES:
                 raise DRFValidationError(
-                    {'file': f'Unsupported file type detected by magic bytes: {detected_mime}.'}
+                    {'file': f'Unsupported file type detected by magic bytes: {_detected_mime}.'}
                 )
         else:
             if file.content_type not in _ALLOWED_CONTENT_TYPES:

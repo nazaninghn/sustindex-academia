@@ -93,5 +93,13 @@ urlpatterns += i18n_patterns(
 )
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# Serve media files in all environments.
+# Django's built-in `serve` view is used here because Render does not run a
+# separate nginx in front of gunicorn.  For higher-traffic deployments, replace
+# this with a cloud object-storage backend (e.g. Cloudinary / AWS S3) and
+# remove this line.
+# The `insecure=True` kwarg is required because django.conf.urls.static.static()
+# returns an empty list when DEBUG=False unless that flag is passed.
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT, insecure=True)
