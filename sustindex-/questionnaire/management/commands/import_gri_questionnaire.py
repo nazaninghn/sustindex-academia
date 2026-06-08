@@ -142,21 +142,308 @@ SECTOR_SECTIONS = [
 
 LETTER_ORDER = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
 
+# Words that appear in v4 STRUCTURED Excel's "Layer" column (p[3]).
+# These are NOT question texts — the parser must skip them so that
+# SECTOR_QUESTION_TEXT provides the real question sentences instead.
+LAYER_MARKERS = frozenset({
+    'sector', 'universal', 'policy', 'implementation', 'measurement', 'results',
+})
+
 # ── Full question text for every sector question ────────────────────────────
-# The Excel source (GRI_Questionnaire_v3_FIXED.xlsx) leaves the "Question"
-# column (col D) empty for all 64 sector questions; only a short category
-# name is present.  This mapping provides the complete EN + TR question
-# sentence so the stored text is meaningful to end users.
+# Covers BOTH v3 Q_IDs (AG-01, RET-01 …) and v4 Q_IDs (AGRI-1, RET-1 …).
+# The v4 STRUCTURED file uses a "Layer" column (value = "Sector") in the
+# position that v3 used for the full question text; LAYER_MARKERS above
+# prevents that from being stored.
 #
 # Priority order used by _parse_sector:
-#   1. Excel col-D text (if filled in)
-#   2. This mapping (SECTOR_QUESTION_TEXT)
+#   1. Excel col-D text (if filled in AND not a layer marker)
+#   2. This mapping (SECTOR_QUESTION_TEXT, keyed by normalised Q_ID)
 #   3. "Category  (GRI Ref)" fallback
 #
-# Turkish translations can be stored separately as text_tr and are served by
-# the frontend when lang='tr'.
+# Turkish translations are stored in text_tr and served by the frontend
+# when lang='tr'.
 SECTOR_QUESTION_TEXT = {
-    # ── Agriculture & Food ─────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════════════
+    # v4 STRUCTURED IDs  (AGRI-1 … RET-8)
+    # ════════════════════════════════════════════════════════════════════════
+
+    # ── Agriculture & Food (v4) ────────────────────────────────────────────
+    'AGRI-1': {
+        'en': "Does your organisation have a formal policy to respect and protect the land rights and tenure of local communities and indigenous peoples?",
+        'tr': "Kuruluşunuzun yerel toplulukların ve yerli halkların arazi hakları ile tapu güvencesini saygıyla korumaya yönelik resmi bir politikası var mı?",
+    },
+    'AGRI-2': {
+        'en': "How does your organisation support the inclusion of smallholder farmers and local communities in its agricultural supply chain?",
+        'tr': "Kuruluşunuz küçük çiftçilerin ve yerel toplulukların tarımsal tedarik zincirine dahil edilmesini nasıl desteklemektedir?",
+    },
+    'AGRI-3': {
+        'en': "Does your organisation measure, manage and reduce water use across its agricultural operations and supply chain?",
+        'tr': "Kuruluşunuz tarımsal faaliyetleri ve tedarik zinciri genelinde su kullanımını ölçüyor, yönetiyor ve azaltıyor mu?",
+    },
+    'AGRI-4': {
+        'en': "Does your organisation assess and mitigate its impact on biodiversity and ecosystem services in agricultural areas?",
+        'tr': "Kuruluşunuz tarım alanlarında biyoçeşitlilik ve ekosistem hizmetleri üzerindeki etkisini değerlendiriyor ve azaltıyor mu?",
+    },
+    'AGRI-5': {
+        'en': "Does your organisation have a policy for responsible pesticide and chemical management that goes beyond minimum regulatory requirements?",
+        'tr': "Kuruluşunuzun asgari yasal gerekliliklerin ötesine geçen sorumlu pestisit ve kimyasal yönetimine ilişkin bir politikası var mı?",
+    },
+    'AGRI-6': {
+        'en': "Does your organisation have a documented food safety and quality management system with third-party certification?",
+        'tr': "Kuruluşunuzun üçüncü taraf sertifikasına sahip, belgelenmiş bir gıda güvenliği ve kalite yönetim sistemi var mı?",
+    },
+    'AGRI-7': {
+        'en': "Does your organisation have measures to identify and prevent child labour and forced labour throughout its agricultural supply chain?",
+        'tr': "Kuruluşunuz tarımsal tedarik zinciri boyunca çocuk işçiliğini ve zorla çalıştırmayı tespit etmeye ve önlemeye yönelik tedbirler alıyor mu?",
+    },
+    'AGRI-8': {
+        'en': "Does your organisation measure and publicly report greenhouse gas emissions from its agricultural operations and supply chain?",
+        'tr': "Kuruluşunuz tarımsal faaliyetlerinden ve tedarik zincirinden kaynaklanan sera gazı emisyonlarını ölçüp kamuoyuyla paylaşıyor mu?",
+    },
+
+    # ── Energy & Utilities (v4) ────────────────────────────────────────────
+    'ENER-1': {
+        'en': "Does your organisation measure, set reduction targets for and publicly report GHG emissions from energy generation?",
+        'tr': "Kuruluşunuz enerji üretiminden kaynaklanan sera gazı emisyonlarını ölçüyor, azaltma hedefleri koyuyor ve kamuoyuyla paylaşıyor mu?",
+    },
+    'ENER-2': {
+        'en': "Does your organisation have a strategy and published targets for transitioning to renewable energy sources?",
+        'tr': "Kuruluşunuzun yenilenebilir enerji kaynaklarına geçiş için bir stratejisi ve yayımlanmış hedefleri var mı?",
+    },
+    'ENER-3': {
+        'en': "Does your organisation monitor, manage and actively reduce water consumption in its energy generation processes?",
+        'tr': "Kuruluşunuz enerji üretim süreçlerindeki su tüketimini izliyor, yönetiyor ve aktif olarak azaltıyor mu?",
+    },
+    'ENER-4': {
+        'en': "Does your organisation assess and manage physical climate risks to its infrastructure, assets and operations?",
+        'tr': "Kuruluşunuz altyapısı, varlıkları ve faaliyetleri üzerindeki fiziksel iklim risklerini değerlendiriyor ve yönetiyor mu?",
+    },
+    'ENER-5': {
+        'en': "Does your organisation have a published just transition plan that protects workers and communities affected by the shift to clean energy?",
+        'tr': "Kuruluşunuzun temiz enerjiye geçiş sürecinden etkilenen işçileri ve toplulukları koruyan yayımlanmış bir adil geçiş planı var mı?",
+    },
+    'ENER-6': {
+        'en': "Does your organisation have programmes and targets to promote affordable and reliable energy access for all, including underserved populations?",
+        'tr': "Kuruluşunuz, hizmet götürülemeyen kesimler dahil herkes için uygun fiyatlı ve güvenilir enerji erişimini teşvik eden programlara ve hedeflere sahip mi?",
+    },
+    'ENER-7': {
+        'en': "Does your organisation measure, disclose and actively reduce air quality pollutant emissions (SO₂, NOₓ, PM) in line with Best Available Technology standards?",
+        'tr': "Kuruluşunuz En İyi Mevcut Teknoloji standartlarına uygun biçimde hava kalitesi kirletici emisyonlarını (SO₂, NOₓ, PM) ölçüyor, ifşa ediyor ve azaltıyor mu?",
+    },
+    'ENER-8': {
+        'en': "Does your organisation have a comprehensive nuclear safety and radioactive waste management policy and programme?",
+        'tr': "Kuruluşunuzun kapsamlı bir nükleer güvenlik ve radyoaktif atık yönetimi politikası ile programı var mı?",
+    },
+
+    # ── Financial Services (v4) ────────────────────────────────────────────
+    'FIN-1': {
+        'en': "Does your organisation measure and disclose financed emissions using the PCAF methodology or equivalent, with third-party verification?",
+        'tr': "Kuruluşunuz üçüncü taraf doğrulamasıyla PCAF metodolojisi veya eşdeğerini kullanarak finanse edilen emisyonları ölçüyor ve açıklıyor mu?",
+    },
+    'FIN-2': {
+        'en': "Does your organisation conduct climate scenario analysis and assess climate-related financial risk across its credit and investment portfolio?",
+        'tr': "Kuruluşunuz iklim senaryo analizi yapıyor ve kredi ile yatırım portföyü genelinde iklimle ilgili finansal riski değerlendiriyor mu?",
+    },
+    'FIN-3': {
+        'en': "Does your organisation have a published responsible investment policy that integrates ESG criteria into investment and lending decisions?",
+        'tr': "Kuruluşunuzun yatırım ve kredi kararlarına ESG kriterlerini entegre eden yayımlanmış bir sorumlu yatırım politikası var mı?",
+    },
+    'FIN-4': {
+        'en': "Does your organisation have programmes and targets to promote financial inclusion and access for underserved populations?",
+        'tr': "Kuruluşunuz hizmet götürülemeyen kesimlere yönelik finansal kapsayıcılığı ve erişimi teşvik eden program ve hedeflere sahip mi?",
+    },
+    'FIN-5': {
+        'en': "Does your organisation have robust anti-money laundering and financial crime compliance systems with regular independent audits?",
+        'tr': "Kuruluşunuzun düzenli bağımsız denetimlerle desteklenen sağlam kara para aklamayla mücadele ve mali suç uyum sistemleri var mı?",
+    },
+    'FIN-6': {
+        'en': "Does your organisation have a comprehensive data privacy and cybersecurity risk management framework with published breach statistics?",
+        'tr': "Kuruluşunuzun yayımlanmış ihlal istatistikleriyle desteklenen kapsamlı bir veri gizliliği ve siber güvenlik risk yönetimi çerçevesi var mı?",
+    },
+    'FIN-7': {
+        'en': "Does your organisation disclose diversity metrics across leadership and the workforce, and have targets to improve representation?",
+        'tr': "Kuruluşunuz liderlik ve işgücü genelinde çeşitlilik ölçütlerini açıklıyor ve temsili artırmaya yönelik hedeflere sahip mi?",
+    },
+    'FIN-8': {
+        'en': "Does your organisation integrate ESG considerations into its product and service design, and offer sustainable finance products to clients?",
+        'tr': "Kuruluşunuz ürün ve hizmet tasarımına ESG değerlendirmelerini dahil ediyor ve müşterilere sürdürülebilir finans ürünleri sunuyor mu?",
+    },
+
+    # ── Manufacturing & Industry (v4) ──────────────────────────────────────
+    'MFG-1': {
+        'en': "Does your organisation have targets and programmes to improve energy efficiency in manufacturing operations, with published performance data?",
+        'tr': "Kuruluşunuz imalat operasyonlarında enerji verimliliğini artırmaya yönelik yayımlanmış performans verileriyle desteklenen hedef ve programlara sahip mi?",
+    },
+    'MFG-2': {
+        'en': "Does your organisation measure, reduce and report waste generation, and apply circular economy principles to minimise landfill?",
+        'tr': "Kuruluşunuz atık üretimini ölçüyor, azaltıyor ve raporluyor; düzenli depolama alanını en aza indirmek için döngüsel ekonomi ilkelerini uyguluyor mu?",
+    },
+    'MFG-3': {
+        'en': "Does your organisation have a management system for the safe handling, storage and disposal of chemicals and hazardous materials?",
+        'tr': "Kuruluşunuzun kimyasallar ve tehlikeli maddelerin güvenli taşınması, depolanması ve bertarafı için bir yönetim sistemi var mı?",
+    },
+    'MFG-4': {
+        'en': "Does your organisation have a certified occupational health and safety management system with measurable targets and published incident data?",
+        'tr': "Kuruluşunuzun ölçülebilir hedefler ve yayımlanmış kaza verileriyle desteklenen sertifikalı bir iş sağlığı ve güvenliği yönetim sistemi var mı?",
+    },
+    'MFG-5': {
+        'en': "Does your organisation audit and monitor labour standards throughout its supplier base, including Tier 2 and beyond?",
+        'tr': "Kuruluşunuz 2. Kademe ve ötesini kapsayan tedarikçi tabanı genelinde çalışma standartlarını denetliyor ve izliyor mu?",
+    },
+    'MFG-6': {
+        'en': "Does your organisation conduct lifecycle assessments for its products and apply product stewardship principles across the full value chain?",
+        'tr': "Kuruluşunuz ürünleri için yaşam döngüsü değerlendirmeleri yapıyor ve tüm değer zinciri boyunca ürün gözetim ilkelerini uyguluyor mu?",
+    },
+    'MFG-7': {
+        'en': "Does your organisation measure and actively reduce GHG emissions from manufacturing processes, with science-based reduction targets?",
+        'tr': "Kuruluşunuz bilim temelli azaltma hedefleriyle imalat süreçlerinden kaynaklanan sera gazı emisyonlarını ölçüyor ve aktif olarak azaltıyor mu?",
+    },
+    'MFG-8': {
+        'en': "Does your organisation assess and manage the social and environmental impact of its operations on local communities?",
+        'tr': "Kuruluşunuz faaliyetlerinin yerel topluluklar üzerindeki sosyal ve çevresel etkisini değerlendiriyor ve yönetiyor mu?",
+    },
+
+    # ── Construction & Real Estate (v4) ────────────────────────────────────
+    'CON-1': {
+        'en': "Does your organisation design and certify new buildings to recognised green building standards (e.g. LEED Gold+, BREEAM Excellent+)?",
+        'tr': "Kuruluşunuz yeni binaları tanınan yeşil bina standartlarına (LEED Gold+, BREEAM Excellent+ vb.) göre tasarlayıp sertifikalandırıyor mu?",
+    },
+    'CON-2': {
+        'en': "Does your organisation measure and minimise embodied carbon in construction materials across all new projects?",
+        'tr': "Kuruluşunuz tüm yeni projelerde inşaat malzemelerindeki gömülü karbonu ölçüyor ve en aza indiriyor mu?",
+    },
+    'CON-3': {
+        'en': "Does your organisation assess and mitigate the biodiversity impact of development projects, and aim for biodiversity net gain?",
+        'tr': "Kuruluşunuz geliştirme projelerinin biyoçeşitlilik üzerindeki etkisini değerlendiriyor, azaltıyor ve biyoçeşitlilik net kazanımı hedefliyor mu?",
+    },
+    'CON-4': {
+        'en': "Does your organisation have targets and systems to reduce, reuse and recycle construction and demolition waste?",
+        'tr': "Kuruluşunuz inşaat ve yıkım atıklarını azaltmaya, yeniden kullanmaya ve geri dönüştürmeye yönelik hedef ve sistemlere sahip mi?",
+    },
+    'CON-5': {
+        'en': "Does your organisation have a comprehensive health and safety management system for all workers on construction sites?",
+        'tr': "Kuruluşunuz şantiyedeki tüm çalışanlar için kapsamlı bir iş sağlığı ve güvenliği yönetim sistemine sahip mi?",
+    },
+    'CON-6': {
+        'en': "Does your organisation contribute to affordable housing and assess community needs as part of its development planning process?",
+        'tr': "Kuruluşunuz geliştirme planlama sürecinde uygun fiyatlı konut üretimine katkıda bulunuyor ve toplumsal ihtiyaçları değerlendiriyor mu?",
+    },
+    'CON-7': {
+        'en': "Does your organisation incorporate climate resilience into the design and long-term management of built assets?",
+        'tr': "Kuruluşunuz inşa edilen varlıkların tasarımına ve uzun vadeli yönetimine iklim dayanıklılığını dahil ediyor mu?",
+    },
+    'CON-8': {
+        'en': "Does your organisation have a policy to respect and protect the land and resource rights of communities affected by its developments?",
+        'tr': "Kuruluşunuzun geliştirmelerinden etkilenen toplulukların arazi ve kaynak haklarını saygıyla korumaya yönelik bir politikası var mı?",
+    },
+
+    # ── Healthcare & Pharma (v4) ───────────────────────────────────────────
+    'HLT-1': {
+        'en': "Does your organisation have a published access-to-medicines strategy with tiered pricing, voluntary licensing and outcome targets?",
+        'tr': "Kuruluşunuzun kademeli fiyatlandırma, gönüllü lisanslama ve sonuç hedeflerini içeren yayımlanmış bir ilaca erişim stratejisi var mı?",
+    },
+    'HLT-2': {
+        'en': "Does your organisation register and publicly disclose results of all clinical trials, including negative findings, within 12 months of completion?",
+        'tr': "Kuruluşunuz tüm klinik deneyleri kaydettiriyor ve tamamlanmadan 12 ay içinde olumsuz bulgular dahil sonuçları kamuoyuyla paylaşıyor mu?",
+    },
+    'HLT-3': {
+        'en': "Does your organisation have a programme to combat antimicrobial resistance through responsible use, stewardship and R&D investment?",
+        'tr': "Kuruluşunuzun sorumlu kullanım, gözetim ve Ar-Ge yatırımı yoluyla antimikrobiyal dirençle mücadeleye yönelik bir programı var mı?",
+    },
+    'HLT-4': {
+        'en': "Does your organisation have a management system for the safe disposal of medical and hazardous waste that exceeds regulatory minimums?",
+        'tr': "Kuruluşunuzun yasal asgari gerekliliklerin üzerinde tıbbi ve tehlikeli atıkların güvenli bertarafı için bir yönetim sistemi var mı?",
+    },
+    'HLT-5': {
+        'en': "Does your organisation have a patient privacy and health data protection framework that is compliant with applicable regulations?",
+        'tr': "Kuruluşunuzun yürürlükteki mevzuata uygun bir hasta gizliliği ve sağlık verisi koruma çerçevesi var mı?",
+    },
+    'HLT-6': {
+        'en': "Does your organisation monitor and protect the health and safety of healthcare workers, including exposure to hazardous substances?",
+        'tr': "Kuruluşunuz tehlikeli maddelere maruziyeti de kapsayacak şekilde sağlık çalışanlarının sağlığını ve güvenliğini izliyor ve koruyor mu?",
+    },
+    'HLT-7': {
+        'en': "Does your organisation have a robust quality management system to ensure the safety and efficacy of all its products?",
+        'tr': "Kuruluşunuzun tüm ürünlerinin güvenliğini ve etkinliğini sağlamaya yönelik sağlam bir kalite yönetim sistemi var mı?",
+    },
+    'HLT-8': {
+        'en': "Does your organisation have and enforce an ethical marketing and promotion policy with independent audit and published breach data?",
+        'tr': "Kuruluşunuzun bağımsız denetim ve yayımlanmış ihlal verileriyle desteklenen, uygulanan bir etik pazarlama ve tanıtım politikası var mı?",
+    },
+
+    # ── Technology & IT (v4) ───────────────────────────────────────────────
+    'TECH-1': {
+        'en': "Does your organisation have a comprehensive data privacy and security management framework with regular independent audits?",
+        'tr': "Kuruluşunuzun düzenli bağımsız denetimlerle desteklenen kapsamlı bir veri gizliliği ve güvenlik yönetimi çerçevesi var mı?",
+    },
+    'TECH-2': {
+        'en': "Does your organisation have governance processes for algorithmic accountability, including bias audits and transparency reporting?",
+        'tr': "Kuruluşunuzun önyargı denetimi ve şeffaflık raporlamasını kapsayan algoritmik hesap verebilirliğe yönelik yönetim süreçleri var mı?",
+    },
+    'TECH-3': {
+        'en': "Does your organisation operate a product take-back programme to responsibly manage e-waste across its product portfolio?",
+        'tr': "Kuruluşunuz ürün portföyü genelinde e-atıkları sorumlu bir şekilde yönetmek için ürün geri alma programı yürütüyor mu?",
+    },
+    'TECH-4': {
+        'en': "Does your organisation measure and actively reduce the energy consumption of its data centres and digital infrastructure?",
+        'tr': "Kuruluşunuz veri merkezlerinin ve dijital altyapısının enerji tüketimini ölçüyor ve aktif olarak azaltıyor mu?",
+    },
+    'TECH-5': {
+        'en': "Does your organisation have programmes to promote digital inclusion and ensure equitable access to its products and services?",
+        'tr': "Kuruluşunuz dijital kapsayıcılığı teşvik etmeye ve ürün ile hizmetlerine eşit erişimi sağlamaya yönelik programlara sahip mi?",
+    },
+    'TECH-6': {
+        'en': "Does your organisation have a published responsible AI policy that addresses ethics, bias, human oversight and the impact of automation on workers?",
+        'tr': "Kuruluşunuzun etik, önyargı, insan gözetimi ve otomasyonun çalışanlar üzerindeki etkisini ele alan yayımlanmış bir sorumlu yapay zeka politikası var mı?",
+    },
+    'TECH-7': {
+        'en': "Does your organisation conduct OECD-aligned due diligence on conflict minerals in its supply chain with independent smelter audits?",
+        'tr': "Kuruluşunuz tedarik zincirinde çatışma mineralleri üzerinde bağımsız eritme tesisi denetimleriyle desteklenen OECD uyumlu özeni yürütüyor mu?",
+    },
+    'TECH-8': {
+        'en': "Does your organisation have a comprehensive cybersecurity risk management and incident response framework with published performance metrics?",
+        'tr': "Kuruluşunuzun yayımlanmış performans metrikleriyle desteklenen kapsamlı bir siber güvenlik risk yönetimi ve olay müdahale çerçevesi var mı?",
+    },
+
+    # ── Retail & Trade (v4) ────────────────────────────────────────────────
+    'RET-1': {
+        'en': "Does your organisation have a policy and monitoring system to ensure fair labour standards throughout its supply chain?",
+        'tr': "Kuruluşunuzun tedarik zinciri boyunca adil çalışma standartlarını sağlamaya yönelik bir politikası ve izleme sistemi var mı?",
+    },
+    'RET-2': {
+        'en': "Does your organisation have a product safety management system and a documented product recall procedure with published safety data?",
+        'tr': "Kuruluşunuzun yayımlanmış güvenlik verileriyle desteklenen bir ürün güvenliği yönetim sistemi ve belgelenmiş ürün geri çağırma prosedürü var mı?",
+    },
+    'RET-3': {
+        'en': "Does your organisation have targets to reduce packaging, increase recyclability and eliminate unnecessary single-use plastic?",
+        'tr': "Kuruluşunuzun ambalajı azaltmaya, geri dönüştürülebilirliği artırmaya ve gereksiz tek kullanımlık plastikleri ortadan kaldırmaya yönelik hedefleri var mı?",
+    },
+    'RET-4': {
+        'en': "Does your organisation have a consumer data privacy and protection framework compliant with applicable data protection regulations?",
+        'tr': "Kuruluşunuzun geçerli veri koruma yönetmeliklerine uygun bir tüketici veri gizliliği ve koruma çerçevesi var mı?",
+    },
+    'RET-5': {
+        'en': "Does your organisation have a responsible sourcing policy for raw materials that addresses environmental and social risks in its supply chain?",
+        'tr': "Kuruluşunuzun tedarik zincirindeki çevresel ve sosyal riskleri ele alan ham maddeler için sorumlu tedarik politikası var mı?",
+    },
+    'RET-6': {
+        'en': "Does your organisation measure and actively reduce food waste across its retail operations, with published reduction targets?",
+        'tr': "Kuruluşunuz yayımlanmış azaltma hedefleriyle perakende operasyonları genelinde gıda israfını ölçüyor ve aktif olarak azaltıyor mu?",
+    },
+    'RET-7': {
+        'en': "Does your organisation have a commitment to paying living wages to all workers in its supply chain, with independent verification?",
+        'tr': "Kuruluşunuzun bağımsız doğrulamayla birlikte tedarik zincirindeki tüm çalışanlara yaşanabilir ücret ödemeye yönelik bir taahhüdü var mı?",
+    },
+    'RET-8': {
+        'en': "Does your organisation measure and reduce the carbon footprint of its logistics and last-mile delivery operations?",
+        'tr': "Kuruluşunuz lojistik ve son kilometre teslimat operasyonlarının karbon ayak izini ölçüyor ve azaltıyor mu?",
+    },
+
+    # ════════════════════════════════════════════════════════════════════════
+    # v3 legacy IDs  (AG-01 … RET-08)  — kept for backward compatibility
+    # ════════════════════════════════════════════════════════════════════════
+
+    # ── Agriculture & Food (v3) ────────────────────────────────────────────
     'AG-01': {
         'en': "What percentage of your sourcing volume is covered by third-party sustainability certifications (e.g. RSPO, FSC, Rainforest Alliance)?",
         'tr': "Kaynak hacminizin yüzde kaçı üçüncü taraf sürdürülebilirlik sertifikalarıyla (RSPO, FSC, Rainforest Alliance vb.) kapsanmaktadır?",
@@ -614,23 +901,27 @@ class Command(BaseCommand):
             p = list(row) + [None] * 12
             q_id    = _s(p[1])
             cat_nm  = _s(p[2])          # Category column   (C)
-            q_text  = _s(p[3])          # Question column   (D) — often empty in v3 Excel
-            gri_ref = _s(p[4])          # GRI Ref column    (E) e.g. "GRI 301-2"
-            option  = _s(p[5])          # Answer Option     (F)
-            pts     = _n(p[6])          # Points            (G)
+            q_text  = _s(p[3])          # Question col  (D) — v3; v4 puts "Sector" here
+            gri_ref = _s(p[4])          # GRI Ref col   (E) — v3; v4 uses Criterion here
+            option  = _s(p[5])          # Answer Option (F)
+            pts     = _n(p[6])          # Points        (G)
             if not option or option[0] not in ('A', 'B', 'C', 'D'):
                 continue
             if q_id and q_id not in ('Q ID', '#'):
                 if q_id not in questions:
                     order += 1
-                    # Priority: Excel col-D → SECTOR_QUESTION_TEXT → "Cat (Ref)" fallback
+                    # v4 STRUCTURED puts a layer marker (e.g. "Sector") in the
+                    # column that v3 used for the full question text.  Treat any
+                    # LAYER_MARKERS value as absent so SECTOR_QUESTION_TEXT is
+                    # consulted instead of storing the word "Sector" verbatim.
+                    effective_text = q_text if q_text and q_text.lower() not in LAYER_MARKERS else ''
+
+                    # Priority: real Excel text → SECTOR_QUESTION_TEXT → fallback
                     override = SECTOR_QUESTION_TEXT.get(q_id, {})
-                    if q_text:
-                        # Excel "Question" column takes highest priority
-                        label    = q_text
+                    if effective_text:
+                        label    = effective_text
                         label_tr = ''
                     elif override:
-                        # Hardcoded full-sentence questions (EN + TR)
                         label    = override.get('en', cat_nm or q_id)
                         label_tr = override.get('tr', '')
                     elif cat_nm and gri_ref:
