@@ -191,6 +191,7 @@ function StepCard({
   onContinue,
   onRetry,
   starting,
+  stepErr,
 }: {
   step: WizardStep;
   lang: string;
@@ -201,6 +202,7 @@ function StepCard({
   onContinue: (attempt: Attempt) => void;
   onRetry: (step: WizardStep) => void;
   starting: boolean;
+  stepErr?: string;
 }) {
   const { status, phase, done, live } = step;
   const isLocked   = status === 'locked';
@@ -398,11 +400,23 @@ function StepCard({
               selected={selectedSector}
               onChange={onSectorChange}
             />
+            {/* Inline error (e.g. sector survey not found) */}
+            {stepErr && (
+              <div style={{
+                marginTop: 10,
+                padding: '8px 12px',
+                background: '#FEF2F0', border: '1px solid #F5C6BB',
+                fontSize: 11, color: 'var(--danger)',
+                fontFamily: "'IBM Plex Mono', monospace",
+              }}>
+                {stepErr}
+              </div>
+            )}
             <div style={{
               marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
-              {selectedSector === null && (
+              {selectedSector === null && !stepErr && (
                 <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
                   * {lang === 'tr' ? 'Devam etmek için sektör seçin.' : 'Select a sector to continue.'}
                 </span>
@@ -688,11 +702,12 @@ export default function SurveysPage() {
               lang={lang}
               isLast={idx === steps.length - 1}
               selectedSector={selectedSector}
-              onSectorChange={setSelectedSector}
+              onSectorChange={(v) => { setSelectedSector(v); setStartErr(''); }}
               onStart={handleStart}
               onContinue={handleContinue}
               onRetry={handleRetry}
               starting={starting}
+              stepErr={step.phase === 4 && step.status === 'active' ? startErr : undefined}
             />
           ))}
         </div>
