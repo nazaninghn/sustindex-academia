@@ -7,393 +7,620 @@ import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/shared';
 import { surveyAPI, attemptAPI } from '@/lib/api';
-import logger from '@/lib/logger';
+import { gradeColor } from '@/lib/utils';
 
-/* ═══════════════════════════════════════════════════════════════
-   Sector selection modal
-   ═══════════════════════════════════════════════════════════════ */
-
-/**
- * Sector options — GRI Sector Standards require every company to select
- * one sector.  The "General / no sector" option was removed because GRI 3
- * Material Topics are always assessed in the context of a sector standard.
- */
-const SECTORS: { value: string; key: string }[] = [
-  { value: 'agri',         key: 'surv_sector_agri'          },
-  { value: 'energy',       key: 'surv_sector_energy'        },
-  { value: 'finance',      key: 'surv_sector_finance'       },
-  { value: 'construction', key: 'surv_sector_construction'  },
-  { value: 'manufacturing',key: 'surv_sector_manufacturing' },
-  { value: 'health',       key: 'surv_sector_health'        },
-  { value: 'tech',         key: 'surv_sector_tech'          },
-  { value: 'retail',       key: 'surv_sector_retail'        },
+/* ─── Sector definitions ─────────────────────────────────────── */
+const SECTORS = [
+  { value: 'agri',          en: 'Agriculture & Food',          tr: 'Tarım & Gıda',            match: 'Agriculture'   },
+  { value: 'energy',        en: 'Energy & Utilities',          tr: 'Enerji & Hizmetler',      match: 'Energy'        },
+  { value: 'finance',       en: 'Financial Services',          tr: 'Finansal Hizmetler',      match: 'Financial'     },
+  { value: 'construction',  en: 'Construction & Real Estate',  tr: 'İnşaat & Gayrimenkul',    match: 'Construction'  },
+  { value: 'manufacturing', en: 'Manufacturing & Industry',    tr: 'İmalat & Sanayi',         match: 'Manufacturing' },
+  { value: 'health',        en: 'Healthcare & Pharma',         tr: 'Sağlık & İlaç',           match: 'Healthcare'    },
+  { value: 'tech',          en: 'Technology & IT',             tr: 'Teknoloji & BT',          match: 'Technology'    },
+  { value: 'retail',        en: 'Retail & Trade',              tr: 'Perakende & Ticaret',     match: 'Retail'        },
 ];
 
-interface SectorModalProps {
-  onConfirm: (sector: string) => void;
-  onCancel: () => void;
-}
-
-function SectorModal({ onConfirm, onCancel }: SectorModalProps) {
-  const { t, lang } = useLang();
-  // No pre-selection — user must actively choose a sector (GRI requirement).
-  const [selected, setSelected] = useState<string | null>(null);
-
-  // Close on Escape
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onCancel]);
-
-  return (
-    /* Overlay */
-    <div
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(20, 20, 18, 0.55)',
-        backdropFilter: 'blur(2px)',
-        zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '24px 16px',
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      {/* Card */}
-      <div style={{
-        background: 'var(--paper)',
-        border: '1px solid var(--line)',
-        width: '100%', maxWidth: 560,
-        padding: '32px 36px',
-        maxHeight: '90vh', overflowY: 'auto',
-      }}>
-        {/* Header */}
-        <div style={{ marginBottom: 20 }}>
-          <span style={{
-            fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
-            color: 'var(--ink-4)', display: 'block', marginBottom: 8,
-          }}>
-            GRI · Phase 4 — Sector Standard
-          </span>
-          <h2 style={{ fontSize: 22, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>
-            {t('surv_sector_title')}
-          </h2>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.65 }}>
-            {lang === 'tr'
-              ? 'GRI Sektör Standartları, her şirketin ilgili sektör için materyel konuları raporlamasını gerektirir. Lütfen şirketinizin ana faaliyet alanına en uygun sektörü seçin.'
-              : 'GRI Sector Standards require every organisation to report on material topics for their relevant sector. Please select the sector that best matches your primary business activities.'}
-          </p>
-        </div>
-
-        {/* Sector grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 28 }}>
-          {SECTORS.map(({ value, key }) => {
-            const isSelected = selected === value;
-            return (
-              <button
-                key={value}
-                onClick={() => setSelected(value)}
-                style={{
-                  padding: '12px 16px',
-                  textAlign: 'left',
-                  border: `1px solid ${isSelected ? 'var(--ink)' : 'var(--line)'}`,
-                  background: isSelected ? 'var(--ink)' : 'var(--cream)',
-                  color: isSelected ? 'var(--paper)' : 'var(--ink)',
-                  cursor: 'pointer',
-                  transition: 'border-color 0.12s, background 0.12s',
-                  fontFamily: "'IBM Plex Sans', sans-serif",
-                  fontSize: 12.5, fontWeight: isSelected ? 500 : 400,
-                  borderRadius: 0,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSelected) e.currentTarget.style.borderColor = 'var(--ink-3)';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSelected) e.currentTarget.style.borderColor = 'var(--line)';
-                }}
-              >
-                {/* dot indicator */}
-                <span style={{
-                  display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
-                  background: isSelected ? 'var(--paper)' : 'var(--line)',
-                  marginRight: 8, marginBottom: 1,
-                  transition: 'background 0.12s',
-                }} />
-                {t(key)}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Actions */}
-        {selected === null && (
-          <p style={{
-            fontSize: 11, color: 'var(--ink-4)', marginBottom: 12,
-            fontFamily: "'IBM Plex Mono', monospace",
-          }}>
-            {lang === 'tr' ? '* Devam etmek için bir sektör seçin.' : '* Select a sector to continue.'}
-          </p>
-        )}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button
-            className="btn btn-outline btn-sm"
-            onClick={onCancel}
-          >
-            {t('surv_sector_cancel')}
-          </button>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => selected !== null && onConfirm(selected)}
-            disabled={selected === null}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              opacity: selected === null ? 0.4 : 1,
-              cursor: selected === null ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {t('surv_sector_confirm')} <Icon.arrow />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/* ─── Types ──────────────────────────────────────────────────── */
 interface Survey {
   id: number;
   name: string; name_en?: string; name_tr?: string;
-  description?: string; description_en?: string; description_tr?: string;
-  /** Per-company effective count: universal + 8 sector (returned by SurveyListSerializer). */
-  question_count?: number;
-  /** Raw total used by SurveySerializer detail endpoint. */
-  total_questions?: number;
-  /** Fallback when neither field is present (e.g. cached old API response). */
-  questions?: { id: number }[];
-  estimated_time?: string;
-  category?: string;   // env | soc | gov — may not come from API
-  tag?: string;
+  question_count?: number; total_questions?: number;
 }
 
-/** Pick the right language field, fall back to default text */
-function loc(
-  obj: { name?: string; name_en?: string; name_tr?: string;
-         description?: string; description_en?: string; description_tr?: string },
-  field: 'name' | 'description',
-  lang: string
-): string {
-  const trKey  = `${field}_tr`  as 'name_tr'  | 'description_tr';
-  const enKey  = `${field}_en`  as 'name_en'  | 'description_en';
-  if (lang === 'tr' && obj[trKey]) return obj[trKey]!;
-  if (lang === 'en' && obj[enKey]) return obj[enKey]!;
-  return obj[field] || '';
+interface Attempt {
+  id: number;
+  survey_name: string;
+  is_completed: boolean;
+  completed_at: string | null;
+  total_score: number | null;
+  overall_grade: string;
 }
 
-function SkeletonCard() {
+type StepStatus = 'completed' | 'in_progress' | 'active' | 'locked';
+
+interface WizardStep {
+  phase: 1 | 2 | 3 | 4;
+  labelEn: string;
+  labelTr: string;
+  descEn: string;
+  descTr: string;
+  questions: number;
+  nameMatch: string;
+  status: StepStatus;
+  survey: Survey | null;
+  done: Attempt | null;   // most recent completed attempt
+  live: Attempt | null;   // in-progress attempt
+}
+
+const STEP_DEFS: Omit<WizardStep, 'status' | 'survey' | 'done' | 'live'>[] = [
+  {
+    phase: 1,
+    labelEn: 'GRI 1: Foundation',
+    labelTr: 'GRI 1: Temel',
+    descEn:  'Understanding GRI reporting requirements and principles',
+    descTr:  'GRI raporlama gereksinimleri ve ilkelerini anlama',
+    questions: 32,
+    nameMatch: 'GRI 1:',
+  },
+  {
+    phase: 2,
+    labelEn: 'GRI 2: General Disclosures',
+    labelTr: 'GRI 2: Genel Açıklamalar',
+    descEn:  'Organisational profile, governance and stakeholder engagement',
+    descTr:  'Kuruluş profili, yönetişim ve paydaş katılımı',
+    questions: 80,
+    nameMatch: 'GRI 2:',
+  },
+  {
+    phase: 3,
+    labelEn: 'GRI 3: Material Topics',
+    labelTr: 'GRI 3: Önemli Konular',
+    descEn:  'Materiality assessment and management approach for key topics',
+    descTr:  'Önemlilik değerlendirmesi ve temel konular için yönetim yaklaşımı',
+    questions: 60,
+    nameMatch: 'GRI 3:',
+  },
+  {
+    phase: 4,
+    labelEn: 'Sector Standard',
+    labelTr: 'Sektör Standardı',
+    descEn:  'Industry-specific sustainability topics for your sector',
+    descTr:  'Sektörünüze özgü sürdürülebilirlik konuları',
+    questions: 8,
+    nameMatch: 'GRI Sector:',
+  },
+];
+
+/* ─── Step status badge ──────────────────────────────────────── */
+function StatusBadge({ status, lang }: { status: StepStatus; lang: string }) {
+  const cfg = {
+    completed:   { bg: 'var(--olive-deep)', color: '#fff',            label: lang === 'tr' ? 'Tamamlandı' : 'Completed'   },
+    in_progress: { bg: 'var(--amber)',      color: 'var(--ink)',       label: lang === 'tr' ? 'Devam Ediyor' : 'In Progress' },
+    active:      { bg: 'var(--ink)',        color: 'var(--cream)',     label: lang === 'tr' ? 'Hazır' : 'Ready'            },
+    locked:      { bg: 'transparent',       color: 'var(--ink-4)',     label: lang === 'tr' ? 'Kilitli' : 'Locked'         },
+  }[status];
+
   return (
-    <div style={{
-      background: 'var(--paper)', border: '1px solid var(--line)',
-      padding: 28, minHeight: 200,
+    <span style={{
+      fontFamily: "'IBM Plex Mono', monospace",
+      fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
+      padding: '3px 8px',
+      background: cfg.bg,
+      color: cfg.color,
+      border: status === 'locked' ? '1px solid var(--line)' : 'none',
+      display: 'inline-block',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 22 }}>
-        <div style={{ height: 10, width: 60, background: 'var(--cream-deep)', borderRadius: 2 }} />
-        <div style={{ height: 20, width: 56, background: 'var(--cream-deep)', borderRadius: 999 }} />
+      {status === 'locked' && '🔒 '}{cfg.label}
+    </span>
+  );
+}
+
+/* ─── Sector Picker (inline, for Step 4 when active) ────────── */
+function SectorPicker({
+  lang,
+  selected,
+  onChange,
+}: {
+  lang: string;
+  selected: string | null;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div style={{ marginTop: 20 }}>
+      <p style={{
+        fontSize: 11, color: 'var(--ink-4)',
+        fontFamily: "'IBM Plex Mono', monospace",
+        letterSpacing: '0.08em', textTransform: 'uppercase',
+        marginBottom: 12,
+      }}>
+        {lang === 'tr' ? 'Sektörünüzü seçin' : 'Choose your sector'}
+      </p>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+        gap: 6,
+      }}>
+        {SECTORS.map((s) => {
+          const isSelected = selected === s.value;
+          return (
+            <button
+              key={s.value}
+              onClick={() => onChange(s.value)}
+              style={{
+                padding: '9px 14px',
+                textAlign: 'left',
+                border: `1px solid ${isSelected ? 'var(--ink)' : 'var(--line)'}`,
+                background: isSelected ? 'var(--ink)' : 'var(--cream)',
+                color: isSelected ? 'var(--paper)' : 'var(--ink)',
+                cursor: 'pointer',
+                fontFamily: "'IBM Plex Sans', sans-serif",
+                fontSize: 12, fontWeight: isSelected ? 500 : 400,
+                display: 'flex', alignItems: 'center', gap: 8,
+                transition: 'border-color 0.1s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSelected) e.currentTarget.style.borderColor = 'var(--ink-3)';
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected) e.currentTarget.style.borderColor = 'var(--line)';
+              }}
+            >
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                background: isSelected ? 'var(--paper)' : 'var(--line)',
+                display: 'inline-block',
+              }} />
+              {lang === 'tr' ? s.tr : s.en}
+            </button>
+          );
+        })}
       </div>
-      <div style={{ height: 18, width: '65%', background: 'var(--cream-deep)', borderRadius: 2, marginBottom: 10 }} />
-      <div style={{ height: 12, width: '90%', background: 'var(--cream-deep)', borderRadius: 2, marginBottom: 6 }} />
-      <div style={{ height: 12, width: '75%', background: 'var(--cream-deep)', borderRadius: 2, marginBottom: 28 }} />
-      <div style={{ height: 1, background: 'var(--line)', marginBottom: 18 }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <div style={{ height: 20, width: 120, background: 'var(--cream-deep)', borderRadius: 2 }} />
-        <div style={{ height: 32, width: 72, background: 'var(--cream-deep)', borderRadius: 999 }} />
+    </div>
+  );
+}
+
+/* ─── Single wizard step card ────────────────────────────────── */
+function StepCard({
+  step,
+  lang,
+  isLast,
+  selectedSector,
+  onSectorChange,
+  onStart,
+  onContinue,
+  onRetry,
+  starting,
+}: {
+  step: WizardStep;
+  lang: string;
+  isLast: boolean;
+  selectedSector: string | null;
+  onSectorChange: (v: string) => void;
+  onStart: (step: WizardStep, sector?: string) => void;
+  onContinue: (attempt: Attempt) => void;
+  onRetry: (step: WizardStep) => void;
+  starting: boolean;
+}) {
+  const { status, phase, done, live } = step;
+  const isLocked   = status === 'locked';
+  const isActive   = status === 'active';
+  const isDone     = status === 'completed';
+  const isLive     = status === 'in_progress';
+
+  const label = lang === 'tr' ? step.labelTr : step.labelEn;
+  const desc  = lang === 'tr' ? step.descTr  : step.descEn;
+
+  /* left-border accent colour */
+  const accentColor = isDone   ? 'var(--olive-deep)'
+                    : isLive   ? 'var(--amber)'
+                    : isActive ? 'var(--ink)'
+                    :            'var(--line)';
+
+  return (
+    <div style={{ display: 'flex', gap: 0 }}>
+      {/* Connector column */}
+      <div style={{ width: 40, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* Phase dot */}
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+          background: isDone   ? 'var(--olive-deep)'
+                    : isLive   ? 'var(--amber)'
+                    : isActive ? 'var(--ink)'
+                    :            'var(--cream-deep)',
+          border: `1px solid ${isDone || isLive || isActive ? 'transparent' : 'var(--line)'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+          fontWeight: 600, letterSpacing: '-0.02em',
+          color: isDone || isLive || isActive ? '#fff' : 'var(--ink-4)',
+          zIndex: 1, position: 'relative',
+        }}>
+          {isDone ? '✓' : phase}
+        </div>
+        {/* Vertical line to next step */}
+        {!isLast && (
+          <div style={{
+            flex: 1, width: 1,
+            background: isDone ? 'var(--olive-deep)' : 'var(--line)',
+            marginTop: 2, marginBottom: 2,
+            minHeight: 16,
+          }} />
+        )}
+      </div>
+
+      {/* Card */}
+      <div style={{
+        flex: 1,
+        marginLeft: 16,
+        marginBottom: isLast ? 0 : 16,
+        background: 'var(--paper)',
+        border: '1px solid var(--line)',
+        borderLeft: `3px solid ${accentColor}`,
+        padding: '20px 24px',
+        opacity: isLocked ? 0.65 : 1,
+        transition: 'opacity 0.2s',
+      }}>
+        {/* Card header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+          <div>
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+              color: 'var(--ink-4)', letterSpacing: '0.12em',
+              textTransform: 'uppercase', display: 'block', marginBottom: 5,
+            }}>
+              {lang === 'tr' ? 'AŞAMA' : 'PHASE'} {String(phase).padStart(2, '0')}
+            </span>
+            <h2 style={{
+              fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em',
+              color: isLocked ? 'var(--ink-3)' : 'var(--ink)',
+              marginBottom: 4,
+            }}>
+              {label}
+            </h2>
+            <p style={{ fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+              {desc}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, marginLeft: 16 }}>
+            <StatusBadge status={status} lang={lang} />
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 10, color: 'var(--ink-4)', whiteSpace: 'nowrap',
+            }}>
+              {step.questions} {lang === 'tr' ? 'soru' : 'Q'}
+            </span>
+          </div>
+        </div>
+
+        {/* Completed: show score + actions */}
+        {isDone && done && (
+          <div style={{
+            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            flexWrap: 'wrap', gap: 10,
+          }}>
+            <div style={{ display: 'flex', gap: 20, alignItems: 'baseline' }}>
+              <div>
+                <span style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                  fontSize: 26, letterSpacing: '-0.04em',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {Math.round(done.total_score ?? 0)}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--ink-3)', marginLeft: 4 }}>pts</span>
+              </div>
+              {done.overall_grade && (
+                <span style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600,
+                  fontSize: 18, color: gradeColor(done.overall_grade),
+                }}>
+                  {done.overall_grade}
+                </span>
+              )}
+              {done.completed_at && (
+                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                  {new Date(done.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB')}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a href={`/results/${done.id}`} style={{ textDecoration: 'none' }}>
+                <button className="btn btn-outline btn-sm">
+                  {lang === 'tr' ? 'Sonuçlar' : 'Results'} <Icon.arrow />
+                </button>
+              </a>
+              {/* Retry only for steps 1-3 (sector retry requires new sector pick) */}
+              {phase < 4 && (
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => onRetry(step)}
+                  disabled={starting}
+                >
+                  {lang === 'tr' ? 'Tekrar' : 'Retry'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* In-progress: continue button */}
+        {isLive && live && (
+          <div style={{
+            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+              {lang === 'tr' ? 'Kaldığınız yerden devam edin.' : 'Pick up where you left off.'}
+            </span>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => onContinue(live)}
+              disabled={starting}
+            >
+              {lang === 'tr' ? 'Devam Et' : 'Continue'} <Icon.arrow />
+            </button>
+          </div>
+        )}
+
+        {/* Active (step 1–3): start button */}
+        {isActive && phase < 4 && (
+          <div style={{
+            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
+            display: 'flex', justifyContent: 'flex-end',
+          }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => onStart(step)}
+              disabled={starting || !step.survey}
+            >
+              {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
+            </button>
+          </div>
+        )}
+
+        {/* Active (step 4): sector picker + start */}
+        {isActive && phase === 4 && (
+          <>
+            <SectorPicker
+              lang={lang}
+              selected={selectedSector}
+              onChange={onSectorChange}
+            />
+            <div style={{
+              marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              {selectedSector === null && (
+                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                  * {lang === 'tr' ? 'Devam etmek için sektör seçin.' : 'Select a sector to continue.'}
+                </span>
+              )}
+              <div style={{ marginLeft: 'auto' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => selectedSector && onStart(step, selectedSector)}
+                  disabled={starting || selectedSector === null}
+                  style={{ opacity: selectedSector === null ? 0.4 : 1, cursor: selectedSector === null ? 'not-allowed' : 'pointer' }}
+                >
+                  {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Locked: show which step to complete first */}
+        {isLocked && (
+          <div style={{ marginTop: 10 }}>
+            <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+              {lang === 'tr'
+                ? `GRI ${phase - 1} tamamlandıktan sonra açılır`
+                : `Unlock after completing GRI ${phase === 4 ? '3' : phase - 1}`}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Surveys Page
+   Main Page
    ═══════════════════════════════════════════════════════════════ */
 export default function SurveysPage() {
-  const { lang, t } = useLang();
+  const { lang } = useLang();
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  // Fix HIGH #19 pattern: ref-based lock prevents double-submit on rapid re-renders
   const submitLockRef = useRef(false);
 
-  const [filter,          setFilter]          = useState('all');
-  const [surveys,         setSurveys]         = useState<Survey[]>([]);
-  const [loading,         setLoading]         = useState(true);
-  const [loadErr,         setLoadErr]         = useState(false);   // Fix H-7: distinguish load failure from empty list
-  const [retryKey,        setRetryKey]        = useState(0);       // increment to re-trigger the fetch effect
-  const [starting,        setStarting]        = useState<number | null>(null);
-  const [startErr,        setStartErr]        = useState('');
-  // Sector modal: pendingSurveyId (state) drives the modal open/closed;
-  // pendingSurveyRef (ref) holds the value for handleSectorConfirm so the
-  // callback doesn't need pendingSurveyId in its dependency array (Fix LOW-04).
-  const [pendingSurveyId, setPendingSurveyId] = useState<number | null>(null);
-  const pendingSurveyRef  = useRef<number | null>(null);
+  const [surveys,  setSurveys]  = useState<Survey[]>([]);
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [loadErr,  setLoadErr]  = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [startErr, setStartErr] = useState('');
+  const [selectedSector, setSelectedSector] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (user) {
-      setLoading(true);
-      setSurveys([]);
-      setLoadErr(false);
-      surveyAPI
-        .getSurveys()
-        .then((data: Survey[] | { results: Survey[] }) => {
-          const list = Array.isArray(data) ? data : (data?.results ?? []);
-          setSurveys(list);
-        })
-        // Fix H-7: surface the error so users know it's a network/server issue,
-        // not just an empty library.  Previously .catch(() => setSurveys([]))
-        // showed the same "no surveys yet" message for both states.
-        .catch(() => { setSurveys([]); setLoadErr(true); })
-        .finally(() => setLoading(false));
+    if (!user) return;
+    setLoading(true);
+    Promise.all([
+      surveyAPI.getSurveys(),
+      attemptAPI.getMyAttempts(),
+    ])
+      .then(([survData, attData]: [Survey[] | { results: Survey[] }, Attempt[] | { results: Attempt[] }]) => {
+        const survList = Array.isArray(survData) ? survData : (survData?.results ?? []);
+        const attList  = Array.isArray(attData)  ? attData  : (attData?.results  ?? []);
+        setSurveys(survList);
+        setAttempts(attList);
+      })
+      .catch(() => setLoadErr(true))
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  /* ── Build wizard steps ─────────────────────────────────── */
+  const steps: WizardStep[] = STEP_DEFS.map((def, idx) => {
+    const sname = (s: Survey) => s.name_en || s.name || '';
+    const aname = (a: Attempt) => a.survey_name || '';
+
+    // Survey match for steps 1-3 (exact phase prefix)
+    const survey = def.phase < 4
+      ? (surveys.find((s) => sname(s).includes(def.nameMatch)) ?? null)
+      : null;  // sector survey resolved later by selected sector
+
+    // Attempt match
+    const stepAttempts = attempts.filter((a) => aname(a).includes(def.nameMatch));
+    // Newest completed + newest in-progress
+    const done = stepAttempts.find((a) =>  a.is_completed) ?? null;
+    const live = stepAttempts.find((a) => !a.is_completed) ?? null;
+
+    // Status
+    let status: StepStatus;
+    if (live)       { status = 'in_progress'; }
+    else if (done)  { status = 'completed';   }
+    else if (idx === 0) { status = 'active';  }
+    else {
+      const prevMatch = STEP_DEFS[idx - 1].nameMatch;
+      const prevDone  = attempts.some((a) => a.is_completed && aname(a).includes(prevMatch));
+      status = prevDone ? 'active' : 'locked';
     }
-  // retryKey is added so the Retry button re-runs the same effect cleanly.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, retryKey]);
 
-  /* Step 1 — user clicks "Start" on a survey card: open sector-selection modal */
-  const handleStart = (surveyId: number) => {
-    if (starting !== null || submitLockRef.current) return;
+    return { ...def, survey, done, live, status };
+  });
+
+  /* ── Handlers ───────────────────────────────────────────── */
+  const handleStart = useCallback(async (step: WizardStep, sector?: string) => {
+    if (submitLockRef.current) return;
     setStartErr('');
-    pendingSurveyRef.current = surveyId;   // Fix LOW-04: store in ref (no stale-closure risk)
-    setPendingSurveyId(surveyId);
-  };
 
-  /* Step 2 — user picks a sector in the modal and clicks "Continue" */
-  // Fix LOW-04: read surveyId from the ref instead of from state so this callback
-  // never needs pendingSurveyId or starting in its dependency array, eliminating
-  // the stale-closure risk that caused occasional "null surveyId" bugs on rapid clicks.
-  const handleSectorConfirm = useCallback(async (sector: string) => {
-    const surveyId = pendingSurveyRef.current;
-    pendingSurveyRef.current = null;
-    setPendingSurveyId(null);  // close modal immediately so UX is snappy
-    if (surveyId === null || submitLockRef.current) return;
+    let survey = step.survey;
+
+    if (step.phase === 4 && sector) {
+      const sectorDef = SECTORS.find((s) => s.value === sector);
+      if (sectorDef) {
+        survey = surveys.find((s) =>
+          (s.name_en || s.name || '').includes(sectorDef.match) ||
+          (s.name || '').includes(sectorDef.match)
+        ) ?? null;
+      }
+    }
+
+    if (!survey) {
+      setStartErr(lang === 'tr' ? 'Anket bulunamadı.' : 'Survey not found.');
+      return;
+    }
+
     submitLockRef.current = true;
-    setStarting(surveyId);
-    setStartErr('');
+    setStarting(true);
     try {
-      // sector is always a non-empty string: sector selection is now required by GRI.
-      const attempt = await attemptAPI.startAttempt(surveyId, sector);
+      const attempt = await attemptAPI.startAttempt(survey.id, sector);
       router.push(`/questionnaire/${attempt.id}`);
-    } catch (err: unknown) {
-      // Fix R4-H-04: environment-gated logger — silent in production
-      logger.error('Failed to start attempt:', err);
-      setStartErr(t('surv_start_err'));
-      setStarting(null);
+    } catch {
+      setStartErr(lang === 'tr' ? 'Başlatılamadı, lütfen tekrar deneyin.' : 'Failed to start. Please try again.');
+      setStarting(false);
     } finally {
       submitLockRef.current = false;
     }
-  }, [router, t]);
+  }, [surveys, lang, router]);
 
-  /* Modal cancel — just dismiss without starting */
-  const handleSectorCancel = useCallback(() => {
-    pendingSurveyRef.current = null;
-    setPendingSurveyId(null);
-  }, []);
+  const handleContinue = useCallback((attempt: Attempt) => {
+    router.push(`/questionnaire/${attempt.id}`);
+  }, [router]);
 
-  // question_count → new smart field (per-company count, e.g. 180 for Combined).
-  // total_questions → raw total (includes all sector questions).
-  // questions.length → legacy fallback for old API responses.
-  const qCount = (s: Survey) =>
-    s.question_count ?? s.total_questions ?? s.questions?.length ?? 0;
+  // Retry = start a fresh attempt for the same survey (no sector needed for 1-3)
+  const handleRetry = useCallback((step: WizardStep) => {
+    handleStart(step);
+  }, [handleStart]);
 
-  // Category filter — only shown if surveys have a category field
-  const hasCats = surveys.some((s) => s.category);
-  const filters: [string, string][] = hasCats
-    ? [
-        ['all', lang === 'tr' ? 'Tümü'          : 'All'],
-        ['env', lang === 'tr' ? 'Çevre'         : 'Environmental'],
-        ['soc', lang === 'tr' ? 'Sosyal'        : 'Social'],
-        ['gov', lang === 'tr' ? 'Yönetişim'     : 'Governance'],
-      ]
-    : [['all', lang === 'tr' ? 'Tümü' : 'All']];
+  /* ── Loading ─────────────────────────────────────────────── */
+  if (authLoading || loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
+          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
+        </span>
+      </div>
+    );
+  }
 
-  const visible = surveys.filter((s) => filter === 'all' || s.category === filter);
+  /* ── Completed all 4 phases banner ───────────────────────── */
+  const allDone = steps.every((s) => s.status === 'completed');
 
-  if (authLoading) return (
-    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
-        {/* Fix R7-14: use i18n key instead of hardcoded English string */}
-        {t('t_loading_auth')}
-      </span>
-    </div>
-  );
+  /* ── Total questions answered ────────────────────────────── */
+  const completedPhases = steps.filter((s) => s.status === 'completed').length;
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
-      {/* Sector selection modal — rendered outside the main layout flow */}
-      {pendingSurveyId !== null && (
-        <SectorModal
-          onConfirm={handleSectorConfirm}
-          onCancel={handleSectorCancel}
-        />
-      )}
       <AppNav />
 
-      <main className="wrap" style={{ padding: '36px 32px 80px' }}>
+      <main className="wrap" style={{ padding: '40px 32px 80px', maxWidth: 760 }}>
 
-        {/* ── Header ── */}
+        {/* ── Page header ─────────────────────────────────── */}
         <div style={{ marginBottom: 40 }}>
           <span style={{
             fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 11, color: 'var(--ink-4)',
-            letterSpacing: '0.1em', textTransform: 'uppercase',
+            fontSize: 10, color: 'var(--ink-4)',
+            letterSpacing: '0.14em', textTransform: 'uppercase',
             display: 'block', marginBottom: 10,
           }}>
-            {loading
-              ? '…'
-              : `${lang === 'tr' ? 'Kütüphane · ' : 'Library · '}${surveys.length} ${lang === 'tr' ? 'anket' : 'surveys'}`}
+            GRI Universal Standards · {lang === 'tr' ? '4 Aşama' : '4 Phases'} · 180 Q
           </span>
-          <h1 style={{ fontSize: 36, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 8 }}>
+          <h1 style={{ fontSize: 32, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 8 }}>
             {lang === 'tr'
-              ? <>Bir{' '}<em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>değerlendirme</em>{' '}seçin.</>
-              : <>Choose an{' '}<em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>assessment</em>.</>}
+              ? <><em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>GRI</em> Değerlendirme Yolculuğu</>
+              : <><em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>GRI</em> Assessment Journey</>}
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 520, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6, maxWidth: 520 }}>
             {lang === 'tr'
-              ? 'Her anket farklı bir kapsama ayarlanmıştır. Temel değerlendirmeden başlayın ya da odaklanmış bir gözden geçirmeye atlayın.'
-              : 'Each survey is calibrated to a different scope. Start with the core baseline, or jump straight to a focused review.'}
+              ? 'Her aşamayı sırayla tamamlayın. Bir sonraki aşama, bir öncekini bitirdikten sonra açılır.'
+              : 'Complete each phase in order. The next phase unlocks when you finish the previous one.'}
           </p>
         </div>
 
-        {/* ── Filter chips ── */}
+        {/* ── Progress strip ───────────────────────────────── */}
         <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          marginBottom: 18, paddingBottom: 14, borderBottom: '1px solid var(--line)',
+          background: 'var(--paper)', border: '1px solid var(--line)',
+          padding: '14px 20px', marginBottom: 32,
+          display: 'flex', alignItems: 'center', gap: 20,
         }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {filters.map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setFilter(k)}
-                style={{
-                  padding: '6px 14px', borderRadius: 999,
-                  background: filter === k ? 'var(--ink)' : 'transparent',
-                  color:      filter === k ? 'var(--cream)' : 'var(--ink-3)',
-                  border: 'none', cursor: 'pointer',
-                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 11.5,
-                }}
-              >{l}</button>
-            ))}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                {lang === 'tr' ? 'İlerleme' : 'Progress'}
+              </span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--olive-deep)', fontWeight: 600 }}>
+                {completedPhases} / 4 {lang === 'tr' ? 'aşama' : 'phases'}
+              </span>
+            </div>
+            <div className="bar bar-olive">
+              <span style={{ width: `${(completedPhases / 4) * 100}%`, transition: 'width 0.4s ease' }} />
+            </div>
           </div>
-          <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-            {loading ? '…' : `${visible.length} ${lang === 'tr' ? 'sonuç' : 'results'}`}
-          </span>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{
+              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+              fontSize: 28, letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1,
+            }}>
+              {completedPhases}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--ink-4)' }}>
+              {lang === 'tr' ? 'tamamlandı' : 'completed'}
+            </div>
+          </div>
         </div>
 
-        {/* ── Error banner ── */}
+        {/* ── Error banner ─────────────────────────────────── */}
         {startErr && (
           <div style={{
             background: '#FEF2F0', border: '1px solid #F5C6BB',
-            padding: '12px 18px', marginBottom: 18,
+            padding: '10px 16px', marginBottom: 20,
             fontSize: 12, color: 'var(--danger)',
             fontFamily: "'IBM Plex Mono', monospace",
           }}>
@@ -401,184 +628,77 @@ export default function SurveysPage() {
           </div>
         )}
 
-        {/* ── GRI phased structure info banner ── */}
-        {!loading && !loadErr && surveys.some((s) =>
-          s.name?.includes('GRI') || s.name_en?.includes('GRI')
-        ) && (
-          <div style={{
-            background: 'var(--paper)', border: '1px solid var(--line)',
-            padding: '20px 24px', marginBottom: 18,
-            display: 'flex', flexWrap: 'wrap', gap: 0,
-          }}>
-            <div style={{
-              fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.1em',
-              textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace",
-              width: '100%', marginBottom: 12,
-            }}>
-              GRI Universal Standards · {lang === 'tr' ? 'Değerlendirme sırası' : 'Assessment flow'}
-            </div>
-            {([
-              { phase: '01', label: lang === 'tr' ? 'GRI 1 · Temel'             : 'GRI 1 · Foundation',           q: '32',  desc: lang === 'tr' ? 'GRI gereksinimlerini anlama' : 'Understanding GRI requirements' },
-              { phase: '02', label: lang === 'tr' ? 'GRI 2 · Genel Açıklamalar' : 'GRI 2 · General Disclosures', q: '80',  desc: lang === 'tr' ? 'Şirket profili & yönetişim' : 'Org. profile & governance'        },
-              { phase: '03', label: lang === 'tr' ? 'GRI 3 · Önemli Konular'    : 'GRI 3 · Material Topics',     q: '60',  desc: lang === 'tr' ? 'Materyellik & yönetim yaklaşımı' : 'Materiality & management approach' },
-              { phase: '04', label: lang === 'tr' ? 'Sektör Standardı'           : 'Sector Standard',             q: '8',   desc: lang === 'tr' ? 'Sektörünüze özel konular' : 'Industry-specific topics'          },
-            ] as const).map((step, i, arr) => (
-              <div key={step.phase} style={{ display: 'flex', alignItems: 'stretch', flex: '1 1 160px', minWidth: 0 }}>
-                <div style={{ flex: 1, paddingRight: 16 }}>
-                  <div style={{
-                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
-                    color: 'var(--ink-4)', letterSpacing: '0.08em', marginBottom: 4,
-                  }}>
-                    PHASE {step.phase}
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
-                    {step.label}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 4, lineHeight: 1.4 }}>
-                    {step.desc}
-                  </div>
-                  <div style={{
-                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
-                    color: 'var(--olive-deep)', fontWeight: 500,
-                  }}>
-                    {step.q} {lang === 'tr' ? 'soru' : 'Q'}
-                  </div>
-                </div>
-                {i < arr.length - 1 && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', padding: '0 8px',
-                    color: 'var(--ink-4)', fontSize: 16, flexShrink: 0,
-                  }}>→</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Survey cards ── */}
-        {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-            {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
-          </div>
-        ) : loadErr ? (
-          /* Fix H-7: distinct error state — user sees a real problem message + retry */
+        {loadErr && (
           <div style={{
             background: '#FEF2F0', border: '1px solid #F5C6BB',
-            padding: '48px 40px', textAlign: 'center',
+            padding: '28px 32px', textAlign: 'center', marginBottom: 20,
           }}>
-            <p style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 12, fontWeight: 500 }}>
-              {lang === 'tr' ? 'Anketler yüklenemedi.' : 'Failed to load surveys.'}
+            <p style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>
+              {lang === 'tr' ? 'Yüklenemedi.' : 'Failed to load.'}
             </p>
-            <p style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 20 }}>
-              {lang === 'tr'
-                ? 'Sunucuya bağlanılamadı. Lütfen bağlantınızı kontrol edin ve tekrar deneyin.'
-                : 'Could not reach the server. Check your connection and try again.'}
-            </p>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => setRetryKey((k) => k + 1)}
-            >
+            <button className="btn btn-outline btn-sm" onClick={() => window.location.reload()}>
               {lang === 'tr' ? 'Tekrar Dene' : 'Retry'}
             </button>
           </div>
-        ) : visible.length === 0 ? (
+        )}
+
+        {/* ── All-done banner ───────────────────────────────── */}
+        {allDone && (
           <div style={{
-            background: 'var(--paper)', border: '1px solid var(--line)',
-            padding: '64px 40px', textAlign: 'center',
+            background: 'var(--olive-deep)', color: '#fff',
+            padding: '20px 24px', marginBottom: 28,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
-            <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 8 }}>
-              {lang === 'tr' ? 'Henüz hiç anket yok.' : 'No surveys available yet.'}
-            </p>
-            <p style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-              {lang === 'tr' ? 'Yönetici tarafından eklendikten sonra burada görünecek.' : 'They will appear here once added by an admin.'}
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-            {visible.map((s, idx) => (
-              <div
-                key={s.id}
-                style={{
-                  background: 'var(--paper)', border: '1px solid var(--line)',
-                  padding: 28, display: 'flex', flexDirection: 'column',
-                  cursor: 'default', transition: 'border-color 0.15s ease',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
-              >
-                {/* Top row */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
-                  <span style={{
-                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 11,
-                    color: 'var(--ink-4)', letterSpacing: '0.08em',
-                  }}>
-                    SX · {String(idx + 1).padStart(2, '0')}
-                  </span>
-                  {(s.tag || s.category) && (
-                    <span className="pill pill-olive">
-                      {s.tag ?? s.category?.toUpperCase()}
-                    </span>
-                  )}
-                </div>
-
-                {/* Title + description */}
-                <h3 style={{ fontSize: 18, marginBottom: 10, fontWeight: 500, letterSpacing: '-0.01em' }}>
-                  {loc(s, 'name', lang)}
-                </h3>
-                {s.description && (
-                  <p style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 24, lineHeight: 1.65 }}>
-                    {loc(s, 'description', lang)}
-                  </p>
-                )}
-
-                {/* Footer */}
-                <div style={{
-                  marginTop: 'auto',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  paddingTop: 18, borderTop: '1px solid var(--line)',
-                }}>
-                  <div style={{ display: 'flex', gap: 22, alignItems: 'baseline' }}>
-                    {qCount(s) > 0 && (
-                      <div>
-                        <span style={{
-                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-                          fontSize: 20, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums',
-                        }}>{qCount(s)}</span>
-                        <span style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 4 }}>
-                          {lang === 'tr' ? 'soru' : 'questions'}
-                        </span>
-                      </div>
-                    )}
-                    {s.estimated_time && (
-                      <div>
-                        <span style={{
-                          fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-                          fontSize: 20, letterSpacing: '-0.03em',
-                        }}>{s.estimated_time}</span>
-                        <span style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 4 }}>min</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Fix H-09: only disable the button for the survey actively being
-                      started.  The old disabled={starting !== null} froze ALL buttons
-                      while one request was in flight — if it hung, users were stuck. */}
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => handleStart(s.id)}
-                    disabled={starting === s.id}
-                    style={{ opacity: starting === s.id ? 0.6 : 1, minWidth: 80 }}
-                  >
-                    {starting === s.id
-                      ? t('surv_opening')
-                      : t('surv_start')}
-                    {starting !== s.id && <Icon.arrow aria-hidden="true" />}
-                  </button>
-                </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>
+                {lang === 'tr' ? '🎉 Tüm aşamalar tamamlandı!' : '🎉 All phases completed!'}
               </div>
-            ))}
+              <div style={{ fontSize: 11.5, opacity: 0.8 }}>
+                {lang === 'tr' ? 'Sonuçlarınızı görüntüleyebilir veya tekrar başlayabilirsiniz.' : 'You can view your results or start again.'}
+              </div>
+            </div>
+            <a href="/history" style={{ textDecoration: 'none' }}>
+              <button style={{
+                padding: '8px 16px', background: '#fff', color: 'var(--ink)',
+                border: 'none', cursor: 'pointer', fontFamily: "'IBM Plex Sans', sans-serif",
+                fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                {lang === 'tr' ? 'Geçmişi Görüntüle' : 'View History'} <Icon.arrow />
+              </button>
+            </a>
           </div>
         )}
+
+        {/* ── Wizard steps ─────────────────────────────────── */}
+        <div>
+          {steps.map((step, idx) => (
+            <StepCard
+              key={step.phase}
+              step={step}
+              lang={lang}
+              isLast={idx === steps.length - 1}
+              selectedSector={selectedSector}
+              onSectorChange={setSelectedSector}
+              onStart={handleStart}
+              onContinue={handleContinue}
+              onRetry={handleRetry}
+              starting={starting}
+            />
+          ))}
+        </div>
+
+        {/* ── Total footer ─────────────────────────────────── */}
+        <div style={{
+          marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--line)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+            {lang === 'tr' ? 'Toplam 180 soru · GRI 1 + GRI 2 + GRI 3 + Sektör' : 'Total 180 questions · GRI 1 + GRI 2 + GRI 3 + Sector'}
+          </span>
+          <a href="/history" style={{ textDecoration: 'none', fontSize: 11, color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {lang === 'tr' ? 'Geçmiş' : 'History'} <Icon.arrow />
+          </a>
+        </div>
       </main>
     </div>
   );
