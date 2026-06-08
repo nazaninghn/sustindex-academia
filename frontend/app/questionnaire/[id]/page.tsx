@@ -52,7 +52,8 @@ function loc(
 /**
  * Strip internal catalogue codes that the import command embeds in the
  * stored question text so they never reach the end user:
- *   - Leading  "[GRI2-18-I]  "  →  removed
+ *   - Leading  "[GRI2-18-I]  "  →  removed  (core GRI codes)
+ *   - Leading  "[RET-02]  "    →  removed  (sector codes: RET, AG, EN, MFG, …)
  *   - Trailing "  [Implementation]" / "[Results]" / "[Policy]" / "[Measurement]" →  removed
  *
  * Works for both plain-text storage (typical import path) and CKEditor HTML
@@ -60,11 +61,14 @@ function loc(
  */
 function cleanQuestionText(raw: string): string {
   if (!raw) return raw;
+  // Matches both GRI core codes   [GRI2-18-I]
+  // and sector codes              [RET-02] [AG-01] [TECH-01] [MFG-03] etc.
+  const CODE_PREFIX = /\[(?:GRI[^\]]*|[A-Z]{1,6}-\d+)\]/i;
   return raw
-    // HTML: strip code after opening block tag  <p>[GRI2-18-I]  →  <p>
-    .replace(/(<(?:p|div|span)[^>]*>)\s*\[GRI[^\]]*\]\s*/gi, '$1')
+    // HTML: strip code after opening block tag  <p>[RET-02]  →  <p>
+    .replace(new RegExp(`(<(?:p|div|span)[^>]*>)\\s*${CODE_PREFIX.source}\\s*`, 'gi'), '$1')
     // Plain text: strip code at start of string
-    .replace(/^\[GRI[^\]]*\]\s*/i, '')
+    .replace(new RegExp(`^${CODE_PREFIX.source}\\s*`, 'i'), '')
     // HTML: strip layer tag before closing block tag   [Implementation]</p>  →  </p>
     .replace(/\s*\[(?:Policy|Implementation|Measurement|Results)\]\s*(<\/(?:p|div|span)>)/gi, '$1')
     // Plain text: strip layer tag at end of string

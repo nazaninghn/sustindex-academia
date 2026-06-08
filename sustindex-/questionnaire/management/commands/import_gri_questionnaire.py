@@ -325,16 +325,31 @@ class Command(BaseCommand):
         order = 0
         for row in ws.iter_rows(min_row=hr + 1, values_only=True):
             p = list(row) + [None] * 12
-            q_id, cat_nm, option, pts = _s(p[1]), _s(p[2]), _s(p[5]), _n(p[6])
+            q_id    = _s(p[1])
+            cat_nm  = _s(p[2])          # Category column   (C)
+            q_text  = _s(p[3])          # Question column   (D) — often empty in v3 Excel
+            gri_ref = _s(p[4])          # GRI Ref column    (E) e.g. "GRI 301-2"
+            option  = _s(p[5])          # Answer Option     (F)
+            pts     = _n(p[6])          # Points            (G)
             if not option or option[0] not in ('A', 'B', 'C', 'D'):
                 continue
             if q_id and q_id not in ('Q ID', '#'):
                 if q_id not in questions:
                     order += 1
-                    questions[q_id] = {
-                        'text': f'[{q_id}]  {cat_nm if cat_nm else q_id}',
-                        'order': order, 'choices': []
-                    }
+                    # Fix SECTOR-01: prefer explicit Question text (col D) when
+                    # the Excel author has filled it in.  Fall back to
+                    # "Category  (GRI Ref)" so the user sees something meaningful
+                    # like "Packaging  (GRI 301-2)" rather than just "Packaging".
+                    # Never embed the Q-ID code in the label — it is redundant
+                    # noise for end users (and cleanQuestionText would have to
+                    # strip it anyway).
+                    if q_text:
+                        label = q_text
+                    elif cat_nm and gri_ref:
+                        label = f'{cat_nm}  ({gri_ref})'
+                    else:
+                        label = cat_nm if cat_nm else q_id
+                    questions[q_id] = {'text': label, 'order': order, 'choices': []}
                 cur_id = q_id
             if cur_id and cur_id in questions:
                 questions[cur_id]['choices'].append({
