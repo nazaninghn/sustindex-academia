@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
@@ -30,6 +30,14 @@ interface Question {
 
 /* ─── Constants ──────────────────────────────────────────── */
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
+/** Stable phase-matching definitions — no lang dependency, safe as module constant */
+const GRI_PHASE_DEFS = [
+  { match: 'Foundation',          num: 1 },
+  { match: 'General Disclosures', num: 2 },
+  { match: 'Material Topics',     num: 3 },
+  { match: 'Sector',              num: 4 },
+] as const;
 
 /* ─── Localised text helper ──────────────────────────────── */
 function loc(
@@ -80,6 +88,8 @@ export default function QuestionnairePage() {
   const [saving,      setSaving]      = useState(false);
   const [exitSaving,  setExitSaving]  = useState(false);
   const [error,       setError]       = useState('');
+  /** Non-null while the phase-completion interstitial is displayed (value = the phase just finished) */
+  const [phaseComplete, setPhaseComplete] = useState<number | null>(null);
 
   /* ── Answer state — keyed by question.id ── */
   const [answers,      setAnswers]      = useState<Record<number, number[]>>({});
@@ -233,6 +243,39 @@ export default function QuestionnairePage() {
     ? GRI_PHASES.find(({ match }) => q.category_name?.includes(match)) ?? null
     : null;
 
+  /** Map phase number → { first index, last index, question IDs } — recomputed only when questions list changes */
+  const phaseBoundaries = useMemo(() => {
+    const map: Record<number, { start: number; end: number; qIds: number[] }> = {};
+    questions.forEach((qItem, i) => {
+      const phase = GRI_PHASE_DEFS.find(({ match }) => qItem.category_name?.includes(match));
+      const num = phase?.num ?? 1;
+      if (!map[num]) map[num] = { start: i, end: i, qIds: [qItem.id] };
+      else { map[num].end = i; map[num].qIds.push(qItem.id); }
+    });
+    return map;
+  }, [questions]);
+
+  /** A phase is "complete" when every question in it has at least one choice selected or text entered */
+  const isPhaseComplete = useCallback((phaseNum: number): boolean => {
+    const boundary = phaseBoundaries[phaseNum];
+    if (!boundary) return true; // phase not present → treat as complete
+    return boundary.qIds.every((qid) =>
+      (answers[qid] ?? []).length > 0 ||
+      (textAnswers[qid] ?? '').trim().length > 0
+    );
+  }, [phaseBoundaries, answers, textAnswers]);
+
+  /**
+   * The highest GRI phase the user may currently access.
+   * Phase 1 is always unlocked; phase N+1 unlocks only when phase N is 100% answered.
+   */
+  const unlockedUpToPhase = useMemo(() => {
+    for (let p = 1; p <= 4; p++) {
+      if (!isPhaseComplete(p)) return p;
+    }
+    return 4; // all phases answered
+  }, [isPhaseComplete]);
+
   /* ── Handlers ── */
   const toggleChoice = (choiceId: number) => {
     if (!q) return;
@@ -315,7 +358,21 @@ export default function QuestionnairePage() {
         emitDataChange({ source: 'questionnaire', id });
         router.push(`/results/${id}`);
       } else {
-        setCurrentIdx((i) => i + 1);
+        // Sequential phase gate: show the interstitial when the user just completed
+        // an entire phase for the first time (unlockedUpToPhase advances to phaseNum+1).
+        const qPhaseNum = GRI_PHASE_DEFS.find(({ match }) => q.category_name?.includes(match))?.num ?? 1;
+        const boundary  = phaseBoundaries[qPhaseNum];
+        const isLastOfPhase = boundary != null && currentIdx === boundary.end;
+        if (
+          isLastOfPhase &&
+          qPhaseNum < 4 &&
+          isPhaseComplete(qPhaseNum) &&
+          unlockedUpToPhase === qPhaseNum + 1
+        ) {
+          setPhaseComplete(qPhaseNum);
+        } else {
+          setCurrentIdx((i) => i + 1);
+        }
       }
     } catch (err) {
       // Fix R4-H-04: environment-gated logger — silent in production
@@ -331,6 +388,12 @@ export default function QuestionnairePage() {
 
   const handleJumpTo = async (targetIdx: number) => {
     if (targetIdx === currentIdx) return;
+    // Sequential phase gate — silently block navigation to questions in locked phases
+    const targetQItem = questions[targetIdx];
+    if (targetQItem) {
+      const targetPhaseNum = GRI_PHASE_DEFS.find(({ match }) => targetQItem.category_name?.includes(match))?.num ?? 1;
+      if (targetPhaseNum > unlockedUpToPhase) return;
+    }
     if (q && (selection.length > 0 || note.trim() || textAns.trim())) {
       try {
         let answerId: number | null = null;
@@ -432,6 +495,83 @@ export default function QuestionnairePage() {
     );
   }
 
+  /* ── Phase completion interstitial ──────────────────────── */
+  if (phaseComplete !== null) {
+    const nextPhaseNum = phaseComplete + 1;
+    const nextPhase    = GRI_PHASES.find((p) => p.num === nextPhaseNum);
+    const donePhase    = GRI_PHASES.find((p) => p.num === phaseComplete);
+    const nextStart    = phaseBoundaries[nextPhaseNum]?.start ?? currentIdx + 1;
+    return (
+      <div style={{ background: 'var(--cream)', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
+        <header style={{ borderBottom: '1px solid var(--line)' }}>
+          <div className="wrap" style={{ padding: '13px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Logo size={20} />
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={handleSaveAndExit}
+              disabled={exitSaving}
+              style={{ opacity: exitSaving ? 0.6 : 1 }}
+            >
+              {lang === 'tr' ? 'Kaydet & Çık' : 'Save & Exit'}
+            </button>
+          </div>
+        </header>
+        {/* Centered card */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
+          <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
+            {/* Checkmark badge */}
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: 'var(--olive-deep)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 24px', fontSize: 22, color: 'var(--paper)',
+            }}>✓</div>
+            <span className="eyebrow" style={{ display: 'block', marginBottom: 10 }}>
+              {lang === 'tr' ? 'Aşama Tamamlandı' : 'Phase Complete'}
+            </span>
+            <h2 style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 16 }}>
+              {donePhase?.label ?? (lang === 'tr' ? `Aşama ${phaseComplete}` : `Phase ${phaseComplete}`)}
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.7, maxWidth: 380, margin: '0 auto 32px' }}>
+              {lang === 'tr'
+                ? 'Bu aşamayı başarıyla tamamladınız. Sıradaki aşamaya geçmeye hazırsınız.'
+                : "You've completed this phase. You're ready to move on to the next one."}
+            </p>
+            {/* Next phase preview */}
+            <div style={{
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              padding: '16px 20px', marginBottom: 32, textAlign: 'left',
+              display: 'inline-block', minWidth: 260,
+            }}>
+              <p style={{
+                fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
+                color: 'var(--ink-4)', letterSpacing: '0.1em',
+                textTransform: 'uppercase', marginBottom: 6,
+              }}>
+                {lang === 'tr' ? 'Sıradaki Aşama' : 'Next Phase'}
+              </p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>
+                {nextPhase?.label ?? (lang === 'tr' ? `Aşama ${nextPhaseNum}` : `Phase ${nextPhaseNum}`)}
+              </p>
+            </div>
+            {/* Continue button */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => { setPhaseComplete(null); setCurrentIdx(nextStart); }}
+                style={{ padding: '13px 28px', fontSize: 13 }}
+              >
+                {lang === 'tr' ? 'Devam Et' : 'Continue'}
+                <Icon.arrow />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
 
@@ -483,15 +623,20 @@ export default function QuestionnairePage() {
             {GRI_PHASES.map((phase, i) => {
               const isActive = phase.num === currentPhase.num;
               const isDone   = phase.num < currentPhase.num;
+              const isLocked = phase.num > unlockedUpToPhase;
               return (
                 <div key={phase.num} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 7,
-                    padding: '5px 10px',
-                    background: isActive ? 'var(--ink)' : 'transparent',
-                    border: `1px solid ${isActive ? 'var(--ink)' : isDone ? 'var(--ink-3)' : 'var(--line)'}`,
-                    opacity: isDone ? 0.55 : 1,
-                  }}>
+                  <div
+                    title={isLocked
+                      ? (lang === 'tr' ? 'Önceki aşamayı tamamlayın' : 'Complete the previous phase first')
+                      : undefined}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '5px 10px',
+                      background: isActive ? 'var(--ink)' : 'transparent',
+                      border: `1px solid ${isActive ? 'var(--ink)' : isDone ? 'var(--ink-3)' : 'var(--line)'}`,
+                      opacity: isLocked ? 0.3 : isDone ? 0.55 : 1,
+                    }}>
                     <span style={{
                       fontFamily: "'IBM Plex Mono', monospace",
                       fontSize: 9, letterSpacing: '0.1em',
@@ -798,28 +943,36 @@ export default function QuestionnairePage() {
 
           {/* Dot progress */}
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', maxWidth: 400, justifyContent: 'center' }}>
-            {questions.map((qItem, i) => (
-              <span
-                key={qItem.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Question ${i + 1}${answers[qItem.id] ? ' (answered)' : ''}`}
-                aria-current={i === currentIdx ? 'step' : undefined}
-                onClick={() => handleJumpTo(i)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleJumpTo(i); } }}
-                title={`${i + 1}`}
-                style={{
-                  width:  i === currentIdx ? 18 : 5, height: 5,
-                  background: answers[qItem.id]
-                    ? 'var(--olive-deep)'
-                    : i === currentIdx ? 'var(--ink)' : 'var(--line)',
-                  borderRadius: 3, transition: 'all 0.2s ease', cursor: 'pointer',
-                  outline: 'none',
-                }}
-                onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--olive)'; }}
-                onBlur={(e)  => { e.currentTarget.style.boxShadow = 'none'; }}
-              />
-            ))}
+            {questions.map((qItem, i) => {
+              const dotPhaseNum = GRI_PHASE_DEFS.find(({ match }) => qItem.category_name?.includes(match))?.num ?? 1;
+              const isLocked    = dotPhaseNum > unlockedUpToPhase;
+              const isAnswered  = (answers[qItem.id] ?? []).length > 0 || (textAnswers[qItem.id] ?? '').trim().length > 0;
+              return (
+                <span
+                  key={qItem.id}
+                  role={isLocked ? undefined : 'button'}
+                  tabIndex={isLocked ? -1 : 0}
+                  aria-label={`Question ${i + 1}${isAnswered ? ' (answered)' : ''}${isLocked ? ' (locked)' : ''}`}
+                  aria-current={i === currentIdx ? 'step' : undefined}
+                  onClick={() => { if (!isLocked) handleJumpTo(i); }}
+                  onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleJumpTo(i); } }}
+                  title={`${i + 1}`}
+                  style={{
+                    width:  i === currentIdx ? 18 : 5, height: 5,
+                    background: isLocked
+                      ? 'var(--line)'
+                      : isAnswered
+                        ? 'var(--olive-deep)'
+                        : i === currentIdx ? 'var(--ink)' : 'var(--line)',
+                    borderRadius: 3, transition: 'all 0.2s ease',
+                    cursor: isLocked ? 'default' : 'pointer',
+                    outline: 'none', opacity: isLocked ? 0.35 : 1,
+                  }}
+                  onFocus={(e) => { if (!isLocked) e.currentTarget.style.boxShadow = '0 0 0 2px var(--olive)'; }}
+                  onBlur={(e)  => { e.currentTarget.style.boxShadow = 'none'; }}
+                />
+              );
+            })}
           </div>
 
           <button
