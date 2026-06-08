@@ -341,6 +341,16 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
         model = Answer
         fields = ['id', 'attempt', 'question', 'choice', 'choices_ids', 'text_answer', 'notes']
         read_only_fields = ['id']
+        # Fix UPSERT-01: disable the auto-generated UniqueTogetherValidator for
+        # (attempt, question).  Without this, DRF rejects a second POST for the
+        # same (attempt, question) pair with HTTP 400 before perform_create even
+        # runs — which means the upsert logic in perform_create (select_for_update
+        # + update existing) is never reached, and users cannot update an answer
+        # they have previously saved (e.g. a note-only answer, then later adding
+        # a choice selection).  perform_create handles uniqueness atomically at
+        # the application layer; the DB unique_together constraint remains as the
+        # final safety net.
+        validators = []
     
     def validate(self, data):
         # Fix R4-M-01: verify the single `choice` FK belongs to the `question`
