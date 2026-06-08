@@ -186,58 +186,70 @@ class Command(BaseCommand):
         except Exception as e:
             raise CommandError(f'Cannot open file: {e}')
 
-        # -- Optional clear --
-        if options['clear']:
-            n, _ = Survey.objects.filter(name__istartswith='GRI').delete()
-            self.stdout.write(self.style.WARNING(f'  [!] Deleted {n} existing GRI surveys.'))
+        # Fix CRASH-01: always close the read-only workbook before the process
+        # exits.  openpyxl's read_only mode keeps a ZipFile (and its underlying
+        # I/O threads) open for the entire workbook lifetime.  Without an
+        # explicit close(), Python's garbage collector tries to finalize the
+        # ZipFile during interpreter shutdown, which races against the Kerberos
+        # pthread mutex teardown on Render's Linux image and triggers the
+        # "k5_mutex_lock: Assertion `r == 0' failed" abort (core dump).
+        # Wrapping the entire body in try/finally guarantees wb.close() is
+        # called even when an exception is raised mid-import.
+        try:
+            # -- Optional clear --
+            if options['clear']:
+                n, _ = Survey.objects.filter(name__istartswith='GRI').delete()
+                self.stdout.write(self.style.WARNING(f'  [!] Deleted {n} existing GRI surveys.'))
 
-        total_surveys = total_q = total_c = 0
+            total_surveys = total_q = total_c = 0
 
-        # -- Core sections --
-        self.stdout.write('\n-- Core sections -------------------------------------------')
-        for cfg in CORE_SECTIONS:
-            if cfg['sheet'] not in wb.sheetnames:
-                self.stdout.write(self.style.ERROR(f'  [X] Sheet missing: {cfg["sheet"]}'))
-                continue
+            # -- Core sections --
+            self.stdout.write('\n-- Core sections -------------------------------------------')
+            for cfg in CORE_SECTIONS:
+                if cfg['sheet'] not in wb.sheetnames:
+                    self.stdout.write(self.style.ERROR(f'  [X] Sheet missing: {cfg["sheet"]}'))
+                    continue
 
-            survey = self._upsert_survey(
-                cfg['survey_name'], cfg['survey_name_tr'], cfg['survey_desc']
-            )
-            cat = self._upsert_category(
-                survey, cfg['cat_name'], cfg['cat_name_tr'],
-                order=1,
-                max_score=cfg['max_score'],
-                env_w=cfg['env_w'], soc_w=cfg['soc_w'], gov_w=cfg['gov_w'],
-            )
-            questions = self._parse_core(wb[cfg['sheet']])
-            q, c = self._persist(questions, survey, cat)
-            self._fix_score_anomalies(survey)
-            total_surveys += 1; total_q += q; total_c += c
-            self.stdout.write(f'  [OK] {cfg["survey_name"]:<45} {q:>3}Q  {c:>4}C')
+                survey = self._upsert_survey(
+                    cfg['survey_name'], cfg['survey_name_tr'], cfg['survey_desc']
+                )
+                cat = self._upsert_category(
+                    survey, cfg['cat_name'], cfg['cat_name_tr'],
+                    order=1,
+                    max_score=cfg['max_score'],
+                    env_w=cfg['env_w'], soc_w=cfg['soc_w'], gov_w=cfg['gov_w'],
+                )
+                questions = self._parse_core(wb[cfg['sheet']])
+                q, c = self._persist(questions, survey, cat)
+                self._fix_score_anomalies(survey)
+                total_surveys += 1; total_q += q; total_c += c
+                self.stdout.write(f'  [OK] {cfg["survey_name"]:<45} {q:>3}Q  {c:>4}C')
 
-        # -- Sector modules --
-        self.stdout.write('\n-- Sector modules ------------------------------------------')
-        for cfg in SECTOR_SECTIONS:
-            if cfg['sheet'] not in wb.sheetnames:
-                self.stdout.write(self.style.WARNING(f'  [!] Sheet missing: {cfg["sheet"]}'))
-                continue
+            # -- Sector modules --
+            self.stdout.write('\n-- Sector modules ------------------------------------------')
+            for cfg in SECTOR_SECTIONS:
+                if cfg['sheet'] not in wb.sheetnames:
+                    self.stdout.write(self.style.WARNING(f'  [!] Sheet missing: {cfg["sheet"]}'))
+                    continue
 
-            survey = self._upsert_survey(
-                cfg['survey_name'], cfg['survey_name_tr'], cfg['survey_desc']
-            )
-            cat = self._upsert_category(
-                survey, cfg['cat_name'], cfg['cat_name_tr'],
-                order=1, max_score=80,
-                env_w=0.34, soc_w=0.33, gov_w=0.33,
-            )
-            questions = self._parse_sector(wb[cfg['sheet']])
-            q, c = self._persist(questions, survey, cat)
-            total_surveys += 1; total_q += q; total_c += c
-            self.stdout.write(f'  [OK] {cfg["survey_name"]:<45} {q:>3}Q  {c:>4}C')
+                survey = self._upsert_survey(
+                    cfg['survey_name'], cfg['survey_name_tr'], cfg['survey_desc']
+                )
+                cat = self._upsert_category(
+                    survey, cfg['cat_name'], cfg['cat_name_tr'],
+                    order=1, max_score=80,
+                    env_w=0.34, soc_w=0.33, gov_w=0.33,
+                )
+                questions = self._parse_sector(wb[cfg['sheet']])
+                q, c = self._persist(questions, survey, cat)
+                total_surveys += 1; total_q += q; total_c += c
+                self.stdout.write(f'  [OK] {cfg["survey_name"]:<45} {q:>3}Q  {c:>4}C')
 
-        self.stdout.write(self.style.SUCCESS(
-            f'\n[DONE] {total_surveys} surveys, {total_q} questions, {total_c} choices imported.\n'
-        ))
+            self.stdout.write(self.style.SUCCESS(
+                f'\n[DONE] {total_surveys} surveys, {total_q} questions, {total_c} choices imported.\n'
+            ))
+        finally:
+            wb.close()
 
     # ── Survey / Category upsert ───────────────────────────────────────────
 
