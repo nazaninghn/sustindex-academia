@@ -368,12 +368,22 @@ function StepCard({
         {isActive && phase < 4 && (
           <div style={{
             marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
-            display: 'flex', justifyContent: 'flex-end',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
+            {!step.survey ? (
+              <span style={{
+                fontSize: 10, color: 'var(--ink-4)',
+                fontFamily: "'IBM Plex Mono', monospace",
+                letterSpacing: '0.06em',
+              }}>
+                ⚠ {lang === 'tr' ? 'Anket verisi henüz yüklenmedi.' : 'Survey data not loaded yet.'}
+              </span>
+            ) : <span />}
             <button
               className="btn btn-primary btn-sm"
               onClick={() => onStart(step)}
               disabled={starting || !step.survey}
+              style={!step.survey ? { opacity: 0.35, cursor: 'not-allowed' } : {}}
             >
               {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
             </button>
