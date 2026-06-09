@@ -190,6 +190,15 @@ export const attemptAPI = {
     return data;
   },
 
+  /**
+   * Admin-only analytics dashboard data.
+   * Requires staff/admin JWT — returns 403 for regular users.
+   */
+  getAdminAnalytics: async () => {
+    const { data } = await api.get('/api/v1/attempts/admin_analytics/');
+    return data;
+  },
+
   /** Upload a supporting document for a saved answer.
    *
    * Fix R5-C-02: migrated from native `fetch` to the shared `api` axios instance

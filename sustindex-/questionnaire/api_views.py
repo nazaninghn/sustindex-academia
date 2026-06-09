@@ -2,7 +2,7 @@ import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, IsAdminUser
 from rest_framework.exceptions import PermissionDenied, ValidationError as DRFValidationError
 from django.conf import settings as django_settings
 from django.db import transaction
@@ -548,6 +548,114 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         attempts = self.get_queryset()
         serializer = self.get_serializer(attempts, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
+    def admin_analytics(self, request):
+        """
+        Admin-only analytics endpoint.
+        Returns aggregate stats across ALL users:
+          - total_users, total_attempts, completed, in_progress
+          - average_score (completed only)
+          - attempts_per_survey  — list: {survey_name, count, avg_score, avg_grade}
+          - score_distribution   — histogram buckets: {range, count}
+          - grade_breakdown      — {A+:N, A:N, ...}
+          - recent_completions   — last 10 completed attempts (user, survey, score, grade, date)
+          - daily_completions    — last 30 days: {date, count}
+        """
+        from django.db.models import Count, Avg, Max, Min
+        from django.db.models.functions import TruncDate
+        from django.utils import timezone as tz
+        import datetime
+
+        all_attempts = QuestionnaireAttempt.objects.select_related('user', 'survey')
+        completed    = all_attempts.filter(is_completed=True)
+        in_progress  = all_attempts.filter(is_completed=False)
+
+        total_users   = all_attempts.values('user').distinct().count()
+        total         = all_attempts.count()
+        n_completed   = completed.count()
+        n_in_progress = in_progress.count()
+
+        avg_score_val = completed.aggregate(avg=Avg('total_score'))['avg']
+        avg_score     = round(float(avg_score_val), 1) if avg_score_val else 0
+
+        # Per-survey stats
+        survey_stats = (
+            completed
+            .values('survey__name')
+            .annotate(count=Count('id'), avg_score=Avg('total_score'))
+            .order_by('-count')
+        )
+        attempts_per_survey = [
+            {
+                'survey_name': r['survey__name'] or 'Unknown',
+                'count':       r['count'],
+                'avg_score':   round(float(r['avg_score'] or 0), 1),
+            }
+            for r in survey_stats
+        ]
+
+        # Score distribution — 10-point buckets
+        score_dist = []
+        for lo in range(0, 100, 10):
+            hi = lo + 10
+            label = f'{lo}–{hi}'
+            cnt   = completed.filter(total_score__gte=lo, total_score__lt=(hi if hi < 100 else 101)).count()
+            score_dist.append({'range': label, 'count': cnt})
+
+        # Grade breakdown
+        grade_counts = (
+            completed
+            .values('overall_grade')
+            .annotate(count=Count('id'))
+            .order_by('overall_grade')
+        )
+        grade_breakdown = {r['overall_grade']: r['count'] for r in grade_counts}
+
+        # Recent 10 completions
+        recent = (
+            completed
+            .order_by('-completed_at')[:10]
+        )
+        recent_completions = [
+            {
+                'id':          a.pk,
+                'user':        a.user.username if a.user else '—',
+                'survey':      a.survey.name if a.survey else '—',
+                'score':       round(a.total_score or 0),
+                'grade':       a.overall_grade or '—',
+                'completed_at': a.completed_at.date().isoformat() if a.completed_at else None,
+            }
+            for a in recent
+        ]
+
+        # Daily completions for the last 30 days
+        thirty_days_ago = tz.now() - datetime.timedelta(days=30)
+        daily = (
+            completed
+            .filter(completed_at__gte=thirty_days_ago)
+            .annotate(day=TruncDate('completed_at'))
+            .values('day')
+            .annotate(count=Count('id'))
+            .order_by('day')
+        )
+        daily_completions = [
+            {'date': str(r['day']), 'count': r['count']}
+            for r in daily
+        ]
+
+        return Response({
+            'total_users':         total_users,
+            'total_attempts':      total,
+            'completed':           n_completed,
+            'in_progress':         n_in_progress,
+            'average_score':       avg_score,
+            'attempts_per_survey': attempts_per_survey,
+            'score_distribution':  score_dist,
+            'grade_breakdown':     grade_breakdown,
+            'recent_completions':  recent_completions,
+            'daily_completions':   daily_completions,
+        })
 
 
 class AnswerViewSet(viewsets.ModelViewSet):
