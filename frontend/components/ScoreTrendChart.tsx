@@ -74,7 +74,7 @@ export default function ScoreTrendChart({
     }
     // Sort each group by completed_at ascending
     for (const key of Object.keys(map)) {
-      map[key].sort((a, b) => new Date(a.completed_at).getTime() - new Date(b.completed_at).getTime());
+      map[key].sort((a, b) => new Date(a.completed_at ?? 0).getTime() - new Date(b.completed_at ?? 0).getTime());
     }
     return map;
   }, [attempts]);
@@ -82,7 +82,7 @@ export default function ScoreTrendChart({
   const surveyNames = Object.keys(grouped);
 
   // Global date range across all attempts
-  const allDates = attempts.map((a) => new Date(a.completed_at).getTime());
+  const allDates = attempts.map((a) => new Date(a.completed_at ?? 0).getTime());
   const minDate = Math.min(...allDates);
   const maxDate = Math.max(...allDates);
   const dateRange = maxDate - minDate || 1;
@@ -130,7 +130,7 @@ export default function ScoreTrendChart({
         {surveyNames.map((name, sIdx) => {
           const colour = SURVEY_COLOURS[sIdx % SURVEY_COLOURS.length];
           const pts = grouped[name].map((a) => ({
-            x: toSvgX(new Date(a.completed_at).getTime()),
+            x: toSvgX(new Date(a.completed_at ?? 0).getTime()),
             y: toSvgY(a.total_score),
             attempt: a,
           }));
@@ -171,7 +171,7 @@ export default function ScoreTrendChart({
                       x: pt.x,
                       y: pt.y,
                       score: pt.attempt.total_score,
-                      date: new Date(pt.attempt.completed_at).toLocaleDateString(),
+                      date: new Date(pt.attempt.completed_at ?? 0).toLocaleDateString(),
                       survey: name,
                     })
                   }
@@ -201,7 +201,7 @@ export default function ScoreTrendChart({
               return i === 0 || i === arr.length - 1;
             })
             .map((a) => {
-              const x = toSvgX(new Date(a.completed_at).getTime());
+              const x = toSvgX(new Date(a.completed_at ?? 0).getTime());
               const y = PAD.top + innerH + 14;
               return (
                 <text
@@ -212,7 +212,7 @@ export default function ScoreTrendChart({
                   fontFamily="'IBM Plex Mono', monospace"
                   fill="var(--ink-4)"
                 >
-                  {new Date(a.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', {
+                  {new Date(a.completed_at ?? 0).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', {
                     month: 'short', day: 'numeric',
                   })}
                 </text>
