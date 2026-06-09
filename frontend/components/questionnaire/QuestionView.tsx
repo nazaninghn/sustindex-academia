@@ -20,11 +20,13 @@ interface Props {
   isTextType: boolean;
   isMixedType: boolean;
   hasChoices: boolean;
+  isNA: boolean;
   GRI_PHASES: GriPhase[];
   currentPhase: GriPhase | null;
   unlockedUpToPhase: number;
   onToggleChoice: (choiceId: number) => void;
   onTextChange: (val: string) => void;
+  onToggleNA: () => void;
 }
 
 export function QuestionView({
@@ -39,11 +41,13 @@ export function QuestionView({
   isTextType,
   isMixedType,
   hasChoices,
+  isNA,
   GRI_PHASES,
   currentPhase,
   unlockedUpToPhase,
   onToggleChoice,
   onTextChange,
+  onToggleNA,
 }: Props) {
   return (
     <>
@@ -140,9 +144,50 @@ export function QuestionView({
         )}
       </div>
 
+      {/* Not-Applicable toggle */}
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          type="button"
+          onClick={onToggleNA}
+          aria-pressed={isNA}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '6px 14px',
+            background: isNA ? 'var(--ink-2)' : 'transparent',
+            border: `1px solid ${isNA ? 'var(--ink-2)' : 'var(--line)'}`,
+            color: isNA ? 'var(--cream)' : 'var(--ink-4)',
+            cursor: 'pointer',
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5,
+            letterSpacing: '0.07em',
+            transition: 'all 0.15s',
+          }}
+        >
+          <span style={{
+            width: 14, height: 14,
+            border: `1.5px solid ${isNA ? 'rgba(249,239,229,0.5)' : 'var(--ink-3)'}`,
+            borderRadius: 2,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 9, fontWeight: 700,
+            background: isNA ? 'var(--ink)' : 'transparent',
+            flexShrink: 0,
+          }}>
+            {isNA ? '✕' : ''}
+          </span>
+          {lang === 'tr' ? 'Bu soru geçerli değil (N/A)' : 'Not applicable to my organisation'}
+        </button>
+        {isNA && (
+          <span style={{
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+            color: 'var(--ink-4)', letterSpacing: '0.06em',
+          }}>
+            {lang === 'tr' ? '— puandan muaf tutulacak' : '— excluded from score'}
+          </span>
+        )}
+      </div>
+
       {/* Choices */}
       {hasChoices && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 32 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 32, opacity: isNA ? 0.35 : 1, pointerEvents: isNA ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
           {q.choices.map((choice, i) => {
             const isSel = selection.includes(choice.id);
             /* Use loc() first; fall back to choice.text (already in correct lang after refreshTexts) */
@@ -204,7 +249,7 @@ export function QuestionView({
 
       {/* Text answer (text / mixed type) */}
       {(isTextType || isMixedType) && (
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 24, opacity: isNA ? 0.35 : 1, pointerEvents: isNA ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
           {/* Fix A-5: associate label with textarea via htmlFor/id */}
           <label htmlFor="qa-text-answer" style={{
             fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,

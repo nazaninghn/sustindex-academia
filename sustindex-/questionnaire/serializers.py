@@ -310,8 +310,9 @@ class AnswerSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Answer
-        fields = ['id', 'question', 'question_text', 'choice', 'choice_text', 
-                  'choices', 'choices_display', 'text_answer', 'notes', 'answered_at', 'total_score', 'documents']
+        fields = ['id', 'question', 'question_text', 'choice', 'choice_text',
+                  'choices', 'choices_display', 'text_answer', 'notes', 'not_applicable',
+                  'answered_at', 'total_score', 'documents']
     
     def get_choice_text(self, obj):
         if obj.choice:
@@ -335,7 +336,7 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Answer
-        fields = ['id', 'attempt', 'question', 'choice', 'choices_ids', 'text_answer', 'notes']
+        fields = ['id', 'attempt', 'question', 'choice', 'choices_ids', 'text_answer', 'notes', 'not_applicable']
         read_only_fields = ['id']
         # Fix UPSERT-01: disable the auto-generated UniqueTogetherValidator for
         # (attempt, question).  Without this, DRF rejects a second POST for the
@@ -358,6 +359,11 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'choice': 'The selected choice does not belong to this question.'}
             )
+        # N/A answers must not carry any choice selection — clear them so the
+        # DB is consistent and scoring logic can rely solely on not_applicable=True.
+        if data.get('not_applicable'):
+            data['choice']      = None
+            data['choices_ids'] = []
         return data
 
     def create(self, validated_data):

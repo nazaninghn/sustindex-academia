@@ -54,6 +54,8 @@ export function useQuestionnaire() {
   const [notes,        setNotes]        = useState<Record<number, string>>({});
   const [textAnswers,  setTextAnswers]  = useState<Record<number, string>>({});
   const [pendingFiles, setPendingFiles] = useState<Record<number, File[]>>({});
+  /** N/A toggle — keyed by question.id. When true, the question is excluded from scoring. */
+  const [naAnswers,    setNaAnswers]    = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -120,15 +122,18 @@ export function useQuestionnaire() {
       const preAnswers: Record<number, number[]> = {};
       const preNotes:   Record<number, string>   = {};
       const preText:    Record<number, string>   = {};
+      const preNA:      Record<number, boolean>  = {};
       for (const ans of attempt.answers || []) {
         if (Array.isArray(ans.choices) && ans.choices.length > 0) preAnswers[ans.question] = ans.choices;
         else if (ans.choice) preAnswers[ans.question] = [ans.choice];
-        if (ans.notes)       preNotes[ans.question]   = ans.notes;
-        if (ans.text_answer) preText[ans.question]    = ans.text_answer;
+        if (ans.notes)          preNotes[ans.question]   = ans.notes;
+        if (ans.text_answer)    preText[ans.question]    = ans.text_answer;
+        if (ans.not_applicable) preNA[ans.question]      = true;
       }
       setAnswers(preAnswers);
       setNotes(preNotes);
       setTextAnswers(preText);
+      setNaAnswers(preNA);
 
       const firstUnanswered = qs.findIndex((q: Question) => !preAnswers[q.id]);
       setCurrentIdx(firstUnanswered >= 0 ? firstUnanswered : qs.length - 1);
@@ -153,9 +158,15 @@ export function useQuestionnaire() {
   const note        = q ? (notes[q.id]        || '') : '';
   const textAns     = q ? (textAnswers[q.id]  || '') : '';
   const files       = q ? (pendingFiles[q.id] || []) : [];
+  /** Whether the current question has been marked Not Applicable */
+  const isNA        = q ? (naAnswers[q.id] ?? false) : false;
 
-  // Fix R5-M-01: count only questions where at least one choice has been selected
-  const answeredCount = Object.values(answers).filter((sel) => sel.length > 0).length;
+  // Fix R5-M-01: count questions with a choice, text answer, or N/A flag
+  const answeredCount = questions.filter((qItem) =>
+    naAnswers[qItem.id] ||
+    (answers[qItem.id] ?? []).length > 0 ||
+    (textAnswers[qItem.id] ?? '').trim().length > 0
+  ).length;
   const progress      = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
 
   const isTextType  = q?.question_type === 'text' || q?.choices?.length === 0;
@@ -163,6 +174,7 @@ export function useQuestionnaire() {
   const hasChoices  = (q?.choices?.length ?? 0) > 0 && !isTextType;
 
   const canSubmit =
+    isNA ||
     (hasChoices && selection.length > 0) ||
     (isTextType && textAns.trim().length > 0) ||
     (isMixedType && (selection.length > 0 || textAns.trim().length > 0)) ||
@@ -205,15 +217,17 @@ export function useQuestionnaire() {
     return map;
   }, [questions]);
 
-  /** A phase is "complete" when every question in it has at least one choice selected or text entered */
+  /** A phase is "complete" when every question in it has at least one choice selected,
+   *  text entered, or is marked Not Applicable. */
   const isPhaseComplete = useCallback((phaseNum: number): boolean => {
     const boundary = phaseBoundaries[phaseNum];
     if (!boundary) return true; // phase not present → treat as complete
     return boundary.qIds.every((qid) =>
+      naAnswers[qid] ||
       (answers[qid] ?? []).length > 0 ||
       (textAnswers[qid] ?? '').trim().length > 0
     );
-  }, [phaseBoundaries, answers, textAnswers]);
+  }, [phaseBoundaries, naAnswers, answers, textAnswers]);
 
   /**
    * The highest GRI phase the user may currently access.
@@ -283,6 +297,19 @@ export function useQuestionnaire() {
     setNotes((prev) => ({ ...prev, [q.id]: val }));
   };
 
+  /** Toggle the Not-Applicable flag for the current question.
+   *  When turned ON, clears any selected choices so the UI is consistent. */
+  const toggleNA = () => {
+    if (!q) return;
+    const qid = q.id;
+    setNaAnswers((prev) => {
+      const next = !prev[qid];
+      // Clear choices when switching N/A on so the UI doesn't show a stale selection
+      if (next) setAnswers((a) => ({ ...a, [qid]: [] }));
+      return { ...prev, [qid]: next };
+    });
+  };
+
   /**
    * FM-1: Shared answer-save helper — eliminates the 3× duplicated submitAnswer
    * dispatch logic that previously existed in handleNext, handleJumpTo, and
@@ -296,23 +323,27 @@ export function useQuestionnaire() {
   const saveCurrentAnswer = useCallback(async (saveEmpty = false): Promise<number | null> => {
     if (!q) return null;
     let answerId: number | null = null;
-    if (hasChoices && q.allow_multiple && selection.length > 0) {
-      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
+    // N/A: always save, regardless of other fields.
+    if (isNA) {
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns, true);
+      answerId = res?.id ?? null;
+    } else if (hasChoices && q.allow_multiple && selection.length > 0) {
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns, false);
       answerId = res?.id ?? null;
     } else if (hasChoices && selection.length > 0) {
-      const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns, false);
       answerId = res?.id ?? null;
     } else if (textAns.trim() || note.trim()) {
-      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns, false);
       answerId = res?.id ?? null;
     } else if (saveEmpty && !hasChoices && !isTextType) {
       // Fix C-07: "no-choice, non-text" question — still needs an answer record
       // for progress to be recorded server-side.
-      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns, false);
       answerId = res?.id ?? null;
     }
     return answerId;
-  }, [q, id, hasChoices, isTextType, selection, note, textAns]);
+  }, [q, id, isNA, hasChoices, isTextType, selection, note, textAns]);
 
   /** Flash the "✓ Saved" indicator for 1.8 s */
   const flashSaved = useCallback(() => {
@@ -505,6 +536,8 @@ export function useQuestionnaire() {
     note,
     textAns,
     files,
+    isNA,
+    naAnswers,
     progress,
     isTextType,
     isMixedType,
@@ -519,6 +552,7 @@ export function useQuestionnaire() {
     unlockedUpToPhase,
     /* handlers */
     toggleChoice,
+    toggleNA,
     addFiles,
     removeFile,
     updateTextAnswer,

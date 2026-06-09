@@ -615,24 +615,32 @@ class AnswerViewSet(viewsets.ModelViewSet):
                 # so the update path goes through the same validation as create.
                 # choice is a PK-related field → resolved to a model instance.
                 # choices_ids is ListField(IntegerField) → already a list of ints.
+                not_applicable = serializer.validated_data.get('not_applicable', False)
                 _choice_obj  = serializer.validated_data.get('choice')
                 choice       = _choice_obj.id if _choice_obj else None
                 text_answer  = serializer.validated_data.get('text_answer', '')
                 notes        = serializer.validated_data.get('notes', '')
                 choices_ids  = serializer.validated_data.get('choices_ids', [])
 
+                # When N/A is toggled on, choices are already cleared by the serializer
+                # validator; apply the same rule here for safety.
+                if not_applicable:
+                    choice = None
+                    choices_ids = []
+
                 # Fix BUG-04: validate choice belongs to this question before assigning
                 if choice is not None:
                     if not Choice.objects.filter(id=choice, question=existing.question).exists():
                         raise DRFValidationError({'choice': 'Choice does not belong to this question.'})
 
+                existing.not_applicable = not_applicable
                 existing.choice_id = choice
                 existing.text_answer = text_answer
                 existing.notes = notes
                 # Fix R5-M-09: save only the mutated columns to avoid unnecessary
                 # full-row writes and reduce the risk of concurrent-update collisions
                 # on unrelated fields.
-                existing.save(update_fields=['choice_id', 'text_answer', 'notes'])
+                existing.save(update_fields=['not_applicable', 'choice_id', 'text_answer', 'notes'])
 
                 # Fix D (Round 2): always sync M2M — empty list clears stale multi-select choices.
                 # Fix BUG-29: filter by question so IDs from other questions are rejected.

@@ -148,24 +148,29 @@ export const attemptAPI = {
   },
 
   submitAnswer: async (
-    attemptId:   number,
-    questionId:  number,
-    choiceId:    number | null,
-    choiceIds?:  number[],
-    notes?:      string,
-    textAnswer?: string,
+    attemptId:      number,
+    questionId:     number,
+    choiceId:       number | null,
+    choiceIds?:     number[],
+    notes?:         string,
+    textAnswer?:    string,
+    notApplicable?: boolean,
   ) => {
-    const payload: Record<string, number | number[] | string | null | undefined> = {
+    const payload: Record<string, number | number[] | string | boolean | null | undefined> = {
       attempt: attemptId,
       question: questionId,
     };
-    if (choiceIds && choiceIds.length > 0) payload.choices_ids = choiceIds;
-    else if (choiceId !== null && choiceId !== undefined) payload.choice = choiceId;
+    // When N/A is toggled on, send no choice — the backend clears them via validate().
+    if (!notApplicable) {
+      if (choiceIds && choiceIds.length > 0) payload.choices_ids = choiceIds;
+      else if (choiceId !== null && choiceId !== undefined) payload.choice = choiceId;
+    }
     // Fix M-29: always include notes/text_answer even when empty so the backend
     // clears the field if the user had previously typed something and then erased it.
     // The old `if (notes)` guard skipped the empty string, leaving stale data on the server.
-    payload.notes       = notes       ?? '';
-    payload.text_answer = textAnswer  ?? '';
+    payload.notes          = notes          ?? '';
+    payload.text_answer    = textAnswer     ?? '';
+    payload.not_applicable = notApplicable  ?? false;
     const { data } = await api.post('/api/v1/answers/', payload);
     return data;  // includes { id, ... }
   },

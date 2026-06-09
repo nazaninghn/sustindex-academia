@@ -160,11 +160,13 @@ export default function QuestionnairePage() {
           isTextType={qs.isTextType}
           isMixedType={qs.isMixedType}
           hasChoices={qs.hasChoices}
+          isNA={qs.isNA}
           GRI_PHASES={qs.GRI_PHASES}
           currentPhase={qs.currentPhase}
           unlockedUpToPhase={qs.unlockedUpToPhase}
           onToggleChoice={qs.toggleChoice}
           onTextChange={qs.updateTextAnswer}
+          onToggleNA={qs.toggleNA}
         />
 
         <EvidencePanel

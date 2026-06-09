@@ -474,6 +474,11 @@ class QuestionnaireAttempt(models.Model):
 
             for question in cat_questions:
                 answer = answers_by_qid.get(question.id)
+                # N/A: exclude the question entirely (no score, no max_possible denominator).
+                # This prevents N/A from penalising the percentage — it's treated as if
+                # the question was never asked for this organisation.
+                if answer and answer.not_applicable:
+                    continue
                 if answer:
                     cat_score += answer.get_total_score()
                 cat_possible += question.get_max_possible_score()
@@ -623,6 +628,7 @@ class Answer(models.Model):
     choices = models.ManyToManyField(Choice, related_name='answers_multiple', blank=True, verbose_name=_('Selected Choices (Multiple)'))
     text_answer = models.TextField(blank=True, null=True, verbose_name=_('Text Answer'), help_text=_('Open-ended text answer for text-type questions'))
     notes = models.TextField(blank=True, null=True, verbose_name=_('Notes/Comments'), help_text=_('Additional notes or comments for this answer'))
+    not_applicable = models.BooleanField(default=False, verbose_name=_('Not Applicable'), help_text=_('User marked this question as not applicable to their organisation. Excluded from score calculation.'))
     answered_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Answered At'))
     
     class Meta:
@@ -641,7 +647,11 @@ class Answer(models.Model):
 
         Fix #32: use list() so the prefetch_related cache is hit instead of
         issuing a fresh queryset on every call (avoids N+1 in scoring hot path).
+        N/A answers always contribute 0 (and their question is excluded from
+        the denominator in get_category_breakdown).
         """
+        if self.not_applicable:
+            return 0
         if self.question.allow_multiple:
             return sum(c.score for c in list(self.choices.all()))
         return self.choice.score if self.choice else 0
