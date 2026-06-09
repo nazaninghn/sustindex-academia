@@ -280,30 +280,45 @@ export function useQuestionnaire() {
     setNotes((prev) => ({ ...prev, [q.id]: val }));
   };
 
+  /**
+   * FM-1: Shared answer-save helper — eliminates the 3× duplicated submitAnswer
+   * dispatch logic that previously existed in handleNext, handleJumpTo, and
+   * handleSaveAndExit.
+   *
+   * @param saveEmpty  When true, also submits a record for "no-choice, non-text"
+   *                   questions (Fix C-07) so progress is tracked server-side.
+   *                   Only handleNext passes true — jump/exit don't need it.
+   * @returns The answer ID returned by the API, or null when nothing was sent.
+   */
+  const saveCurrentAnswer = useCallback(async (saveEmpty = false): Promise<number | null> => {
+    if (!q) return null;
+    let answerId: number | null = null;
+    if (hasChoices && q.allow_multiple && selection.length > 0) {
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
+      answerId = res?.id ?? null;
+    } else if (hasChoices && selection.length > 0) {
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
+      answerId = res?.id ?? null;
+    } else if (textAns.trim() || note.trim()) {
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
+      answerId = res?.id ?? null;
+    } else if (saveEmpty && !hasChoices && !isTextType) {
+      // Fix C-07: "no-choice, non-text" question — still needs an answer record
+      // for progress to be recorded server-side.
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
+      answerId = res?.id ?? null;
+    }
+    return answerId;
+  }, [q, id, hasChoices, isTextType, selection, note, textAns]);
+
   const handleNext = async () => {
     if (!q || saving || submitLockRef.current) return;
     submitLockRef.current = true;
     setSaving(true);
     setError('');
     try {
-      let answerId: number | null = null;
-
-      if (hasChoices && q.allow_multiple && selection.length > 0) {
-        const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
-        answerId = res?.id ?? null;
-      } else if (hasChoices && selection.length > 0) {
-        const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
-        answerId = res?.id ?? null;
-      } else if (textAns.trim() || note.trim()) {
-        const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-        answerId = res?.id ?? null;
-      } else if (!hasChoices && !isTextType && q) {
-        // Fix C-07: "no-choice, non-text" question — canSubmit is true because
-        // the question has no required inputs, but we still need to create/update
-        // an answer record (with empty payload) so progress is recorded server-side.
-        const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-        answerId = res?.id ?? null;
-      }
+      // FM-1: single call replaces the 4-branch inline dispatch
+      const answerId = await saveCurrentAnswer(true);
 
       if (answerId && files.length > 0) {
         // Fix FM-8: upload all files in parallel so 5 files × 200 ms = ~200 ms
@@ -367,17 +382,8 @@ export function useQuestionnaire() {
     }
     if (q && (selection.length > 0 || note.trim() || textAns.trim())) {
       try {
-        let answerId: number | null = null;
-        if (hasChoices && q.allow_multiple && selection.length > 0) {
-          const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
-          answerId = res?.id ?? null;
-        } else if (hasChoices && selection.length > 0) {
-          const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
-          answerId = res?.id ?? null;
-        } else if (textAns.trim() || note.trim()) {
-          const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-          answerId = res?.id ?? null;
-        }
+        // FM-1: single call replaces the 3-branch inline dispatch
+        const answerId = await saveCurrentAnswer();
         // Fix M-6: upload pending files when jumping — previously they were
         // silently discarded, leaving evidence permanently lost.
         // Fix R4-M-04: surface upload failures with a user confirmation so they
@@ -428,16 +434,8 @@ export function useQuestionnaire() {
       if (q) {
         let answerId: number | null = null;
         try {
-          if (hasChoices && q.allow_multiple && selection.length > 0) {
-            const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
-            answerId = res?.id ?? null;
-          } else if (hasChoices && selection.length > 0) {
-            const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
-            answerId = res?.id ?? null;
-          } else if (textAns.trim() || note.trim()) {
-            const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-            answerId = res?.id ?? null;
-          }
+          // FM-1: single call replaces the 3-branch inline dispatch
+          answerId = await saveCurrentAnswer();
         } catch (err) {
           logger.error('Save & Exit: answer save failed', err);
           saveFailed = true;

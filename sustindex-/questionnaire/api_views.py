@@ -319,19 +319,25 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         # Fix HIGH-05: scope to request.user regardless of staff status to prevent
         # IDOR — a staff user should not be able to complete another user's attempt
         # via this endpoint (admin operations belong in the admin panel).
-        attempt = get_object_or_404(
-            self._base_queryset().filter(user=request.user),
-            pk=pk,
-        )
-        if attempt.is_completed:
-            return Response(
-                {'error': 'Attempt already completed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        # Fix #29: combine completion + score fields into a single DB write.
-        # calculate_scores(save=False) sets all score attrs on the instance
-        # without touching the DB; we then save everything at once.
+        # BH-4: wrap entire check-and-update in a single atomic block with
+        # select_for_update() so two concurrent complete requests cannot both
+        # pass the is_completed guard and race into save() — that would trigger
+        # the UniqueConstraint (BH-2) and produce a 500 instead of a 409.
         with transaction.atomic():
+            attempt = get_object_or_404(
+                self._base_queryset().filter(user=request.user).select_for_update(),
+                pk=pk,
+            )
+            if attempt.is_completed:
+                # BH-4: 409 Conflict — the resource is already in the completed
+                # state; this is not a client input error (400).
+                return Response(
+                    {'error': 'Attempt already completed'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            # Fix #29: combine completion + score fields into a single DB write.
+            # calculate_scores(save=False) sets all score attrs on the instance
+            # without touching the DB; we then save everything at once.
             attempt.is_completed = True
             attempt.completed_at = timezone.now()
             scores = attempt.calculate_scores(save=False)

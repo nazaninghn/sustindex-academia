@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Logo from './Logo';
 import LangToggle from './LangToggle';
 import { useLang } from '@/lib/i18n';
@@ -18,9 +18,44 @@ export default function AppNav() {
     router.push('/login');
   };
   const [open, setOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   // Close menu on route change
   useEffect(() => { setOpen(false); }, [path]);
+
+  // Fix A-4: focus trap — keep Tab-key focus inside the mobile drawer while open.
+  // Also handles Escape to close and moves initial focus to the first item on open.
+  const trapFocus = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') { setOpen(false); return; }
+    if (e.key !== 'Tab') return;
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+    const focusable = Array.from(
+      drawer.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last  = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    document.addEventListener('keydown', trapFocus);
+    // Move initial focus to the first interactive element so keyboard users
+    // don't have to Tab from the hamburger button all the way back in.
+    const firstFocusable = drawerRef.current?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled])'
+    );
+    firstFocusable?.focus();
+    return () => document.removeEventListener('keydown', trapFocus);
+  }, [open, trapFocus]);
   // Fix M-27: iOS Safari ignores overflow:hidden on body without position:fixed.
   // Store and restore the scroll position so the page doesn't jump on close.
   useEffect(() => {
@@ -192,7 +227,7 @@ export default function AppNav() {
 
       {/* ── Mobile drawer ── */}
       {open && (
-        <div id="mobile-nav-drawer" style={{
+        <div ref={drawerRef} id="mobile-nav-drawer" style={{
           position: 'fixed', top: 57, left: 0, right: 0, bottom: 0,
           background: 'var(--cream)', zIndex: 51, /* Fix L-16: must exceed header z-index:50 */
           display: 'flex', flexDirection: 'column',
