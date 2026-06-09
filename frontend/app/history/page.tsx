@@ -10,6 +10,7 @@ import AppNav from '@/components/AppNav';
 import { useLang } from '@/lib/i18n';
 import { Icon } from '@/components/shared';
 import { CategoryScore } from '@/lib/types';
+import ScoreTrendChart from '@/components/ScoreTrendChart';
 
 interface Attempt {
   id: number;
@@ -151,6 +152,24 @@ export default function HistoryPage() {
             </div>
           ))}
         </div>
+
+        {/* Score trend chart — shown when 2+ completed attempts exist */}
+        {completed.length >= 2 && (
+          <div style={{
+            background: 'var(--paper)', border: '1px solid var(--line)',
+            padding: '20px 24px', marginBottom: 20,
+          }}>
+            <div style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 10, color: 'var(--ink-4)',
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              marginBottom: 16,
+            }}>
+              {lang === 'tr' ? 'Skor Trendi' : 'Score Trend'}
+            </div>
+            <ScoreTrendChart attempts={completed} lang={lang} height={140} />
+          </div>
+        )}
 
         {/* Filter chips */}
         <div style={{
