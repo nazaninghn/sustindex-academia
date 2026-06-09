@@ -1,3 +1,4 @@
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,6 +9,8 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 from .models import (
     Survey, SurveySession, Category, Question, Choice,
     QuestionnaireAttempt, Answer, UserDocument
@@ -327,6 +330,21 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         # BH-4: wrap entire check-and-update in a single atomic block with
         # select_for_update() so two concurrent complete requests cannot both
         # pass the is_completed guard and race into save().
+        try:
+          return self._complete_attempt(request, pk)
+        except Exception as exc:
+            logger.error(
+                '[complete] UNHANDLED ERROR pk=%s user=%s type=%s msg=%s',
+                pk, getattr(request.user, 'id', '?'),
+                type(exc).__name__, exc,
+                exc_info=True,
+            )
+            return Response(
+                {'error': 'complete_failed', 'detail': str(exc), 'type': type(exc).__name__},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _complete_attempt(self, request, pk):
         with transaction.atomic():
             attempt = get_object_or_404(
                 self._base_queryset().filter(user=request.user).select_for_update(),
