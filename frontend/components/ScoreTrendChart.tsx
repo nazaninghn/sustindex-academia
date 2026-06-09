@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 export interface TrendAttempt {
   id: number;
   survey_name: string;
-  completed_at: string;
+  completed_at: string | null;
   total_score: number;
   overall_grade: string;
 }
