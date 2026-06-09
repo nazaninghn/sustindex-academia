@@ -295,10 +295,25 @@ class AttemptBreakdownMixin:
 
 class UserDocumentSerializer(serializers.ModelSerializer):
     file_size_display = serializers.CharField(source='get_file_size_display', read_only=True)
-    
+    # Contextual fields for the document library view
+    answer_id         = serializers.IntegerField(source='answer.id', read_only=True)
+    question_text     = serializers.CharField(source='answer.question.text', read_only=True)
+    survey_name       = serializers.SerializerMethodField()
+    attempt_id        = serializers.IntegerField(source='answer.attempt.id', read_only=True)
+
     class Meta:
         model = UserDocument
-        fields = ['id', 'title', 'description', 'file', 'uploaded_at', 'file_size', 'file_size_display']
+        fields = [
+            'id', 'title', 'description', 'file', 'uploaded_at',
+            'file_size', 'file_size_display',
+            'answer_id', 'question_text', 'survey_name', 'attempt_id',
+        ]
+
+    def get_survey_name(self, obj):
+        try:
+            return obj.answer.attempt.survey.name
+        except AttributeError:
+            return None
 
 
 class AnswerSerializer(serializers.ModelSerializer):

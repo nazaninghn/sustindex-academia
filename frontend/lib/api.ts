@@ -199,6 +199,12 @@ export const attemptAPI = {
     return data;
   },
 
+  /** Fetch all documents uploaded by the current user (central library). */
+  getMyDocuments: async () => {
+    const { data } = await api.get('/api/v1/documents/');
+    return data;
+  },
+
   /** Upload a supporting document for a saved answer.
    *
    * Fix R5-C-02: migrated from native `fetch` to the shared `api` axios instance

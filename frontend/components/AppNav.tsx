@@ -8,7 +8,7 @@ import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 
 export default function AppNav() {
-  const { t }              = useLang();
+  const { t, lang }        = useLang();
   const path               = usePathname();
   const router             = useRouter();
   const { user, logout }   = useAuth();
@@ -82,10 +82,11 @@ export default function AppNav() {
   }, [open]);
 
   const items: [string, string][] = [
-    [t('nav_overview'), '/dashboard'],
-    [t('nav_surveys'),  '/surveys'],
-    [t('nav_courses'),  '/courses'],
-    [t('nav_history'),  '/history'],
+    [t('nav_overview'),   '/dashboard'],
+    [t('nav_surveys'),    '/surveys'],
+    [t('nav_courses'),    '/courses'],
+    [t('nav_history'),    '/history'],
+    [lang === 'tr' ? 'Belgeler' : 'Documents', '/documents'],
   ];
 
   const firstName = user?.first_name || user?.username || '—';
