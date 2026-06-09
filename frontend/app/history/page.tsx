@@ -27,7 +27,7 @@ export default function HistoryPage() {
   const { user, isLoading: authLoading } = useAuth();
   // Fix R13-04: use only `t` — all strings now go through t() for consistent
   // bilingual i18n. Raw lang === 'tr' ? … : … ternaries have been removed.
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [attempts,   setAttempts]   = useState<Attempt[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [loadError,  setLoadError]  = useState(false);
@@ -176,9 +176,26 @@ export default function HistoryPage() {
               </button>
             ))}
           </div>
-          <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-            {visible.length} {t('courses_results')}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+              {visible.length} {t('courses_results')}
+            </span>
+            {completed.length > 0 && (
+              <Link href="/results/combined" style={{ textDecoration: 'none' }}>
+                <button style={{
+                  padding: '7px 16px',
+                  background: 'var(--olive-deep)', color: '#fff',
+                  border: 'none', cursor: 'pointer',
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                  fontWeight: 600, fontSize: 11.5,
+                  letterSpacing: '0.02em',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}>
+                  📊 {lang === 'tr' ? 'Birleşik GRI Raporu' : 'Combined GRI Report'}
+                </button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Empty state */}
