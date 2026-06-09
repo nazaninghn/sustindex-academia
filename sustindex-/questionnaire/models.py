@@ -347,19 +347,13 @@ class QuestionnaireAttempt(models.Model):
         verbose_name = _('Questionnaire Attempt')
         verbose_name_plural = _('Questionnaire Attempts')
         ordering = ['-started_at']
-        constraints = [
-            # BH-2: DB-level guard that prevents two *completed* attempts for the
-            # same (user, survey) pair from being inserted concurrently.
-            # The application-layer check in perform_create uses select_for_update()
-            # to prevent races, but this constraint is the last line of defence.
-            # Partial index (WHERE is_completed = true) means in-progress attempts
-            # are unaffected — a user can have multiple open drafts for the same survey.
-            models.UniqueConstraint(
-                fields=['user', 'survey'],
-                condition=models.Q(is_completed=True),
-                name='unique_completed_attempt',
-            ),
-        ]
+        # Fix START-2: removed unique_completed_attempt constraint (BH-2).
+        # That constraint prevented users from completing a *second* attempt
+        # for the same survey, which is exactly what the GRI Retry flow needs.
+        # Race-condition protection is already handled by select_for_update()
+        # inside transaction.atomic() in the complete action — the DB constraint
+        # was belt-and-suspenders that became actively harmful.
+        constraints = []
     
     def __str__(self):
         # Fix LOW-03: avoid lazy-loading self.survey.name and self.user.username
