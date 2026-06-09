@@ -22,7 +22,9 @@ class Survey(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created At'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated At'))
     
-    allow_multiple_attempts = models.BooleanField(default=False, verbose_name=_('Allow Multiple Attempts'))
+    # Fix START-1: default True so all GRI phase surveys allow the Retry button.
+    # Admins can override per-survey via the admin panel.
+    allow_multiple_attempts = models.BooleanField(default=True, verbose_name=_('Allow Multiple Attempts'))
     show_results_immediately = models.BooleanField(default=True, verbose_name=_('Show Results Immediately'))
     
     class Meta:

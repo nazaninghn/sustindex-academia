@@ -281,9 +281,14 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
             # template view) so the two enforcement points stay in sync.
             # select_for_update locks the rows so a concurrent request is blocked
             # until this transaction commits, eliminating the race condition.
+            # Fix START-1: the old hard-coded default {'free': 3} blocked the
+            # 4-phase GRI flow — completing phases 1/2/3 already consumed the
+            # free quota, making it impossible to start phase 4.  The default
+            # is now unlimited for all tiers; set ATTEMPT_LIMITS in Django
+            # settings to re-enable per-tier limits when a paywall is needed.
             _attempt_limits = getattr(
                 django_settings, 'ATTEMPT_LIMITS',
-                {'free': 3, 'silver': 1, 'gold': None},
+                {'free': None, 'silver': None, 'gold': None},
             )
             _limit = _attempt_limits.get(user.membership_type)
             if _limit is not None:

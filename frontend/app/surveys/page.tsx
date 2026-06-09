@@ -557,8 +557,27 @@ export default function SurveysPage() {
     try {
       const attempt = await attemptAPI.startAttempt(survey.id, sector);
       router.push(`/questionnaire/${attempt.id}`);
-    } catch {
-      setStartErr(lang === 'tr' ? 'Başlatılamadı, lütfen tekrar deneyin.' : 'Failed to start. Please try again.');
+    } catch (err: unknown) {
+      // Fix START-1: parse the API error so the user sees WHY it failed.
+      let msg = lang === 'tr' ? 'Başlatılamadı, lütfen tekrar deneyin.' : 'Failed to start. Please try again.';
+
+      const axErr = err as { response?: { status?: number; data?: { detail?: string; error?: string } } };
+      const status = axErr?.response?.status;
+      const detail = axErr?.response?.data?.detail || axErr?.response?.data?.error || '';
+
+      if (status === 403) {
+        msg = lang === 'tr'
+          ? 'Deneme limitinize ulaştınız. Plan yükseltmek için yöneticinizle iletişime geçin.'
+          : 'You have reached your attempt limit. Contact your administrator to upgrade your plan.';
+      } else if (status === 400 && typeof detail === 'string' && detail.toLowerCase().includes('multiple attempt')) {
+        msg = lang === 'tr'
+          ? 'Bu anket için yeniden denemeye izin verilmiyor.'
+          : 'Multiple attempts are not allowed for this survey.';
+      } else if (typeof detail === 'string' && detail.length > 0) {
+        msg = detail;
+      }
+
+      setStartErr(msg);
       setStarting(false);
     } finally {
       submitLockRef.current = false;
