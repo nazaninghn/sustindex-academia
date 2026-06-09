@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useLanguage } from '@/lib/language';
+import { useLang } from '@/lib/i18n';
 
 export default function Footer() {
-  const { t } = useLanguage();
+  const { t } = useLang();
   
   return (
     <footer className="relative bg-gradient-to-br from-green-50 to-emerald-50 border-t border-green-100">

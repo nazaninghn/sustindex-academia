@@ -408,6 +408,143 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
     tr: 'Bağlantı geçersiz veya süresi dolmuş.',
   },
 
+  /* ── Legacy landing-page keys (CO-1: migrated from lib/language.tsx) ───── */
+  /* Nav */
+  'nav.features':     { en: 'Features',        tr: 'Özellikler' },
+  'nav.methodology':  { en: 'Methodology',      tr: 'Metodoloji' },
+  'nav.dashboard':    { en: 'Dashboard',         tr: 'Kontrol Paneli' },
+  'nav.surveys':      { en: 'Surveys',           tr: 'Anketler' },
+  'nav.about':        { en: 'About',             tr: 'Hakkımızda' },
+  'nav.signin':       { en: 'Sign In',           tr: 'Giriş Yap' },
+  'nav.getstarted':   { en: 'Get Started',       tr: 'Başlayın' },
+  'nav.logout':       { en: 'Logout',            tr: 'Çıkış Yap' },
+  'nav.history':      { en: 'History',           tr: 'Geçmiş' },
+  'nav.profile':      { en: 'Profile',           tr: 'Profil' },
+
+  /* Hero */
+  'hero.badge':              { en: 'ESG Assessment Platform',    tr: 'ESG Değerlendirme Platformu' },
+  'hero.title1':             { en: 'Transform Your',             tr: 'Sürdürülebilirlik' },
+  'hero.title2':             { en: 'Sustainability',             tr: 'Yolculuğunuzu' },
+  'hero.description': {
+    en: 'Comprehensive ESG assessment with AI-powered insights, real-time scoring, and actionable recommendations for a sustainable future.',
+    tr: 'Yapay zeka destekli içgörüler, gerçek zamanlı puanlama ve sürdürülebilir bir gelecek için eyleme dönüştürülebilir önerilerle kapsamlı ESG değerlendirmesi.',
+  },
+  'hero.getstarted':         { en: 'Get Started',                tr: 'Başlayın' },
+  'hero.signin':             { en: 'Sign In',                    tr: 'Giriş Yap' },
+  'hero.stats.companies':    { en: 'Companies',                  tr: 'Şirket' },
+  'hero.stats.accuracy':     { en: 'Accuracy',                   tr: 'Doğruluk' },
+  'hero.stats.criteria':     { en: 'Criteria',                   tr: 'Kriter' },
+
+  /* Features */
+  'features.badge':               { en: 'Platform Features',           tr: 'Platform Özellikleri' },
+  'features.title1':              { en: 'Everything You Need for',      tr: 'ESG Mükemmelliği İçin' },
+  'features.title2':              { en: 'ESG Excellence',               tr: 'İhtiyacınız Olan Her Şey' },
+  'features.description': {
+    en: "Comprehensive tools and insights to measure, improve, and showcase your organization's sustainability performance.",
+    tr: 'Kuruluşunuzun sürdürülebilirlik performansını ölçmek, geliştirmek ve sergilemek için kapsamlı araçlar ve içgörüler.',
+  },
+  'features.analytics.title':     { en: 'Real-Time Analytics',          tr: 'Gerçek Zamanlı Analitik' },
+  'features.analytics.desc': {
+    en: 'Live ESG scoring with instant feedback and detailed breakdowns across all sustainability dimensions.',
+    tr: 'Tüm sürdürülebilirlik boyutlarında anında geri bildirim ve ayrıntılı dökümlerle canlı ESG puanlaması.',
+  },
+  'features.reports.title':       { en: 'Professional Reports',         tr: 'Profesyonel Raporlar' },
+  'features.reports.desc': {
+    en: 'Executive-ready PDF reports with benchmarking, trends analysis, and actionable recommendations.',
+    tr: 'Kıyaslama, trend analizi ve eyleme dönüştürülebilir önerilerle yönetici düzeyinde PDF raporları.',
+  },
+  'features.standards.title':     { en: 'ISO Standards',                tr: 'ISO Standartları' },
+  'features.standards.desc': {
+    en: 'Assessment framework aligned with international sustainability standards and best practices.',
+    tr: 'Uluslararası sürdürülebilirlik standartları ve en iyi uygulamalarla uyumlu değerlendirme çerçevesi.',
+  },
+  'features.insights.title':      { en: 'AI Insights',                  tr: 'Yapay Zeka İçgörüleri' },
+  'features.insights.desc': {
+    en: 'Smart recommendations powered by machine learning to accelerate your sustainability journey.',
+    tr: 'Sürdürülebilirlik yolculuğunuzu hızlandırmak için makine öğrenimi destekli akıllı öneriler.',
+  },
+  'features.tracking.title':      { en: 'Progress Tracking',            tr: 'İlerleme Takibi' },
+  'features.tracking.desc': {
+    en: 'Monitor your sustainability improvements over time with historical data and trend analysis.',
+    tr: 'Geçmiş veriler ve trend analiziyle sürdürülebilirlik iyileştirmelerinizi zaman içinde izleyin.',
+  },
+  'features.collaboration.title': { en: 'Team Collaboration',           tr: 'Ekip İşbirliği' },
+  'features.collaboration.desc': {
+    en: 'Multi-user access with role-based permissions for seamless team collaboration.',
+    tr: 'Sorunsuz ekip işbirliği için rol tabanlı izinlerle çok kullanıcılı erişim.',
+  },
+  'features.cta.title':           { en: 'Ready to get started?',        tr: 'Başlamaya hazır mısınız?' },
+  'features.cta.desc': {
+    en: 'Join hundreds of companies improving their sustainability.',
+    tr: 'Sürdürülebilirliklerini geliştiren yüzlerce şirkete katılın.',
+  },
+  'features.cta.button':          { en: 'Start Free Trial',             tr: 'Ücretsiz Denemeye Başla' },
+
+  /* Methodology */
+  'methodology.badge':         { en: 'Our Methodology',           tr: 'Metodolojimiz' },
+  'methodology.title1':        { en: 'How We Measure',            tr: 'Etkilerinizi Nasıl' },
+  'methodology.title2':        { en: 'Your Impact',               tr: 'Ölçüyoruz' },
+  'methodology.description': {
+    en: 'Our comprehensive ESG assessment framework is built on international standards and industry best practices.',
+    tr: 'Kapsamlı ESG değerlendirme çerçevemiz, uluslararası standartlar ve sektör en iyi uygulamaları üzerine inşa edilmiştir.',
+  },
+  'methodology.env.title':     { en: 'Environmental',             tr: 'Çevresel' },
+  'methodology.env.desc': {
+    en: 'Carbon emissions, energy efficiency, waste management, water conservation, and biodiversity protection.',
+    tr: 'Karbon emisyonları, enerji verimliliği, atık yönetimi, su tasarrufu ve biyoçeşitlilik koruması.',
+  },
+  'methodology.social.title':  { en: 'Social',                    tr: 'Sosyal' },
+  'methodology.social.desc': {
+    en: 'Employee welfare, diversity & inclusion, community engagement, health & safety, and human rights.',
+    tr: 'Çalışan refahı, çeşitlilik ve kapsayıcılık, toplum katılımı, sağlık ve güvenlik ve insan hakları.',
+  },
+  'methodology.gov.title':     { en: 'Governance',                tr: 'Yönetişim' },
+  'methodology.gov.desc': {
+    en: 'Board independence, transparency, ethics programs, anti-corruption, and stakeholder engagement.',
+    tr: 'Yönetim kurulu bağımsızlığı, şeffaflık, etik programları, yolsuzlukla mücadele ve paydaş katılımı.',
+  },
+  'methodology.cta.title': {
+    en: 'Ready to Start Your Sustainability Journey?',
+    tr: 'Sürdürülebilirlik Yolculuğunuza Başlamaya Hazır mısınız?',
+  },
+  'methodology.cta.desc': {
+    en: "Join leading organizations in measuring and improving their ESG performance.",
+    tr: 'ESG performanslarını ölçen ve geliştiren önde gelen kuruluşlara katılın.',
+  },
+  'methodology.cta.start':     { en: 'Start Free Assessment',     tr: 'Ücretsiz Değerlendirmeye Başla' },
+  'methodology.cta.signin':    { en: 'Sign In',                   tr: 'Giriş Yap' },
+
+  /* Stats */
+  'stats.companies':    { en: 'Companies Assessed',    tr: 'Değerlendirilen Şirket' },
+  'stats.questions':    { en: 'ESG Questions',          tr: 'ESG Sorusu' },
+  'stats.pillars':      { en: 'Core Pillars',           tr: 'Temel Sütun' },
+  'stats.satisfaction': { en: 'Satisfaction Rate',      tr: 'Memnuniyet Oranı' },
+
+  /* Footer */
+  'footer.description': {
+    en: 'Empowering organizations to measure, improve, and showcase their sustainability performance.',
+    tr: 'Kuruluşların sürdürülebilirlik performanslarını ölçmelerine, geliştirmelerine ve sergilemelerine güç veriyoruz.',
+  },
+  'footer.platform':      { en: 'Platform',              tr: 'Platform' },
+  'footer.about':         { en: 'About Us',              tr: 'Hakkımızda' },
+  'footer.features':      { en: 'Features',              tr: 'Özellikler' },
+  'footer.methodology':   { en: 'Methodology',           tr: 'Metodoloji' },
+  'footer.assessments':   { en: 'Assessments',           tr: 'Değerlendirmeler' },
+  'footer.resources':     { en: 'Resources',             tr: 'Kaynaklar' },
+  'footer.documentation': { en: 'Documentation',         tr: 'Dokümantasyon' },
+  'footer.api':           { en: 'API Reference',         tr: 'API Referansı' },
+  'footer.support':       { en: 'Support',               tr: 'Destek' },
+  'footer.blog':          { en: 'Blog',                  tr: 'Blog' },
+  'footer.getstarted':    { en: 'Get Started',           tr: 'Başlayın' },
+  'footer.signup':        { en: 'Sign Up',               tr: 'Kayıt Ol' },
+  'footer.signin':        { en: 'Sign In',               tr: 'Giriş Yap' },
+  'footer.pricing':       { en: 'Pricing',               tr: 'Fiyatlandırma' },
+  'footer.contact':       { en: 'Contact',               tr: 'İletişim' },
+  'footer.rights':        { en: 'All rights reserved.',  tr: 'Tüm hakları saklıdır.' },
+  'footer.privacy':       { en: 'Privacy Policy',        tr: 'Gizlilik Politikası' },
+  'footer.terms':         { en: 'Terms of Service',      tr: 'Hizmet Şartları' },
+  'footer.cookies':       { en: 'Cookie Policy',         tr: 'Çerez Politikası' },
+
   /* ── History page (R13-04) ───────────────────────────────────────────────── */
   hist_load_error:       {
     en: 'Failed to load history. Please refresh the page.',

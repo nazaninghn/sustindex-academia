@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useLanguage } from '@/lib/language';
+import { useLang } from '@/lib/i18n';
 
 export default function HeroSection() {
-  const { t } = useLanguage();
+  const { t } = useLang();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

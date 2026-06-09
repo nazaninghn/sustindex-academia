@@ -473,19 +473,31 @@ export default function SurveysPage() {
 
   useEffect(() => {
     if (!user) return;
+    // Fix H-4: cancel in-flight requests when the component unmounts so we never
+    // call setState on an already-unmounted component (prevents memory leaks and
+    // the "Can't perform a React state update on an unmounted component" warning).
+    const controller = new AbortController();
     setLoading(true);
     Promise.all([
       surveyAPI.getSurveys(),
       attemptAPI.getMyAttempts(),
     ])
       .then(([survData, attData]: [Survey[] | { results: Survey[] }, Attempt[] | { results: Attempt[] }]) => {
+        if (controller.signal.aborted) return;
         const survList = Array.isArray(survData) ? survData : (survData?.results ?? []);
         const attList  = Array.isArray(attData)  ? attData  : (attData?.results  ?? []);
         setSurveys(survList);
         setAttempts(attList);
       })
-      .catch(() => setLoadErr(true))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setLoadErr(true);
+        void err;
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [user]);
 
   /* ── Build wizard steps ─────────────────────────────────── */

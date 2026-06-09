@@ -134,22 +134,32 @@ class SurveySessionViewSet(viewsets.ReadOnlyModelViewSet):
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     # Fix R5-H-02: require authentication
-    queryset = (
-        Category.objects.all()
-        .order_by('order')
-        # Fix BUG-06: select_related('category') on nested questions prevents
-        # QuestionSerializer.to_representation from lazy-loading category per question.
-        .prefetch_related(
-            Prefetch(
-                'questions',
-                queryset=Question.objects.filter(is_active=True)
-                    .select_related('category')
-                    .prefetch_related('choices'),
-            )
-        )
-    )
+    # Fix H-2: use .none() as the class-level queryset sentinel and override
+    # get_queryset() so categories are scoped to active surveys only (previously
+    # returned ALL categories, including ones from soft-deleted / inactive surveys
+    # that the user should never see).
+    queryset = Category.objects.none()
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Fix H-2: restrict to categories that belong to an active survey.
+        # This prevents leaking categories from inactive / deleted surveys and
+        # keeps the response in sync with SurveyViewSet's is_active=True filter.
+        return (
+            Category.objects.filter(survey__is_active=True)
+            .order_by('order')
+            # Fix BUG-06: select_related('category') on nested questions prevents
+            # QuestionSerializer.to_representation from lazy-loading category per question.
+            .prefetch_related(
+                Prefetch(
+                    'questions',
+                    queryset=Question.objects.filter(is_active=True)
+                        .select_related('category')
+                        .prefetch_related('choices'),
+                )
+            )
+        )
 
 
 class QuestionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -459,7 +469,40 @@ class AnswerViewSet(viewsets.ModelViewSet):
                 serializer.instance = existing
                 return
 
-            serializer.save(attempt=attempt)
+            try:
+                serializer.save(attempt=attempt)
+            except Exception as integrity_exc:
+                # Handle both Django's IntegrityError and database-level IntegrityError
+                from django.db import IntegrityError as DjangoIntegrityError
+                import django.db
+                if isinstance(integrity_exc, (DjangoIntegrityError, django.db.utils.IntegrityError)):
+                    # Race condition: another request created this (attempt, question) pair simultaneously.
+                    # Return the existing answer so the client can proceed.
+                    existing_answer = Answer.objects.filter(
+                        attempt=attempt, question_id=serializer.validated_data['question'].pk
+                    ).first()
+                    if existing_answer:
+                        return Response(
+                            AnswerSerializer(existing_answer, context={'request': request}).data,
+                            status=status.HTTP_200_OK,
+                        )
+                raise
+
+    def perform_update(self, serializer):
+        """
+        Fix BH-1: block modifications to answers belonging to completed attempts.
+        The upsert logic in perform_create makes update/partial_update redundant,
+        but we guard them anyway so the REST interface is consistent.
+        """
+        instance = serializer.instance
+        if instance.attempt.is_completed:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Cannot modify answers on a completed attempt.")
+        # Ownership check — ensure the attempt belongs to the requesting user
+        if instance.attempt.user != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not own this answer.")
+        serializer.save()
 
 
 class UserDocumentViewSet(viewsets.ModelViewSet):

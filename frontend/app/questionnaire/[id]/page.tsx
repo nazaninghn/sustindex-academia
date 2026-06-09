@@ -1,1021 +1,187 @@
 'use client';
+/* CO-2: QuestionnairePage — orchestrator shell.
+   All state + handlers live in useQuestionnaire.
+   UI is composed from four sub-components.        */
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
-import { useLang } from '@/lib/i18n';
-import { useAuth } from '@/lib/auth';
-import { Icon } from '@/components/shared';
-import { attemptAPI, API_URL } from '@/lib/api';
-import { sanitizeHtml, formatBytes } from '@/lib/utils';
-import logger from '@/lib/logger';
-import { emitDataChange } from '@/lib/events';
+import { useQuestionnaire }   from './useQuestionnaire';
+import { PhaseInterstitial }  from '@/components/questionnaire/PhaseInterstitial';
+import { QuestionView }       from '@/components/questionnaire/QuestionView';
+import { EvidencePanel }      from '@/components/questionnaire/EvidencePanel';
+import { QuestionNav }        from '@/components/questionnaire/QuestionNav';
 
-/* ─── Types ──────────────────────────────────────────────── */
-interface Choice {
-  id: number;
-  text: string; text_en?: string; text_tr?: string;
-  score: number; order: number;
-}
-interface Question {
-  id: number;
-  text: string; text_en?: string; text_tr?: string;
-  category: number;
-  category_name: string; category_name_en?: string; category_name_tr?: string;
-  order: number; allow_multiple: boolean; question_type: string;
-  choices: Choice[];
-  attachment?: string;
-}
-
-/* ─── Constants ──────────────────────────────────────────── */
-const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-
-/** Stable phase-matching definitions — no lang dependency, safe as module constant */
-const GRI_PHASE_DEFS = [
-  { match: 'Foundation',          num: 1 },
-  { match: 'General Disclosures', num: 2 },
-  { match: 'Material Topics',     num: 3 },
-  { match: 'Sector',              num: 4 },
-] as const;
-
-/* ─── Localised text helper ──────────────────────────────── */
-function loc(
-  obj: { text?: string; text_en?: string; text_tr?: string },
-  lang: string
-): string {
-  if (lang === 'tr' && obj.text_tr) return obj.text_tr;
-  if (lang === 'en' && obj.text_en) return obj.text_en;
-  return obj.text || '';
-}
-
-/**
- * Strip internal catalogue codes that the import command embeds in the
- * stored question text so they never reach the end user:
- *   - Leading  "[GRI2-18-I]  "  →  removed  (core GRI codes)
- *   - Leading  "[RET-02]  "    →  removed  (sector codes: RET, AG, EN, MFG, …)
- *   - Trailing "  [Implementation]" / "[Results]" / "[Policy]" / "[Measurement]" →  removed
- *
- * Works for both plain-text storage (typical import path) and CKEditor HTML
- * (content edited through the admin panel — handles <p>/<div> wrappers).
- */
-function cleanQuestionText(raw: string): string {
-  if (!raw) return raw;
-  // Matches both GRI core codes   [GRI2-18-I]
-  // and sector codes              [RET-02] [AG-01] [TECH-01] [MFG-03] etc.
-  const CODE_PREFIX = /\[(?:GRI[^\]]*|[A-Z]{1,6}-\d+)\]/i;
-  return raw
-    // HTML: strip code after opening block tag  <p>[RET-02]  →  <p>
-    .replace(new RegExp(`(<(?:p|div|span)[^>]*>)\\s*${CODE_PREFIX.source}\\s*`, 'gi'), '$1')
-    // Plain text: strip code at start of string
-    .replace(new RegExp(`^${CODE_PREFIX.source}\\s*`, 'i'), '')
-    // HTML: strip layer tag before closing block tag   [Implementation]</p>  →  </p>
-    .replace(/\s*\[(?:Policy|Implementation|Measurement|Results)\]\s*(<\/(?:p|div|span)>)/gi, '$1')
-    // Plain text: strip layer tag at end of string
-    .replace(/\s*\[(?:Policy|Implementation|Measurement|Results)\]\s*$/i, '')
-    .trim();
-}
-
-/* ─── Paperclip icon ─────────────────────────────────────── */
-function PaperclipIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.44 11.05L12.25 20.24a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.42 17.41a2 2 0 01-2.83-2.83l8.49-8.48"/>
-    </svg>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Questionnaire Page
-   ═══════════════════════════════════════════════════════════ */
 export default function QuestionnairePage() {
-  const { id }   = useParams<{ id: string }>();
-  const router   = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
-  const { lang, t } = useLang();
-  const fileInputRef  = useRef<HTMLInputElement>(null);
-  const langRef       = useRef(lang);
-  const submitLockRef = useRef(false);
-  /* surveyId stored so refreshTexts can re-fetch without re-loading the attempt */
-  const surveyIdRef   = useRef<number | null>(null);
-  /* Fix #22: track mount state so refreshTexts never calls setState after unmount */
-  const mountedRef    = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-  useEffect(() => { langRef.current = lang; }, [lang]);
+  const qs = useQuestionnaire();
 
-  /* ── Data state ── */
-  const [questions,   setQuestions]   = useState<Question[]>([]);
-  const [surveyName,  setSurveyName]  = useState('');
-  const [currentIdx,  setCurrentIdx]  = useState(0);
-  const [loading,     setLoading]     = useState(true);
-  const [saving,      setSaving]      = useState(false);
-  const [exitSaving,  setExitSaving]  = useState(false);
-  const [error,       setError]       = useState('');
-  /** Non-null while the phase-completion interstitial is displayed (value = the phase just finished) */
-  const [phaseComplete, setPhaseComplete] = useState<number | null>(null);
-
-  /* ── Answer state — keyed by question.id ── */
-  const [answers,      setAnswers]      = useState<Record<number, number[]>>({});
-  const [notes,        setNotes]        = useState<Record<number, string>>({});
-  const [textAnswers,  setTextAnswers]  = useState<Record<number, string>>({});
-  const [pendingFiles, setPendingFiles] = useState<Record<number, File[]>>({});
-
-  useEffect(() => {
-    if (!authLoading && !user) router.push('/login');
-  }, [user, authLoading, router]);
-
-  /**
-   * Lightweight re-fetch: only updates question texts + survey name.
-   * Does NOT touch answers, notes, currentIdx — so the user keeps their position.
-   * Called whenever lang changes after initial load.
-   */
-  const refreshTexts = useCallback(async () => {
-    const sid = surveyIdRef.current;
-    if (!sid) return;
-    try {
-      const { surveyAPI } = await import('@/lib/api');
-      // Use the same sector-filtered endpoint so language refresh doesn't
-      // accidentally inflate the question list back to 236.
-      const [survey, filteredQs] = await Promise.all([
-        surveyAPI.getSurvey(sid),
-        surveyAPI.getQuestions(sid, Number(id)),
-      ]);
-      // Fix #22: abort if the component was unmounted while the fetch was in flight
-      if (!mountedRef.current) return;
-      setSurveyName(survey.name || '');
-      const qs: Question[] = (filteredQs as unknown as Question[]).sort(
-        (a: Question, b: Question) => a.order - b.order
-      );
-      setQuestions(qs);
-    } catch { /* non-fatal — keep showing previous texts */ }
-  }, [id]); // id is stable for the lifetime of this page
-
-  /* Re-fetch question texts whenever language changes (after initial load) */
-  useEffect(() => {
-    if (surveyIdRef.current) refreshTexts();
-  }, [lang, refreshTexts]);
-
-  const loadData = useCallback(async () => {
-    try {
-      const attempt = await attemptAPI.getAttempt(Number(id));
-      if (attempt.is_completed) { router.replace(`/results/${id}`); return; }
-
-      const { surveyAPI } = await import('@/lib/api');
-      if (!attempt.survey) {
-        /* Fix L-3: correct Turkish diacritics */
-        setError(langRef.current === 'tr' ? 'Ankete bağlı deneme bulunamadı.' : 'Attempt has no associated survey.');
-        return;
-      }
-      /* Save survey ID so refreshTexts can use it on lang switch */
-      surveyIdRef.current = attempt.survey;
-
-      // Fetch survey name AND sector-filtered questions in parallel.
-      // getQuestions(?attempt=id) returns only universal + the attempt's chosen
-      // sector Qs — so 172+8=180 for the combined survey, not all 236.
-      const [survey, filteredQs] = await Promise.all([
-        surveyAPI.getSurvey(attempt.survey),
-        surveyAPI.getQuestions(attempt.survey, Number(id)),
-      ]);
-      setSurveyName(survey.name || '');
-
-      const qs: Question[] = (filteredQs as unknown as Question[]).sort(
-        (a: Question, b: Question) => a.order - b.order
-      );
-      setQuestions(qs);
-
-      const preAnswers: Record<number, number[]> = {};
-      const preNotes:   Record<number, string>   = {};
-      const preText:    Record<number, string>   = {};
-      for (const ans of attempt.answers || []) {
-        if (Array.isArray(ans.choices) && ans.choices.length > 0) preAnswers[ans.question] = ans.choices;
-        else if (ans.choice) preAnswers[ans.question] = [ans.choice];
-        if (ans.notes)       preNotes[ans.question]   = ans.notes;
-        if (ans.text_answer) preText[ans.question]    = ans.text_answer;
-      }
-      setAnswers(preAnswers);
-      setNotes(preNotes);
-      setTextAnswers(preText);
-
-      const firstUnanswered = qs.findIndex((q: Question) => !preAnswers[q.id]);
-      setCurrentIdx(firstUnanswered >= 0 ? firstUnanswered : qs.length - 1);
-    } catch (err) {
-      // Fix R4-H-04: environment-gated logger — silent in production
-      logger.error('Failed to load questionnaire:', err);
-      setError(langRef.current === 'tr' ? 'Yüklenemedi.' : 'Failed to load.');
-    } finally {
-      setLoading(false);
-    }
-  }, [id, router]);
-
-  useEffect(() => {
-    if (user && id) loadData();
-  }, [user, id, loadData]);
-
-  /* ── Derived ── */
-  const q           = questions[currentIdx];
-  const total       = questions.length;
-  const isFirst     = currentIdx === 0;
-  const isLast      = currentIdx === total - 1;
-  const selection   = q ? (answers[q.id]      || []) : [];
-  const note        = q ? (notes[q.id]        || '') : '';
-  const textAns     = q ? (textAnswers[q.id]  || '') : '';
-  const files       = q ? (pendingFiles[q.id] || []) : [];
-
-  // Fix R5-M-01: count only questions where at least one choice has been selected
-  // (not every key in `answers` — empty arrays count as "answered" otherwise).
-  const answeredCount = Object.values(answers).filter((sel) => sel.length > 0).length;
-  const progress      = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
-
-  const isTextType  = q?.question_type === 'text' || q?.choices?.length === 0;
-  const isMixedType = q?.question_type === 'mixed';
-  const hasChoices  = (q?.choices?.length ?? 0) > 0 && !isTextType;
-
-  const canSubmit =
-    (hasChoices && selection.length > 0) ||
-    (isTextType && textAns.trim().length > 0) ||
-    (isMixedType && (selection.length > 0 || textAns.trim().length > 0)) ||
-    (!hasChoices && !isTextType);
-
-  /* ── Localised helpers for current question ──
-   * qText / choiceText: use `text` directly — after refreshTexts() the API already
-   * returns the correct language in `text`.  loc() is kept as extra safety for
-   * cases where text_tr is populated but the API didn't override text.
-   * catLabel: always resolved from the stored _tr/_en fields (set by import command). */
-  const qText    = q ? cleanQuestionText(loc(q, lang) || q.text) : '';
-  const catLabel = q
-    ? (lang === 'tr' && q.category_name_tr) ? q.category_name_tr
-      : (lang === 'en' && q.category_name_en) ? q.category_name_en
-      : q.category_name
-    : '';
-
-  /**
-   * Detect GRI phase from the category name so we can show a progress indicator.
-   * Category names set by import_gri_questionnaire / create_combined_survey:
-   *   "Foundation"          → Phase 1 (GRI 1)
-   *   "General Disclosures" → Phase 2 (GRI 2)
-   *   "Material Topics"     → Phase 3 (GRI 3)
-   *   "Sector Supplement"   → Phase 4 (Sector Standard)
-   */
-  const GRI_PHASES = [
-    { match: 'Foundation',          num: 1, label: lang === 'tr' ? 'GRI 1 · Temel'             : 'GRI 1 · Foundation'           },
-    { match: 'General Disclosures', num: 2, label: lang === 'tr' ? 'GRI 2 · Genel Açıklamalar' : 'GRI 2 · General Disclosures' },
-    { match: 'Material Topics',     num: 3, label: lang === 'tr' ? 'GRI 3 · Önemli Konular'    : 'GRI 3 · Material Topics'     },
-    { match: 'Sector',              num: 4, label: lang === 'tr' ? 'Sektör Standardı'           : 'Sector Standard'             },
-  ] as const;
-  const currentPhase = q
-    ? GRI_PHASES.find(({ match }) => q.category_name?.includes(match)) ?? null
-    : null;
-
-  /** Map phase number → { first index, last index, question IDs } — recomputed only when questions list changes */
-  const phaseBoundaries = useMemo(() => {
-    const map: Record<number, { start: number; end: number; qIds: number[] }> = {};
-    questions.forEach((qItem, i) => {
-      const phase = GRI_PHASE_DEFS.find(({ match }) => qItem.category_name?.includes(match));
-      const num = phase?.num ?? 1;
-      if (!map[num]) map[num] = { start: i, end: i, qIds: [qItem.id] };
-      else { map[num].end = i; map[num].qIds.push(qItem.id); }
-    });
-    return map;
-  }, [questions]);
-
-  /** A phase is "complete" when every question in it has at least one choice selected or text entered */
-  const isPhaseComplete = useCallback((phaseNum: number): boolean => {
-    const boundary = phaseBoundaries[phaseNum];
-    if (!boundary) return true; // phase not present → treat as complete
-    return boundary.qIds.every((qid) =>
-      (answers[qid] ?? []).length > 0 ||
-      (textAnswers[qid] ?? '').trim().length > 0
-    );
-  }, [phaseBoundaries, answers, textAnswers]);
-
-  /**
-   * The highest GRI phase the user may currently access.
-   * Phase 1 is always unlocked; phase N+1 unlocks only when phase N is 100% answered.
-   */
-  const unlockedUpToPhase = useMemo(() => {
-    for (let p = 1; p <= 4; p++) {
-      if (!isPhaseComplete(p)) return p;
-    }
-    return 4; // all phases answered
-  }, [isPhaseComplete]);
-
-  /* ── Handlers ── */
-  const toggleChoice = (choiceId: number) => {
-    if (!q) return;
-    if (q.allow_multiple) {
-      const prev = answers[q.id] || [];
-      setAnswers({ ...answers, [q.id]: prev.includes(choiceId) ? prev.filter((c) => c !== choiceId) : [...prev, choiceId] });
-    } else {
-      setAnswers({ ...answers, [q.id]: [choiceId] });
-    }
-  };
-
-  const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
-  const addFiles = (newFiles: FileList | null) => {
-    if (!newFiles || !q) return;
-    const oversized: string[] = [];
-    const valid = Array.from(newFiles).filter((f) => {
-      if (f.size > MAX_FILE_BYTES) { oversized.push(f.name); return false; }
-      return true;
-    });
-    if (oversized.length) {
-      setError(lang === 'tr'
-        ? `Bu dosyalar 10 MB sınırını aşıyor: ${oversized.join(', ')}`
-        : `These files exceed the 10 MB limit: ${oversized.join(', ')}`);
-    }
-    if (valid.length) setPendingFiles({ ...pendingFiles, [q.id]: [...files, ...valid] });
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const removeFile = (idx: number) => {
-    if (!q) return;
-    const updated = files.filter((_, i) => i !== idx);
-    setPendingFiles({ ...pendingFiles, [q.id]: updated });
-  };
-
-  const handleNext = async () => {
-    if (!q || saving || submitLockRef.current) return;
-    submitLockRef.current = true;
-    setSaving(true);
-    setError('');
-    try {
-      let answerId: number | null = null;
-
-      if (hasChoices && q.allow_multiple && selection.length > 0) {
-        const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
-        answerId = res?.id ?? null;
-      } else if (hasChoices && selection.length > 0) {
-        const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
-        answerId = res?.id ?? null;
-      } else if (textAns.trim() || note.trim()) {
-        const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-        answerId = res?.id ?? null;
-      } else if (!hasChoices && !isTextType && q) {
-        // Fix C-07: "no-choice, non-text" question — canSubmit is true because
-        // the question has no required inputs, but we still need to create/update
-        // an answer record (with empty payload) so progress is recorded server-side.
-        const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-        answerId = res?.id ?? null;
-      }
-
-      if (answerId && files.length > 0) {
-        const failedUploads: string[] = [];
-        for (const file of files) {
-          try { await attemptAPI.uploadDocument(answerId, file); }
-          catch { failedUploads.push(file.name); }
-        }
-        if (failedUploads.length > 0) {
-          setError(lang === 'tr'
-            ? `Bazı belgeler yüklenemedi: ${failedUploads.join(', ')}`
-            : `Some documents failed to upload: ${failedUploads.join(', ')}`);
-          // Fix H-06: do NOT complete the attempt when uploads failed on the
-          // last question — the user must retry or acknowledge before we mark
-          // the assessment complete.  Without this return, evidence files were
-          // silently lost while the questionnaire appeared successfully submitted.
-          return;
-        }
-      }
-
-      if (isLast) {
-        await attemptAPI.completeAttempt(Number(id));
-        emitDataChange({ source: 'questionnaire', id });
-        router.push(`/results/${id}`);
-      } else {
-        // Sequential phase gate: show the interstitial when the user just completed
-        // an entire phase for the first time (unlockedUpToPhase advances to phaseNum+1).
-        const qPhaseNum = GRI_PHASE_DEFS.find(({ match }) => q.category_name?.includes(match))?.num ?? 1;
-        const boundary  = phaseBoundaries[qPhaseNum];
-        const isLastOfPhase = boundary != null && currentIdx === boundary.end;
-        if (
-          isLastOfPhase &&
-          qPhaseNum < 4 &&
-          isPhaseComplete(qPhaseNum) &&
-          unlockedUpToPhase === qPhaseNum + 1
-        ) {
-          setPhaseComplete(qPhaseNum);
-        } else {
-          setCurrentIdx((i) => i + 1);
-        }
-      }
-    } catch (err) {
-      // Fix R4-H-04: environment-gated logger — silent in production
-      logger.error('Failed to save answer:', err);
-      setError(lang === 'tr' ? 'Kaydedilemedi, tekrar dene.' : 'Could not save — please retry.');
-    } finally {
-      setSaving(false);
-      submitLockRef.current = false;
-    }
-  };
-
-  const handlePrev = () => { if (!isFirst) setCurrentIdx((i) => i - 1); };
-
-  const handleJumpTo = async (targetIdx: number) => {
-    if (targetIdx === currentIdx) return;
-    // Sequential phase gate — silently block navigation to questions in locked phases
-    const targetQItem = questions[targetIdx];
-    if (targetQItem) {
-      const targetPhaseNum = GRI_PHASE_DEFS.find(({ match }) => targetQItem.category_name?.includes(match))?.num ?? 1;
-      if (targetPhaseNum > unlockedUpToPhase) return;
-    }
-    if (q && (selection.length > 0 || note.trim() || textAns.trim())) {
-      try {
-        let answerId: number | null = null;
-        if (hasChoices && q.allow_multiple && selection.length > 0) {
-          const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
-          answerId = res?.id ?? null;
-        } else if (hasChoices && selection.length > 0) {
-          const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
-          answerId = res?.id ?? null;
-        } else if (textAns.trim() || note.trim()) {
-          const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-          answerId = res?.id ?? null;
-        }
-        // Fix M-6: upload pending files when jumping — previously they were
-        // silently discarded, leaving evidence permanently lost.
-        // Fix R4-M-04: surface upload failures with a user confirmation so they
-        // can decide whether to abort and retry rather than silently losing evidence.
-        if (answerId && files.length > 0) {
-          const failedUploads: string[] = [];
-          for (const file of files) {
-            try { await attemptAPI.uploadDocument(answerId, file); }
-            catch { failedUploads.push(file.name); }
-          }
-          if (failedUploads.length > 0) {
-            const proceed = window.confirm(
-              lang === 'tr'
-                ? `${failedUploads.length} dosya yüklenemedi: ${failedUploads.join(', ')}.\nYine de devam etmek istiyor musunuz? Dosyalar kaydedilmeyecek.`
-                : `${failedUploads.length} file(s) failed to upload: ${failedUploads.join(', ')}.\nProceed anyway? Those files will not be saved.`
-            );
-            if (!proceed) return;  // stay on current question so user can retry
-          }
-        }
-      } catch { /* non-fatal */ }
-    }
-    // Fix R5-M-04: always clear pending files for the current question when
-    // jumping away, regardless of whether the answer or upload succeeded.
-    // Previously, if answerId was null (submit failed), files were never cleared
-    // and persisted as stale state on the question when the user returned.
-    if (q) {
-      setPendingFiles((prev) => { const next = { ...prev }; delete next[q.id]; return next; });
-    }
-    setCurrentIdx(targetIdx);
-  };
-
-  const handleSaveAndExit = async () => {
-    if (exitSaving) return;
-    setExitSaving(true);
-    try {
-      if (q) {
-        let answerId: number | null = null;
-        try {
-          if (hasChoices && q.allow_multiple && selection.length > 0) {
-            const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns);
-            answerId = res?.id ?? null;
-          } else if (hasChoices && selection.length > 0) {
-            const res = await attemptAPI.submitAnswer(Number(id), q.id, selection[0], undefined, note, textAns);
-            answerId = res?.id ?? null;
-          } else if (textAns.trim() || note.trim()) {
-            const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns);
-            answerId = res?.id ?? null;
-          }
-        } catch { /* non-fatal */ }
-
-        if (answerId && files.length > 0) {
-          for (const file of files) {
-            try { await attemptAPI.uploadDocument(answerId, file); } catch { /* non-fatal */ }
-          }
-        }
-      }
-    } finally {
-      setExitSaving(false);
-      router.push('/dashboard');
-    }
-  };
-
-  /* ── Loading / error states ── */
-  if (authLoading || loading) {
+  /* ── Loading state ── */
+  if (qs.authLoading || qs.loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {/* Fix R11-05: use shared i18n key — consistent with all other pages */}
-          {t('t_loading_auth')}
+          {qs.t('t_loading_auth')}
         </span>
       </div>
     );
   }
 
-  if (!q) {
+  /* ── No questions / error state ── */
+  if (!qs.q) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
         <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>
           {/* Fix L-3: correct Turkish diacritics */}
-          {error || (lang === 'tr' ? 'Soru bulunamadı.' : 'No questions found.')}
+          {qs.error || (qs.lang === 'tr' ? 'Soru bulunamadı.' : 'No questions found.')}
         </p>
         <Link href="/surveys" style={{ textDecoration: 'none' }}>
-          <button className="btn btn-outline">{lang === 'tr' ? '← Anketlere Dön' : '← Back to Surveys'}</button>
+          <button className="btn btn-outline">{qs.lang === 'tr' ? '← Anketlere Dön' : '← Back to Surveys'}</button>
         </Link>
       </div>
     );
   }
 
-  /* ── Phase completion interstitial ──────────────────────── */
-  if (phaseComplete !== null) {
-    const nextPhaseNum = phaseComplete + 1;
-    const nextPhase    = GRI_PHASES.find((p) => p.num === nextPhaseNum);
-    const donePhase    = GRI_PHASES.find((p) => p.num === phaseComplete);
-    const nextStart    = phaseBoundaries[nextPhaseNum]?.start ?? currentIdx + 1;
+  /* ── Phase completion interstitial ── */
+  if (qs.phaseComplete !== null) {
     return (
-      <div style={{ background: 'var(--cream)', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <header style={{ borderBottom: '1px solid var(--line)' }}>
-          <div className="wrap" style={{ padding: '13px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Logo size={20} />
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={handleSaveAndExit}
-              disabled={exitSaving}
-              style={{ opacity: exitSaving ? 0.6 : 1 }}
-            >
-              {lang === 'tr' ? 'Kaydet & Çık' : 'Save & Exit'}
-            </button>
-          </div>
-        </header>
-        {/* Centered card */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
-          <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
-            {/* Checkmark badge */}
-            <div style={{
-              width: 56, height: 56, borderRadius: '50%',
-              background: 'var(--olive-deep)', display: 'flex',
-              alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 24px', fontSize: 22, color: 'var(--paper)',
-            }}>✓</div>
-            <span className="eyebrow" style={{ display: 'block', marginBottom: 10 }}>
-              {lang === 'tr' ? 'Aşama Tamamlandı' : 'Phase Complete'}
-            </span>
-            <h2 style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 16 }}>
-              {donePhase?.label ?? (lang === 'tr' ? `Aşama ${phaseComplete}` : `Phase ${phaseComplete}`)}
-            </h2>
-            <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.7, maxWidth: 380, margin: '0 auto 32px' }}>
-              {lang === 'tr'
-                ? 'Bu aşamayı başarıyla tamamladınız. Sıradaki aşamaya geçmeye hazırsınız.'
-                : "You've completed this phase. You're ready to move on to the next one."}
-            </p>
-            {/* Next phase preview */}
-            <div style={{
-              background: 'var(--paper)', border: '1px solid var(--line)',
-              padding: '16px 20px', marginBottom: 32, textAlign: 'left',
-              display: 'inline-block', minWidth: 260,
-            }}>
-              <p style={{
-                fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-                color: 'var(--ink-4)', letterSpacing: '0.1em',
-                textTransform: 'uppercase', marginBottom: 6,
-              }}>
-                {lang === 'tr' ? 'Sıradaki Aşama' : 'Next Phase'}
-              </p>
-              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>
-                {nextPhase?.label ?? (lang === 'tr' ? `Aşama ${nextPhaseNum}` : `Phase ${nextPhaseNum}`)}
-              </p>
-            </div>
-            {/* Continue button */}
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => { setPhaseComplete(null); setCurrentIdx(nextStart); }}
-                style={{ padding: '13px 28px', fontSize: 13 }}
-              >
-                {lang === 'tr' ? 'Devam Et' : 'Continue'}
-                <Icon.arrow />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PhaseInterstitial
+        phaseComplete={qs.phaseComplete}
+        GRI_PHASES={qs.GRI_PHASES}
+        phaseBoundaries={qs.phaseBoundaries}
+        lang={qs.lang}
+        exitSaving={qs.exitSaving}
+        onContinue={(nextStart) => { qs.setPhaseComplete(null); qs.setCurrentIdx(nextStart); }}
+        onSaveAndExit={qs.handleSaveAndExit}
+      />
     );
   }
 
+  /* ── Main questionnaire view ── */
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
 
-      {/* ─── Sticky header ─────────────────────────────── */}
+      {/* Sticky header ─────────────────────────────────────── */}
       <header style={{ borderBottom: '1px solid var(--line)', position: 'sticky', top: 0, background: 'var(--cream)', zIndex: 10 }}>
         <div className="wrap" style={{ padding: '13px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <Logo size={20} />
             <span style={{ width: 1, height: 18, background: 'var(--line)' }} />
             <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 12, color: 'var(--ink-2)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {surveyName}
+              {qs.surveyName}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 80, height: 2, background: 'var(--line)', borderRadius: 1 }}>
-                <div style={{ width: `${progress}%`, height: '100%', background: 'var(--olive-deep)', borderRadius: 1, transition: 'width 0.4s' }} />
+                <div style={{ width: `${qs.progress}%`, height: '100%', background: 'var(--olive-deep)', borderRadius: 1, transition: 'width 0.4s' }} />
               </div>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.06em' }}>
-                {progress}%
+                {qs.progress}%
               </span>
             </div>
             <button
               className="btn btn-outline btn-sm"
-              onClick={handleSaveAndExit}
-              disabled={exitSaving}
-              style={{ opacity: exitSaving ? 0.6 : 1 }}
+              onClick={qs.handleSaveAndExit}
+              disabled={qs.exitSaving}
+              style={{ opacity: qs.exitSaving ? 0.6 : 1 }}
             >
-              {exitSaving
-                ? (lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
-                : (lang === 'tr' ? 'Kaydet & Çık' : 'Save & Exit')}
+              {qs.exitSaving
+                ? (qs.lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
+                : (qs.lang === 'tr' ? 'Kaydet & Çık' : 'Save & Exit')}
             </button>
           </div>
         </div>
+        {/* Dual progress bar: hairline at bottom of header */}
         <div style={{ height: 2, background: 'var(--line-soft)' }}>
-          <div style={{ width: `${progress}%`, height: '100%', background: 'var(--ink)', transition: 'width 0.4s ease' }} />
+          <div style={{ width: `${qs.progress}%`, height: '100%', background: 'var(--ink)', transition: 'width 0.4s ease' }} />
         </div>
       </header>
 
-      {/* ─── Main content ──────────────────────────────── */}
+      {/* Save & Exit error banner ─────────────────────────── */}
+      {/* Fix CRIT-3: shown when handleSaveAndExit fails to save the answer.
+          Fix A-2: role="alert" so AT announces the banner immediately on mount */}
+      {qs.exitErr && (
+        <div role="alert" style={{
+          position: 'sticky', top: 0, zIndex: 20,
+          background: 'var(--danger, #c0392b)', color: '#fff',
+          padding: '10px 24px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+          fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, letterSpacing: '0.02em',
+        }}>
+          <span>{qs.exitErr}</span>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={qs.navigateToDashboard}
+              style={{
+                background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.5)',
+                color: '#fff', padding: '4px 12px', cursor: 'pointer', fontSize: 11,
+                fontFamily: 'inherit', letterSpacing: 'inherit',
+              }}
+            >
+              {qs.lang === 'tr' ? 'Yine de Çık' : 'Exit Anyway'}
+            </button>
+            <button
+              onClick={() => qs.setExitErr('')}
+              style={{
+                background: 'transparent', border: '1px solid rgba(255,255,255,0.5)',
+                color: '#fff', padding: '4px 12px', cursor: 'pointer', fontSize: 11,
+                fontFamily: 'inherit', letterSpacing: 'inherit',
+              }}
+            >
+              {qs.lang === 'tr' ? 'İptal' : 'Cancel'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main content ────────────────────────────────────── */}
       <main className="wrap-narrow" style={{ paddingTop: 52, paddingBottom: 80 }}>
 
-        {/* GRI phase stepper — shown only when phase info is available */}
-        {currentPhase && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 0,
-            marginBottom: 28, overflowX: 'auto',
-          }}>
-            {GRI_PHASES.map((phase, i) => {
-              const isActive = phase.num === currentPhase.num;
-              const isDone   = phase.num < currentPhase.num;
-              const isLocked = phase.num > unlockedUpToPhase;
-              return (
-                <div key={phase.num} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                  <div
-                    title={isLocked
-                      ? (lang === 'tr' ? 'Önceki aşamayı tamamlayın' : 'Complete the previous phase first')
-                      : undefined}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 7,
-                      padding: '5px 10px',
-                      background: isActive ? 'var(--ink)' : 'transparent',
-                      border: `1px solid ${isActive ? 'var(--ink)' : isDone ? 'var(--ink-3)' : 'var(--line)'}`,
-                      opacity: isLocked ? 0.3 : isDone ? 0.55 : 1,
-                    }}>
-                    <span style={{
-                      fontFamily: "'IBM Plex Mono', monospace",
-                      fontSize: 9, letterSpacing: '0.1em',
-                      color: isActive ? 'var(--paper)' : isDone ? 'var(--ink-3)' : 'var(--ink-4)',
-                    }}>
-                      {isDone ? '✓' : String(phase.num).padStart(2, '0')}
-                    </span>
-                    <span style={{
-                      fontSize: 11, fontWeight: isActive ? 600 : 400,
-                      color: isActive ? 'var(--paper)' : isDone ? 'var(--ink-3)' : 'var(--ink-4)',
-                    }}>
-                      {phase.label}
-                    </span>
-                  </div>
-                  {i < GRI_PHASES.length - 1 && (
-                    <span style={{
-                      fontSize: 12, color: 'var(--line)', padding: '0 4px', flexShrink: 0,
-                    }}>›</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <QuestionView
+          q={qs.q}
+          currentIdx={qs.currentIdx}
+          total={qs.total}
+          lang={qs.lang}
+          catLabel={qs.catLabel}
+          qText={qs.qText}
+          selection={qs.selection}
+          textAns={qs.textAns}
+          isTextType={qs.isTextType}
+          isMixedType={qs.isMixedType}
+          hasChoices={qs.hasChoices}
+          GRI_PHASES={qs.GRI_PHASES}
+          currentPhase={qs.currentPhase}
+          unlockedUpToPhase={qs.unlockedUpToPhase}
+          onToggleChoice={qs.toggleChoice}
+          onTextChange={qs.updateTextAnswer}
+        />
 
-        {/* Category pill + counter */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 36 }}>
-          <span className="pill pill-olive">
-            {catLabel || `${lang === 'tr' ? 'Kategori' : 'Category'} ${q.category}`}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-            <span style={{
-              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-              fontSize: 22, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums',
-            }}>{String(currentIdx + 1).padStart(2, '0')}</span>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)' }}>
-              {' '}/ {String(total).padStart(2, '0')}
-            </span>
-          </div>
-        </div>
+        <EvidencePanel
+          note={qs.note}
+          files={qs.files}
+          lang={qs.lang}
+          fileInputRef={qs.fileInputRef}
+          onNoteChange={qs.updateNote}
+          onAddFiles={qs.addFiles}
+          onRemoveFile={qs.removeFile}
+        />
 
-        {/* ─── Question text ─── */}
-        <div style={{ marginBottom: 32, paddingBottom: 32, borderBottom: '1px solid var(--line)' }}>
-          <div
-            className="prose"
-            style={{ fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--ink)' }}
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(qText) }}
-          />
-          {q.allow_multiple && (
-            <p style={{
-              fontSize: 11, color: 'var(--ink-4)',
-              fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em',
-              marginTop: 10,
-            }}>
-              {lang === 'tr' ? '↳ Birden fazla seçeneği işaretleyebilirsiniz' : '↳ Multiple answers allowed — select all that apply'}
-            </p>
-          )}
-          {/* Fix R7-04: use authenticated DRF attachment endpoint — raw q.attachment
-              is a /media/ URL that bypasses Django auth and exposes the file to anyone
-              with the link.  The /attachment/ action enforces IsAuthenticated. */}
-          {q.attachment && (
-            <a
-              href={`${API_URL}/api/v1/questions/${q.id}/attachment/`} target="_blank" rel="noreferrer"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12,
-                fontSize: 11, color: 'var(--olive-deep)', textDecoration: 'none',
-                fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em',
-              }}
-            >
-              <PaperclipIcon /> {lang === 'tr' ? 'Ek dosyayı görüntüle' : 'View attachment'}
-            </a>
-          )}
-        </div>
+        <QuestionNav
+          questions={qs.questions}
+          currentIdx={qs.currentIdx}
+          answers={qs.answers}
+          textAnswers={qs.textAnswers}
+          unlockedUpToPhase={qs.unlockedUpToPhase}
+          lang={qs.lang}
+          isFirst={qs.isFirst}
+          isLast={qs.isLast}
+          canSubmit={qs.canSubmit}
+          saving={qs.saving}
+          error={qs.error}
+          onPrev={qs.handlePrev}
+          onNext={qs.handleNext}
+          onJumpTo={qs.handleJumpTo}
+        />
 
-        {/* ─── Choices ─── */}
-        {hasChoices && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 32 }}>
-            {q.choices.map((choice, i) => {
-              const isSel = selection.includes(choice.id);
-              /* Use loc() first; fall back to choice.text (already in correct lang after refreshTexts) */
-              const choiceText = loc(choice, lang) || choice.text;
-              return (
-                <button
-                  key={choice.id}
-                  type="button"
-                  onClick={() => toggleChoice(choice.id)}
-                  style={{
-                    background: isSel ? 'var(--ink)' : 'var(--paper)',
-                    color:      isSel ? 'var(--cream)' : 'var(--ink)',
-                    border:     `1px solid ${isSel ? 'var(--ink)' : 'var(--line)'}`,
-                    borderLeft: `3px solid ${isSel ? 'var(--olive)' : 'transparent'}`,
-                    padding: '15px 20px',
-                    textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 16,
-                    transition: 'all 0.12s ease',
-                  }}
-                  onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.borderRightColor = e.currentTarget.style.borderTopColor = e.currentTarget.style.borderBottomColor = 'var(--ink-3)'; }}
-                  onMouseLeave={(e) => { if (!isSel) { e.currentTarget.style.borderRightColor = e.currentTarget.style.borderTopColor = e.currentTarget.style.borderBottomColor = 'var(--line)'; } }}
-                >
-                  <span style={{
-                    width: 24, height: 24,
-                    borderRadius: q.allow_multiple ? 3 : '50%',
-                    border: `1.5px solid ${isSel ? 'rgba(249,239,229,0.4)' : 'var(--line)'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: 10,
-                    flexShrink: 0, color: isSel ? 'var(--cream)' : 'var(--ink-4)',
-                    background: isSel && q.allow_multiple ? 'var(--olive-deep)' : 'transparent',
-                    transition: 'all 0.12s',
-                  }}>
-                    {isSel && q.allow_multiple ? '✓' : (LETTERS[i] ?? String(i + 1))}
-                  </span>
-
-                  <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>{choiceText}</span>
-
-                  {/* Score is hidden from non-staff by the backend (anti-gaming).
-                      Only render it when a non-null value is returned. */}
-                  {choice.score !== null && choice.score !== undefined && (
-                    <span style={{
-                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-                      opacity: isSel ? 0.65 : 0.4, letterSpacing: '0.04em',
-                      flexShrink: 0, fontVariantNumeric: 'tabular-nums',
-                    }}>
-                      {String(choice.score).padStart(3, '0')} {lang === 'tr' ? 'puan' : 'pts'}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ─── Text answer (text / mixed type) ─── */}
-        {(isTextType || isMixedType) && (
-          <div style={{ marginBottom: 24 }}>
-            <label style={{
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-              color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
-              display: 'block', marginBottom: 8,
-            }}>
-              {lang === 'tr' ? 'Yanıtınız' : 'Your Answer'}
-            </label>
-            <textarea
-              value={textAns}
-              onChange={(e) => setTextAnswers({ ...textAnswers, [q.id]: e.target.value })}
-              rows={4}
-              placeholder={lang === 'tr' ? 'Yanıtınızı buraya yazın…' : 'Type your answer here…'}
-              style={{
-                width: '100%', padding: '14px 16px',
-                background: 'var(--paper)', border: '1px solid var(--line)',
-                borderLeft: '3px solid var(--olive-deep)',
-                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 13,
-                color: 'var(--ink)', lineHeight: 1.6, resize: 'vertical',
-                outline: 'none', borderRadius: 0,
-                transition: 'border-color 0.15s',
-              }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink)')}
-              onBlur={(e)  => (e.currentTarget.style.borderColor = 'var(--line)')}
-            />
-          </div>
-        )}
-
-        {/* ─── Notes & Evidence — always visible ────────────── */}
-        <div style={{
-          borderTop: '1px solid var(--line)',
-          paddingTop: 20,
-          marginBottom: 40,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}>
-          {/* Section title */}
-          <p style={{
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-            color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
-            margin: 0,
-          }}>
-            {/* Fix L-02: 'Kanit' → 'Kanıt' (dotless ı, U+0131) */}
-            {lang === 'tr' ? 'Not & Kanıt (isteğe bağlı)' : 'Notes & Evidence (optional)'}
-          </p>
-
-          {/* Notes textarea */}
-          <div>
-            <label style={{
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
-              color: 'var(--ink-4)', letterSpacing: '0.08em',
-              display: 'block', marginBottom: 6,
-            }}>
-              {lang === 'tr' ? 'Notlar / Yorumlar' : 'Notes / Comments'}
-            </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNotes({ ...notes, [q.id]: e.target.value })}
-              rows={3}
-              placeholder={lang === 'tr'
-                ? 'Bu soruyla ilgili ek not veya yorum ekleyin…'
-                : 'Add context, clarifications, or additional comments…'}
-              style={{
-                width: '100%', padding: '12px 14px',
-                background: 'var(--cream-deep)', border: '1px solid var(--line)',
-                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12.5,
-                color: 'var(--ink)', lineHeight: 1.6, resize: 'vertical',
-                outline: 'none', borderRadius: 0,
-                transition: 'border-color 0.15s',
-              }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
-              onBlur={(e)  => (e.currentTarget.style.borderColor = 'var(--line)')}
-            />
-          </div>
-
-          {/* File upload */}
-          <div>
-            <label style={{
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
-              color: 'var(--ink-4)', letterSpacing: '0.08em',
-              display: 'block', marginBottom: 6,
-            }}>
-              {lang === 'tr' ? 'Kanıt Belgesi Yükle' : 'Upload Evidence'}
-            </label>
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                padding: '8px 14px', background: 'transparent',
-                border: '1px dashed var(--line)', cursor: 'pointer',
-                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12, color: 'var(--ink-3)',
-                transition: 'all 0.15s',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--ink-3)'; e.currentTarget.style.color = 'var(--ink)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--ink-3)'; }}
-            >
-              <PaperclipIcon />
-              {lang === 'tr' ? 'Dosya seç veya sürükle' : 'Choose file or drag & drop'}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-              style={{ display: 'none' }}
-              onChange={(e) => addFiles(e.target.files)}
-            />
-
-            {files.length > 0 && (
-              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {files.map((file, idx) => (
-                  <div key={`${file.name}-${file.size}`} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 12px', background: 'var(--paper)',
-                    border: '1px solid var(--line)',
-                  }}>
-                    <PaperclipIcon />
-                    <span style={{ flex: 1, fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {file.name}
-                    </span>
-                    {/* Fix L-03: use shared formatBytes() from utils.ts — eliminates
-                        the inline duplicate and ensures consistent formatting site-wide */}
-                    <span style={{ fontSize: 10, color: 'var(--ink-4)', flexShrink: 0 }}>
-                      {formatBytes(file.size)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(idx)}
-                      /* Fix R5-L-03: aria-label so screen readers announce the action */
-                      aria-label={lang === 'tr' ? 'Dosyayı kaldır' : 'Remove file'}
-                      style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        color: 'var(--ink-4)', fontSize: 13, lineHeight: 1, padding: '0 2px',
-                        flexShrink: 0,
-                      }}
-                    >×</button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <p style={{ fontSize: 10.5, color: 'var(--ink-4)', marginTop: 8 }}>
-              {lang === 'tr' ? 'PDF, Word, Excel, resim — maks. 10 MB' : 'PDF, Word, Excel, images — max 10 MB per file'}
-            </p>
-          </div>
-        </div>
-
-        {/* ─── Error ─── */}
-        {error && (
-          <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 16, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.02em' }}>
-            {error}
-          </p>
-        )}
-
-        {/* ─── Navigation ─── */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          paddingTop: 8,
-        }}>
-          <button
-            className="btn btn-outline"
-            onClick={handlePrev}
-            disabled={isFirst}
-            style={{ opacity: isFirst ? 0.3 : 1 }}
-          >
-            {lang === 'tr' ? '← Önceki' : '← Previous'}
-          </button>
-
-          {/* Dot progress */}
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', maxWidth: 400, justifyContent: 'center' }}>
-            {questions.map((qItem, i) => {
-              const dotPhaseNum = GRI_PHASE_DEFS.find(({ match }) => qItem.category_name?.includes(match))?.num ?? 1;
-              const isLocked    = dotPhaseNum > unlockedUpToPhase;
-              const isAnswered  = (answers[qItem.id] ?? []).length > 0 || (textAnswers[qItem.id] ?? '').trim().length > 0;
-              return (
-                <span
-                  key={qItem.id}
-                  role={isLocked ? undefined : 'button'}
-                  tabIndex={isLocked ? -1 : 0}
-                  aria-label={`Question ${i + 1}${isAnswered ? ' (answered)' : ''}${isLocked ? ' (locked)' : ''}`}
-                  aria-current={i === currentIdx ? 'step' : undefined}
-                  onClick={() => { if (!isLocked) handleJumpTo(i); }}
-                  onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleJumpTo(i); } }}
-                  title={`${i + 1}`}
-                  style={{
-                    width:  i === currentIdx ? 18 : 5, height: 5,
-                    background: isLocked
-                      ? 'var(--line)'
-                      : isAnswered
-                        ? 'var(--olive-deep)'
-                        : i === currentIdx ? 'var(--ink)' : 'var(--line)',
-                    borderRadius: 3, transition: 'all 0.2s ease',
-                    cursor: isLocked ? 'default' : 'pointer',
-                    outline: 'none', opacity: isLocked ? 0.35 : 1,
-                  }}
-                  onFocus={(e) => { if (!isLocked) e.currentTarget.style.boxShadow = '0 0 0 2px var(--olive)'; }}
-                  onBlur={(e)  => { e.currentTarget.style.boxShadow = 'none'; }}
-                />
-              );
-            })}
-          </div>
-
-          <button
-            className="btn btn-primary"
-            onClick={handleNext}
-            disabled={!canSubmit || saving}
-            style={{ opacity: canSubmit ? 1 : 0.4, minWidth: 110 }}
-          >
-            {saving
-              ? (lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
-              : isLast
-                ? (lang === 'tr' ? 'Tamamla' : 'Finish')
-                : (lang === 'tr' ? 'Sonraki' : 'Next')}
-            {!saving && !isLast && <Icon.arrow />}
-          </button>
-        </div>
       </main>
     </div>
   );

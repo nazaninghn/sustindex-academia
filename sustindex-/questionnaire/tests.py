@@ -75,10 +75,12 @@ class SurveyListTests(APITestCase):
         survey_ids = [s['id'] for s in data]
         self.assertIn(self.survey.id, survey_ids)
 
-    def test_unauthenticated_user_can_list_surveys(self):
-        """Default permission is IsAuthenticatedOrReadOnly; GET is public."""
+    def test_unauthenticated_user_cannot_list_surveys(self):
+        """Fix BH-6: SurveyViewSet uses IsAuthenticated; unauthenticated GET must return 401.
+        The previous assertion (HTTP_200_OK) was a false-positive that would silently
+        pass even if the permission was accidentally removed."""
         res = self.client.get('/api/v1/surveys/')
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 # ─── Attempt lifecycle ─────────────────────────────────────────────────────────

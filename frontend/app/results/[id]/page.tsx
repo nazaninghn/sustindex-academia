@@ -147,9 +147,23 @@ export default function ResultsPage() {
       .then((data: Attempt) => {
         if (!controller.signal.aborted) setAttempt(data);
       })
-      .catch(() => {
-        if (!controller.signal.aborted)
-          setFetchError(langRef.current === 'tr' ? 'Değerlendirme yüklenemedi.' : 'Failed to load assessment.');
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        // Fix EH-4: differentiate HTTP error codes so the user knows what went wrong.
+        const httpStatus = (err as { response?: { status?: number } })?.response?.status;
+        if (httpStatus === 403) {
+          setFetchError(langRef.current === 'tr'
+            ? 'Bu değerlendirmeye erişim yetkiniz yok.'
+            : "You don't have access to this assessment.");
+        } else if (httpStatus === 404) {
+          setFetchError(langRef.current === 'tr'
+            ? 'Değerlendirme bulunamadı.'
+            : 'Assessment not found.');
+        } else {
+          setFetchError(langRef.current === 'tr'
+            ? 'Sonuçlar yüklenemedi. Bağlantınızı kontrol edin.'
+            : 'Failed to load results. Check your connection.');
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -367,22 +381,33 @@ export default function ResultsPage() {
         {/* ══════════════════════════════════════
             TABS
             ══════════════════════════════════════ */}
-        <div className="no-print" style={{
-          display: 'flex', gap: 0, marginTop: 28, marginBottom: 0,
-          borderBottom: '1px solid var(--line)',
-        }}>
+        {/* Fix A-3: full ARIA tab pattern — role="tablist" on container,
+            role="tab" + aria-selected on each button, tabpanels below */}
+        <div role="tablist" aria-label={lang === 'tr' ? 'Sonuç sekmeleri' : 'Result tabs'}
+          className="no-print" style={{
+            display: 'flex', gap: 0, marginTop: 28, marginBottom: 0,
+            borderBottom: '1px solid var(--line)',
+          }}>
           {([
             ['overview', lang === 'tr' ? 'Performans Özeti' : 'Performance Summary'],
             ['actions',  lang === 'tr' ? `Aksiyon Planı${recs.length > 0 ? ` (${recs.length})` : ''}` : `Action Plan${recs.length > 0 ? ` (${recs.length})` : ''}`],
             ['evidence', lang === 'tr' ? `Notlar & Kanıtlar${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}` : `Notes & Evidence${evidenceAnswers.length > 0 ? ` (${evidenceAnswers.length})` : ''}`],
           ] as [typeof tab, string][]).map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)} style={{
-              padding: '11px 22px', background: 'none', border: 'none', cursor: 'pointer',
-              borderBottom: tab === key ? '2px solid var(--ink)' : '2px solid transparent',
-              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: tab === key ? 600 : 400,
-              fontSize: 12, color: tab === key ? 'var(--ink)' : 'var(--ink-3)',
-              marginBottom: -1, transition: 'color 0.15s', letterSpacing: '0.02em',
-            }}>
+            <button
+              key={key}
+              id={`tab-${key}`}
+              role="tab"
+              aria-selected={tab === key}
+              aria-controls={`tabpanel-${key}`}
+              onClick={() => setTab(key)}
+              style={{
+                padding: '11px 22px', background: 'none', border: 'none', cursor: 'pointer',
+                borderBottom: tab === key ? '2px solid var(--ink)' : '2px solid transparent',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: tab === key ? 600 : 400,
+                fontSize: 12, color: tab === key ? 'var(--ink)' : 'var(--ink-3)',
+                marginBottom: -1, transition: 'color 0.15s', letterSpacing: '0.02em',
+              }}
+            >
               {label}
             </button>
           ))}
@@ -392,7 +417,8 @@ export default function ResultsPage() {
             TAB: OVERVIEW — Category breakdown
             ══════════════════════════════════════ */}
         {tab === 'overview' && (
-          <div className="print-section" style={{ marginTop: 24 }}>
+          <div role="tabpanel" id="tabpanel-overview" aria-labelledby="tab-overview"
+            className="print-section" style={{ marginTop: 24 }}>
 
             {categories.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
@@ -508,7 +534,8 @@ export default function ResultsPage() {
             TAB: ACTION PLAN
             ══════════════════════════════════════ */}
         {tab === 'actions' && (
-          <div className="print-section" style={{ marginTop: 24 }}>
+          <div role="tabpanel" id="tabpanel-actions" aria-labelledby="tab-actions"
+            className="print-section" style={{ marginTop: 24 }}>
             {recs.length === 0 ? (
               <div style={{
                 background: 'var(--paper)', border: '1px solid var(--line)',
@@ -700,7 +727,8 @@ export default function ResultsPage() {
             TAB: EVIDENCE & NOTES
             ══════════════════════════════════════ */}
         {tab === 'evidence' && (
-          <div style={{ marginTop: 24 }}>
+          <div role="tabpanel" id="tabpanel-evidence" aria-labelledby="tab-evidence"
+            style={{ marginTop: 24 }}>
             {evidenceAnswers.length === 0 ? (
               <div style={{
                 background: 'var(--paper)', border: '1px solid var(--line)',

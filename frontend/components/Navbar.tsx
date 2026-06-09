@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
-import { useLanguage } from '@/lib/language';
+import { useLang } from '@/lib/i18n';
 import { useRouter } from 'next/navigation';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
+  const { lang: language, setLang: setLanguage, t } = useLang();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);

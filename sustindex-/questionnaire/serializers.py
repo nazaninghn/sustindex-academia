@@ -1,11 +1,66 @@
 from rest_framework import serializers
 from .models import (
-    Survey, SurveySession, Category, Question, Choice, 
+    Survey, SurveySession, Category, Question, Choice,
     QuestionnaireAttempt, Answer, UserDocument
 )
 
 
-class ChoiceSerializer(serializers.ModelSerializer):
+# ── Fix M-2: LocalisedRepresentationMixin ──────────────────────────────────
+class LocalisedRepresentationMixin:
+    """
+    DRY helper that eliminates the 5× duplicated language-detection + field-
+    override logic that was spread across ChoiceSerializer, QuestionSerializer,
+    CategorySerializer, SurveyListSerializer, and SurveySerializer.
+
+    Usage — in each serializer that needs localisation call:
+
+        def to_representation(self, instance):
+            rep  = super().to_representation(instance)
+            lang = self._get_lang(self.context.get('request'))
+            return self._localise(rep, instance, lang, {
+                'name':        ('name_tr',        'name_en'),
+                'description': ('description_tr', 'description_en'),
+            })
+
+    `mapping` keys are the canonical serialized field names; values are
+    (tr_attr, en_attr) pairs resolved from the model instance.  The canonical
+    field is only overridden when the language-specific attribute is non-empty.
+    """
+
+    @staticmethod
+    def _get_lang(request) -> str:
+        """Detect the preferred language from ?lang= param or Accept-Language header.
+        Returns 'tr', 'en', or '' — never an arbitrary user-supplied string (Fix API-6).
+        """
+        if not request:
+            return ''
+        raw = (
+            request.query_params.get('lang')
+            or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0].lower()
+        )
+        # Fix API-6: normalise to the supported set; reject arbitrary values so a
+        # crafted ?lang=../../etc/passwd never reaches downstream code.
+        return raw if raw in ('tr', 'en') else ''
+
+    @staticmethod
+    def _localise(representation: dict, instance, lang: str, mapping: dict) -> dict:
+        """
+        Mutate *representation* in-place for each entry in *mapping*.
+        mapping = { canonical_field: (tr_attr, en_attr) }
+        """
+        for field, (tr_attr, en_attr) in mapping.items():
+            if lang == 'tr':
+                val = getattr(instance, tr_attr, None) or ''
+                if val:
+                    representation[field] = val
+            elif lang == 'en':
+                val = getattr(instance, en_attr, None) or ''
+                if val:
+                    representation[field] = val
+        return representation
+
+
+class ChoiceSerializer(LocalisedRepresentationMixin, serializers.ModelSerializer):
     # Fix L-3: hide score from non-staff users — exposing it allows
     # respondents to game the questionnaire by selecting the highest-scoring option.
     score = serializers.SerializerMethodField()
@@ -21,25 +76,14 @@ class ChoiceSerializer(serializers.ModelSerializer):
         return None
 
     def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        request = self.context.get('request')
-        
-        # Get language from request header or query param
-        language = None
-        if request:
-            language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-        
-        # Return appropriate language text
-        if language == 'tr' and instance.text_tr:
-            representation['text'] = instance.text_tr
-        elif language == 'en' and instance.text_en:
-            representation['text'] = instance.text_en
-        # else keep default text
-        
-        return representation
+        rep  = super().to_representation(instance)
+        lang = self._get_lang(self.context.get('request'))
+        return self._localise(rep, instance, lang, {
+            'text': ('text_tr', 'text_en'),
+        })
 
 
-class QuestionSerializer(serializers.ModelSerializer):
+class QuestionSerializer(LocalisedRepresentationMixin, serializers.ModelSerializer):
     choices = ChoiceSerializer(many=True, read_only=True)
     category_name    = serializers.CharField(source='category.name',    read_only=True)
     category_name_en = serializers.CharField(source='category.name_en', read_only=True)
@@ -51,71 +95,46 @@ class QuestionSerializer(serializers.ModelSerializer):
                   'text', 'text_tr', 'text_en',
                   'question_type', 'order', 'is_active', 'allow_multiple', 'attachment',
                   'sector', 'choices']
-    
+
     def to_representation(self, instance):
         # Fix P: super() already serializes `choices` via the field definition AND
         # DRF automatically propagates context to nested serializers — the explicit
         # re-instantiation of ChoiceSerializer issued a new DB query every time,
         # bypassing any prefetch cache.  Removed.
-        representation = super().to_representation(instance)
-        request = self.context.get('request')
-
-        language = None
-        if request:
-            language = (
-                request.query_params.get('lang')
-                or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-            )
-
-        if language == 'tr' and instance.text_tr:
-            representation['text'] = instance.text_tr
-        elif language == 'en' and instance.text_en:
-            representation['text'] = instance.text_en
+        rep  = super().to_representation(instance)
+        lang = self._get_lang(self.context.get('request'))
+        rep  = self._localise(rep, instance, lang, {
+            'text': ('text_tr', 'text_en'),
+        })
 
         # Fix H-07: guard against category being null — accessing .name_tr on None
         # raises AttributeError and crashes the serializer for every question in
         # the survey when any question has no category assigned.
         cat = instance.category
         if cat:
-            if language == 'tr' and cat.name_tr:
-                representation['category_name'] = cat.name_tr
-            elif language == 'en' and cat.name_en:
-                representation['category_name'] = cat.name_en
+            rep = self._localise(rep, cat, lang, {
+                'category_name': ('name_tr', 'name_en'),
+            })
 
-        return representation
+        return rep
 
 
-class CategorySerializer(serializers.ModelSerializer):
+class CategorySerializer(LocalisedRepresentationMixin, serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = Category
-        fields = ['id', 'survey', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'order', 
-                  'environmental_weight', 'social_weight', 'governance_weight', 
+        fields = ['id', 'survey', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'order',
+                  'environmental_weight', 'social_weight', 'governance_weight',
                   'max_score', 'questions']
-    
+
     def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        request = self.context.get('request')
-        
-        # Get language from request header or query param
-        language = None
-        if request:
-            language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-        
-        # Return appropriate language text
-        if language == 'tr':
-            if instance.name_tr:
-                representation['name'] = instance.name_tr
-            if instance.description_tr:
-                representation['description'] = instance.description_tr
-        elif language == 'en':
-            if instance.name_en:
-                representation['name'] = instance.name_en
-            if instance.description_en:
-                representation['description'] = instance.description_en
-        
-        return representation
+        rep  = super().to_representation(instance)
+        lang = self._get_lang(self.context.get('request'))
+        return self._localise(rep, instance, lang, {
+            'name':        ('name_tr',        'name_en'),
+            'description': ('description_tr', 'description_en'),
+        })
 
     def validate(self, data):
         # H2: mirror Category.clean() so the weight-sum rule is enforced when
@@ -175,7 +194,7 @@ def _effective_question_count(survey):
 _NUM_GRI_SECTORS = 8
 
 
-class SurveyListSerializer(serializers.ModelSerializer):
+class SurveyListSerializer(LocalisedRepresentationMixin, serializers.ModelSerializer):
     """
     Lightweight serializer for GET /api/v1/surveys/ (list).
     Does NOT embed questions or choices — avoids loading 1000+ rows per request.
@@ -210,23 +229,15 @@ class SurveyListSerializer(serializers.ModelSerializer):
         return _effective_question_count(obj)
 
     def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        request = self.context.get('request')
-        if request:
-            lang = (
-                request.query_params.get('lang')
-                or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-            )
-            if lang == 'tr':
-                if instance.name_tr:        rep['name']        = instance.name_tr
-                if instance.description_tr: rep['description'] = instance.description_tr
-            elif lang == 'en':
-                if instance.name_en:        rep['name']        = instance.name_en
-                if instance.description_en: rep['description'] = instance.description_en
-        return rep
+        rep  = super().to_representation(instance)
+        lang = self._get_lang(self.context.get('request'))
+        return self._localise(rep, instance, lang, {
+            'name':        ('name_tr',        'name_en'),
+            'description': ('description_tr', 'description_en'),
+        })
 
 
-class SurveySerializer(serializers.ModelSerializer):
+class SurveySerializer(LocalisedRepresentationMixin, serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
     sessions = SurveySessionSerializer(many=True, read_only=True)
     total_questions = serializers.IntegerField(source='get_total_questions', read_only=True)
@@ -242,33 +253,18 @@ class SurveySerializer(serializers.ModelSerializer):
     def get_question_count(self, obj):
         """Delegate to SurveyListSerializer logic (shared via module-level helper)."""
         return _effective_question_count(obj)
-    
+
     def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        request = self.context.get('request')
-        
-        # Get language from request header or query param
-        language = None
-        if request:
-            language = request.query_params.get('lang') or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-        
-        # Return appropriate language text
-        if language == 'tr':
-            if instance.name_tr:
-                representation['name'] = instance.name_tr
-            if instance.description_tr:
-                representation['description'] = instance.description_tr
-        elif language == 'en':
-            if instance.name_en:
-                representation['name'] = instance.name_en
-            if instance.description_en:
-                representation['description'] = instance.description_en
-        
+        rep  = super().to_representation(instance)
+        lang = self._get_lang(self.context.get('request'))
         # Fix P: removed the re-instantiation of QuestionSerializer — it issued a
         # fresh DB query that bypassed the prefetch cache on `questions__choices`.
         # DRF already serializes `questions` via the field definition with full
         # context propagation, so the override was only causing N+1.
-        return representation
+        return self._localise(rep, instance, lang, {
+            'name':        ('name_tr',        'name_en'),
+            'description': ('description_tr', 'description_en'),
+        })
 
 
 # ── Shared mixin ────────────────────────────────────────────────────────────
@@ -378,7 +374,7 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
         return answer
 
 
-class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSerializer):
+class QuestionnaireAttemptSerializer(LocalisedRepresentationMixin, AttemptBreakdownMixin, serializers.ModelSerializer):
     answers = AnswerSerializer(many=True, read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
     # Fix #10: CharField(source='x.name') crashes when FK is null.
@@ -406,15 +402,9 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
         ]
 
     # ---- helpers ----
-
-    def _get_language(self):
-        request = self.context.get('request')
-        if request:
-            return (
-                request.query_params.get('lang')
-                or request.headers.get('Accept-Language', '').split(',')[0].split('-')[0]
-            )
-        return None
+    # Fix BM-2: removed duplicate _get_language() — replaced with inherited
+    # LocalisedRepresentationMixin._get_lang() which is identical but also
+    # sanitises the value to 'tr' | 'en' | '' (Fix API-6).
 
     # ---- Fix #10: null-safe FK fields ----
 
@@ -480,7 +470,7 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
         if not obj.is_completed:
             return None
         from .gri_recommendations import maturity_label, maturity_narrative
-        language = self._get_language() or 'en'
+        language = self._get_lang(self.context.get('request')) or 'en'
         score = self._breakdown(obj)['total_percentage']
         return {
             'label':     maturity_label(score, language),
@@ -525,7 +515,7 @@ class QuestionnaireAttemptSerializer(AttemptBreakdownMixin, serializers.ModelSer
         # Fix R7-08: default to 'en' when no request context is present
         # (e.g. admin views, management commands) so category names are always
         # localised rather than falling back to the raw `name` field only.
-        language = self._get_language() or 'en'
+        language = self._get_lang(self.context.get('request')) or 'en'
 
         # Single bulk query instead of one per category (fixes N+1)
         cat_map: dict = {}

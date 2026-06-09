@@ -1,9 +1,9 @@
 'use client';
 
-import { useLanguage } from '@/lib/language';
+import { useLang } from '@/lib/i18n';
 
 export default function FeaturesSection() {
-  const { t } = useLanguage();
+  const { t } = useLang();
   
   const features = [
     {

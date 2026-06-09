@@ -1,9 +1,9 @@
 'use client';
 
-import { useLanguage } from '@/lib/language';
+import { useLang } from '@/lib/i18n';
 
 export default function StatsSection() {
-  const { t } = useLanguage();
+  const { t } = useLang();
 
   return (
     <section className="relative py-8 overflow-hidden bg-white">

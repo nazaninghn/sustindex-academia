@@ -1,3 +1,13 @@
+/**
+ * @deprecated CO-1 — this file is superseded by lib/i18n.tsx.
+ * All translation keys from this file have been migrated to TRANSLATIONS in
+ * lib/i18n.tsx.  All components that previously imported `useLanguage` now
+ * import `useLang` from lib/i18n.tsx instead.
+ *
+ * This file can be deleted once the legacy landing-page components
+ * (Navbar, Footer, HeroSection, FeaturesSection, MethodologySection,
+ * StatsSection, DashboardNavbar) are either removed or confirmed unused.
+ */
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';

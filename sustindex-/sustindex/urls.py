@@ -77,8 +77,11 @@ if REST_FRAMEWORK_INSTALLED:
 
 # Add autocomplete URL only if available
 if AUTOCOMPLETE_AVAILABLE:
+    from django.contrib.auth.decorators import login_required
     urlpatterns.append(
-        path('autocomplete/category/', CategoryAutocomplete.as_view(), name='category-autocomplete')
+        # Fix BH-3: CategoryAutocomplete is unauthenticated by default in DAL;
+        # wrap with login_required so category names are not leaked to anonymous visitors.
+        path('autocomplete/category/', login_required(CategoryAutocomplete.as_view()), name='category-autocomplete')
     )
 
 # URLs with language prefix (Only Admin and API - Frontend is Next.js)
@@ -95,11 +98,23 @@ urlpatterns += i18n_patterns(
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-# Serve media files in all environments.
-# Django's built-in `serve` view is used here because Render does not run a
-# separate nginx in front of gunicorn.  For higher-traffic deployments, replace
-# this with a cloud object-storage backend (e.g. Cloudinary / AWS S3) and
-# remove this line.
-# The `insecure=True` kwarg is required because django.conf.urls.static.static()
-# returns an empty list when DEBUG=False unless that flag is passed.
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT, insecure=True)
+# ── Media file serving ────────────────────────────────────────────────────────
+#
+# SECURITY NOTE (C-1):
+#   In development (DEBUG=True) Django serves /media/ files directly.
+#   In production (DEBUG=False) raw /media/ URLs return 404 — all file access
+#   must go through authenticated API endpoints:
+#
+#     • User documents  →  /api/v1/documents/{id}/download/
+#     • Question files  →  /api/v1/questions/{id}/attachment/
+#
+# PRODUCTION TODO: migrate file storage to Cloudinary / AWS S3 and replace
+# both download views with signed URL redirects.  This removes the need for
+# Django to stream files at all and eliminates the security exposure entirely.
+#
+# Render note: Render does NOT put nginx in front of gunicorn, so we cannot
+# delegate /media/ to a reverse-proxy in the current stack — the authenticated
+# API views above are the secure alternative until object storage is wired up.
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

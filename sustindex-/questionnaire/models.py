@@ -251,6 +251,15 @@ class Question(models.Model):
         verbose_name = _('Question')
         verbose_name_plural = _('Questions')
         ordering = ['survey', 'category', 'order']
+        # Fix M-3: composite index covering the most common hot-path filter:
+        #   Question.objects.filter(is_active=True, survey=x)
+        #                   .filter(Q(sector='') | Q(sector=selected_sector))
+        # survey_id already has an index (FK), but the engine can't use it
+        # together with is_active / sector without these additional indexes.
+        indexes = [
+            models.Index(fields=['survey', 'is_active', 'sector'],
+                         name='q_survey_active_sector_idx'),
+        ]
     
     def __str__(self):
         survey_name = self.survey.name if self.survey else 'No Survey'
@@ -336,6 +345,19 @@ class QuestionnaireAttempt(models.Model):
         verbose_name = _('Questionnaire Attempt')
         verbose_name_plural = _('Questionnaire Attempts')
         ordering = ['-started_at']
+        constraints = [
+            # BH-2: DB-level guard that prevents two *completed* attempts for the
+            # same (user, survey) pair from being inserted concurrently.
+            # The application-layer check in perform_create uses select_for_update()
+            # to prevent races, but this constraint is the last line of defence.
+            # Partial index (WHERE is_completed = true) means in-progress attempts
+            # are unaffected — a user can have multiple open drafts for the same survey.
+            models.UniqueConstraint(
+                fields=['user', 'survey'],
+                condition=models.Q(is_completed=True),
+                name='unique_completed_attempt',
+            ),
+        ]
     
     def __str__(self):
         # Fix LOW-03: avoid lazy-loading self.survey.name and self.user.username
@@ -681,6 +703,18 @@ class UserDocument(models.Model):
         # Fix R11-03: avoid chaining answer.attempt.user.username (3 lazy-load queries
         # per row in admin list views). Use local fields only — zero extra DB queries.
         return f"{self.title} (#{self.pk})"
+
+    def save(self, *args, **kwargs):
+        # Fix M-3: auto-populate file_size from the uploaded file so the field
+        # is never left at the default 0.  The DRF serializer returns
+        # file_size_display to the frontend; without this the display was always
+        # "0 B" even after a successful upload.
+        if self.file and not self.file_size:
+            try:
+                self.file_size = self.file.size
+            except (OSError, AttributeError):
+                pass  # file not yet written to storage; size will be set by storage backend
+        super().save(*args, **kwargs)
 
     def get_file_size_display(self):
         """Return human readable file size"""

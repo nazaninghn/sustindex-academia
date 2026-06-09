@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useLanguage } from '@/lib/language';
+import { useLang } from '@/lib/i18n';
 
 export default function MethodologySection() {
-  const { t } = useLanguage();
+  const { t } = useLang();
   
   const steps = [
     {
