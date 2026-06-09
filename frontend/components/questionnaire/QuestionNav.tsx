@@ -54,7 +54,7 @@ export function QuestionNav({
       )}
 
       {/* Navigation row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
+      <div className="q-nav-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
 
         {/* Previous */}
         <button

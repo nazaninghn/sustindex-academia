@@ -33,6 +33,9 @@ export default function HistoryPage() {
   const [loading,    setLoading]    = useState(true);
   const [loadError,  setLoadError]  = useState(false);
   const [filter,     setFilter]     = useState<'all' | 'completed' | 'in-progress'>('all');
+  const [surveyFilter, setSurveyFilter] = useState<string>('all');
+  const [dateFrom,   setDateFrom]   = useState('');
+  const [dateTo,     setDateTo]     = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -93,9 +96,23 @@ export default function HistoryPage() {
     ? Math.round(completed.reduce((s, a) => s + a.total_score, 0) / completed.length)
     : 0;
 
+  // All unique survey names for the survey filter dropdown
+  const surveyNames = Array.from(new Set(attempts.map((a) => a.survey_name))).sort();
+
   const visible = attempts.filter((a) => {
-    if (filter === 'completed')   return a.is_completed;
-    if (filter === 'in-progress') return !a.is_completed;
+    if (filter === 'completed')   { if (!a.is_completed)  return false; }
+    if (filter === 'in-progress') { if (a.is_completed)   return false; }
+    if (surveyFilter !== 'all' && a.survey_name !== surveyFilter) return false;
+    if (dateFrom) {
+      const from = new Date(dateFrom).setHours(0, 0, 0, 0);
+      const date = new Date(a.started_at).setHours(0, 0, 0, 0);
+      if (date < from) return false;
+    }
+    if (dateTo) {
+      const to   = new Date(dateTo).setHours(23, 59, 59, 999);
+      const date = new Date(a.started_at).getTime();
+      if (date > to) return false;
+    }
     return true;
   });
 
@@ -216,6 +233,87 @@ export default function HistoryPage() {
             )}
           </div>
         </div>
+
+        {/* Advanced filters row — survey + date range */}
+        {surveyNames.length > 1 && (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
+            marginBottom: 18, padding: '10px 14px',
+            background: 'var(--paper)', border: '1px solid var(--line)',
+          }}>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.08em', textTransform: 'uppercase', flexShrink: 0 }}>
+              {lang === 'tr' ? 'Filtre' : 'Filter'}
+            </span>
+
+            {/* Survey dropdown */}
+            <select
+              value={surveyFilter}
+              onChange={(e) => setSurveyFilter(e.target.value)}
+              style={{
+                padding: '5px 10px', fontSize: 11.5, border: '1px solid var(--line)',
+                background: 'var(--cream)', color: 'var(--ink)',
+                fontFamily: "'IBM Plex Sans', sans-serif", cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="all">{lang === 'tr' ? 'Tüm anketler' : 'All surveys'}</option>
+              {surveyNames.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+
+            {/* Date from */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label style={{ fontSize: 10.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                {lang === 'tr' ? 'Başlangıç' : 'From'}
+              </label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                style={{
+                  padding: '4px 8px', fontSize: 11.5, border: '1px solid var(--line)',
+                  background: 'var(--cream)', color: 'var(--ink)',
+                  fontFamily: "'IBM Plex Sans', sans-serif", outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* Date to */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label style={{ fontSize: 10.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                {lang === 'tr' ? 'Bitiş' : 'To'}
+              </label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                style={{
+                  padding: '4px 8px', fontSize: 11.5, border: '1px solid var(--line)',
+                  background: 'var(--cream)', color: 'var(--ink)',
+                  fontFamily: "'IBM Plex Sans', sans-serif", outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* Clear filters */}
+            {(surveyFilter !== 'all' || dateFrom || dateTo) && (
+              <button
+                onClick={() => { setSurveyFilter('all'); setDateFrom(''); setDateTo(''); }}
+                style={{
+                  padding: '4px 10px', background: 'transparent',
+                  border: '1px solid var(--line)', cursor: 'pointer',
+                  fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+                  color: 'var(--ink-3)', letterSpacing: '0.06em',
+                }}
+              >
+                {lang === 'tr' ? '× Temizle' : '× Clear'}
+              </button>
+            )}
+
+            <span style={{ marginLeft: 'auto', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)' }}>
+              {visible.length} {lang === 'tr' ? 'sonuç' : 'results'}
+            </span>
+          </div>
+        )}
 
         {/* Empty state */}
         {visible.length === 0 ? (

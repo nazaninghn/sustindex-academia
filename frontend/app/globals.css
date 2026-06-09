@@ -567,15 +567,94 @@ button, input, select, textarea { font: inherit; }
 .prose h2, .prose h3 { font-family: 'IBM Plex Sans', sans-serif; margin-bottom: 0.4em; font-weight: 600; }
 
 /* ============================================================
+   Questionnaire — mobile-specific overrides
+   ============================================================ */
+@media (max-width: 760px) {
+  /* Sticky header: shrink to fit small screens */
+  header[style*="position: sticky"] .wrap {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+  /* Compact survey name */
+  header[style*="position: sticky"] span[style*="maxWidth: 280px"] {
+    max-width: 140px !important;
+    font-size: 11px !important;
+  }
+  /* Choice buttons: full-width stacking */
+  [role="checkbox"],
+  [role="button"][aria-pressed] {
+    padding: 14px 14px !important;
+    font-size: 12.5px !important;
+  }
+  /* Navigation buttons row */
+  .q-nav-row {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  .q-nav-row .btn {
+    flex: 1;
+    min-width: 100px;
+    justify-content: center;
+  }
+}
+
+/* ============================================================
    Print / PDF Export
    ============================================================ */
 @media print {
   @page { size: A4; margin: 18mm 16mm; }
-  html, body { background: white !important; color: black !important;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .no-print { display: none !important; }
-  .wrap, .wrap-narrow { max-width: 100% !important; padding: 0 !important; }
+
+  html, body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide interactive chrome */
+  nav,
+  header,
+  .no-print,
+  button:not(.print-keep),
+  [role="tablist"],
+  .app-nav-row,
+  .site-nav-row {
+    display: none !important;
+  }
+
+  .wrap, .wrap-narrow {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
   main { padding: 0 !important; }
-  .print-section { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Section breaks */
+  .print-section      { page-break-inside: avoid; break-inside: avoid; }
+  .print-break-before { page-break-before: always; break-before: always; }
+  .print-break-after  { page-break-after:  always; break-after:  always; }
+
+  /* Colours: force exact rendering */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  /* Results page: expand all tabs content */
+  [role="tabpanel"][hidden] { display: block !important; }
+
+  /* Score ring / grade display — keep colours */
+  [style*="color: var(--olive"] { color: #5F6E2F !important; }
+  [style*="background: var(--ink)"] { background: #1A1A14 !important; color: white !important; }
+  [style*="background: var(--paper)"],
+  [style*="background: var(--cream)"] { background: white !important; }
+
+  /* Progress bars — show filled width */
+  .bar > span { print-color-adjust: exact !important; }
+
+  /* Typography scale up slightly for A4 */
+  h1 { font-size: 22pt !important; }
+  h2 { font-size: 16pt !important; }
+  h3 { font-size: 13pt !important; }
+
+  /* Remove hover borders that look odd in PDF */
+  * { transition: none !important; }
+  a { color: inherit !important; text-decoration: none !important; }
 }
