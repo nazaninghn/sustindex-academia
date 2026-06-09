@@ -326,8 +326,7 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         # via this endpoint (admin operations belong in the admin panel).
         # BH-4: wrap entire check-and-update in a single atomic block with
         # select_for_update() so two concurrent complete requests cannot both
-        # pass the is_completed guard and race into save() — that would trigger
-        # the UniqueConstraint (BH-2) and produce a 500 instead of a 409.
+        # pass the is_completed guard and race into save().
         with transaction.atomic():
             attempt = get_object_or_404(
                 self._base_queryset().filter(user=request.user).select_for_update(),
@@ -340,6 +339,27 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
                     {'error': 'Attempt already completed'},
                     status=status.HTTP_409_CONFLICT,
                 )
+
+            # Fix START-2: before marking this attempt complete, supersede any
+            # previous completed attempt for the same (user, survey) pair.
+            #
+            # Why: migration 0019 added a partial UniqueConstraint
+            # (user, survey WHERE is_completed=True).  Migration 0021 drops it,
+            # but until that migration runs on Render the constraint is still
+            # live in Postgres and the save() below would raise IntegrityError
+            # → HTTP 500 whenever a user retries a survey they already finished.
+            #
+            # Superseding (is_completed=False on old rows) inside the same
+            # transaction means the constraint is never violated even on
+            # unpatched databases.  After migration 0021 is applied this block
+            # becomes a no-op that updates 0 rows — safe to leave in place.
+            if attempt.survey_id:
+                QuestionnaireAttempt.objects.filter(
+                    user=request.user,
+                    survey_id=attempt.survey_id,
+                    is_completed=True,
+                ).exclude(pk=attempt.pk).update(is_completed=False)
+
             # Fix #29: combine completion + score fields into a single DB write.
             # calculate_scores(save=False) sets all score attrs on the instance
             # without touching the DB; we then save everything at once.

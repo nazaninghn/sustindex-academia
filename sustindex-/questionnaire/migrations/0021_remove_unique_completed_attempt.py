@@ -27,7 +27,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='questionnaireAttempt',
+            model_name='questionnaireattempt',
             name='unique_completed_attempt',
         ),
     ]
