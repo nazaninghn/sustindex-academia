@@ -346,8 +346,16 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
 
     def _complete_attempt(self, request, pk):
         with transaction.atomic():
+            # Fix START-3: use select_for_update(of=('self',)) instead of
+            # select_for_update().  _base_queryset() uses select_related on
+            # nullable FKs (survey, session) which Django translates to LEFT
+            # OUTER JOINs.  PostgreSQL raises
+            #   "FOR UPDATE cannot be applied to the nullable side of an outer join"
+            # when select_for_update() tries to lock those joined tables too.
+            # of=('self',) restricts the lock to the questionnaireattempt table
+            # only — exactly what we need to serialise concurrent complete calls.
             attempt = get_object_or_404(
-                self._base_queryset().filter(user=request.user).select_for_update(),
+                self._base_queryset().filter(user=request.user).select_for_update(of=('self',)),
                 pk=pk,
             )
             if attempt.is_completed:
