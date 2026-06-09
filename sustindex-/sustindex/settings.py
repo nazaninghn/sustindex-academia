@@ -267,9 +267,12 @@ CKEDITOR_CONFIGS = {
 
 # Maximum completed questionnaire attempts per membership tier.
 # Set to None for unlimited.
+# Fix START-1: all tiers are unlimited — the GRI 4-phase flow requires users
+# to start (and retry) multiple surveys.  Reinstate limits here when a
+# gating/upgrade strategy is defined.
 ATTEMPT_LIMITS = {
-    'free':   3,
-    'silver': 1,
+    'free':   None,  # unlimited
+    'silver': None,  # unlimited
     'gold':   None,  # unlimited
 }
 
