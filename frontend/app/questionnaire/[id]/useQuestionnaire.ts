@@ -45,6 +45,9 @@ export function useQuestionnaire() {
   const [exitErr,     setExitErr]     = useState('');
   /** Non-null while the phase-completion interstitial is displayed */
   const [phaseComplete, setPhaseComplete] = useState<number | null>(null);
+  /** Briefly true after a successful answer save — shows "✓ Saved" indicator */
+  const [savedFlash,  setSavedFlash]  = useState(false);
+  const savedFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── Answer state — keyed by question.id ── */
   const [answers,      setAnswers]      = useState<Record<number, number[]>>({});
@@ -311,6 +314,13 @@ export function useQuestionnaire() {
     return answerId;
   }, [q, id, hasChoices, isTextType, selection, note, textAns]);
 
+  /** Flash the "✓ Saved" indicator for 1.8 s */
+  const flashSaved = useCallback(() => {
+    if (savedFlashTimer.current) clearTimeout(savedFlashTimer.current);
+    setSavedFlash(true);
+    savedFlashTimer.current = setTimeout(() => setSavedFlash(false), 1800);
+  }, []);
+
   const handleNext = async () => {
     if (!q || saving || submitLockRef.current) return;
     submitLockRef.current = true;
@@ -319,6 +329,7 @@ export function useQuestionnaire() {
     try {
       // FM-1: single call replaces the 4-branch inline dispatch
       const answerId = await saveCurrentAnswer(true);
+      if (answerId !== null) flashSaved();
 
       if (answerId && files.length > 0) {
         // Fix FM-8: upload all files in parallel so 5 files × 200 ms = ~200 ms
@@ -475,6 +486,7 @@ export function useQuestionnaire() {
     currentIdx,
     loading,
     saving,
+    savedFlash,
     exitSaving,
     error,
     exitErr,

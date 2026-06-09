@@ -175,6 +175,16 @@ export const attemptAPI = {
     return data;
   },
 
+  /**
+   * Consolidated GRI report — returns the latest completed attempt for each
+   * GRI phase (1-4) in a single API call with combined score + grade.
+   * Replaces 4 sequential getAttempt() calls in the combined report page.
+   */
+  getCombinedReport: async () => {
+    const { data } = await api.get('/api/v1/attempts/combined_report/');
+    return data;
+  },
+
   /** Upload a supporting document for a saved answer.
    *
    * Fix R5-C-02: migrated from native `fetch` to the shared `api` axios instance

@@ -78,6 +78,18 @@ export default function QuestionnairePage() {
                 {qs.progress}%
               </span>
             </div>
+            {/* Auto-save flash indicator */}
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 10, color: 'var(--olive-deep)',
+              letterSpacing: '0.08em',
+              opacity: qs.savedFlash ? 1 : 0,
+              transition: 'opacity 0.4s ease',
+              pointerEvents: 'none',
+              minWidth: 56,
+            }}>
+              ✓ {qs.lang === 'tr' ? 'Kaydedildi' : 'Saved'}
+            </span>
             <button
               className="btn btn-outline btn-sm"
               onClick={qs.handleSaveAndExit}

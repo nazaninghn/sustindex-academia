@@ -320,6 +320,35 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
                     raise DRFValidationError({
                         'detail': 'Multiple attempts are not allowed for this survey.'
                     })
+
+            # Fix START-4: enforce GRI phase ordering at the backend.
+            # Phase 2 requires a completed Phase 1; Phase 3 requires Phase 2;
+            # Sector requires Phase 3.  The UI already gates navigation but
+            # without backend enforcement a direct API call can skip phases.
+            PHASE_PREREQS = [
+                ('GRI 2:',      'GRI 1:'),
+                ('GRI 3:',      'GRI 2:'),
+                ('GRI Sector:', 'GRI 3:'),
+            ]
+            survey_name = (survey.name or '') if survey else ''
+            for current_prefix, required_prefix in PHASE_PREREQS:
+                if survey_name.startswith(current_prefix):
+                    has_prereq = QuestionnaireAttempt.objects.filter(
+                        user=user,
+                        survey__name__startswith=required_prefix,
+                        is_completed=True,
+                    ).exists()
+                    if not has_prereq:
+                        required_label = required_prefix.rstrip(':')
+                        raise DRFValidationError({
+                            'detail': (
+                                f'You must complete {required_label} before '
+                                f'starting this phase.'
+                            ),
+                            'prerequisite': required_label,
+                        })
+                    break  # only the first matching rule applies
+
             serializer.save(user=self.request.user)
 
     @action(detail=True, methods=['post'])
@@ -409,6 +438,95 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
                 'total_percentage': scores['total_percentage'],
                 'grade': scores['grade'],
             }
+        })
+
+    @action(detail=False, methods=['get'])
+    def combined_report(self, request):
+        """
+        Single endpoint for the consolidated GRI report page.
+
+        Returns the latest completed attempt for each GRI phase (1-4)
+        in ONE query + serialisation pass — replacing 4 sequential frontend
+        fetches and reducing page load time significantly.
+
+        Response:
+        {
+          "phases": [
+            {"phase": 1, "label": "GRI 1", "attempt": <serialized | null>},
+            ...
+          ],
+          "combined_score":   72,   // simple average of completed phase scores
+          "combined_grade":   "B",
+          "phases_completed": 3,
+          "report_date":      "2026-06-09"
+        }
+        """
+        PHASE_MATCHERS = [
+            (1, 'GRI 1:'),
+            (2, 'GRI 2:'),
+            (3, 'GRI 3:'),
+            (4, 'GRI Sector:'),
+        ]
+
+        # One DB round-trip for all completed attempts (prefetches answers, survey, etc.)
+        all_completed = list(
+            self._base_queryset()
+            .filter(user=request.user, is_completed=True)
+            .order_by('-completed_at')
+        )
+
+        phases_data = []
+        for phase_num, matcher in PHASE_MATCHERS:
+            # Find the most recent completed attempt for this phase (Python filter)
+            latest = next(
+                (a for a in all_completed
+                 if a.survey and (a.survey.name or '').startswith(matcher)),
+                None,
+            )
+            if latest:
+                ser = QuestionnaireAttemptSerializer(latest, context={'request': request})
+                phases_data.append({
+                    'phase':   phase_num,
+                    'label':   matcher.rstrip(':'),
+                    'attempt': ser.data,
+                })
+            else:
+                phases_data.append({
+                    'phase':   phase_num,
+                    'label':   matcher.rstrip(':'),
+                    'attempt': None,
+                })
+
+        # Combined score — weighted average by total_questions (already serialised above)
+        scored_phases = [
+            p for p in phases_data
+            if p['attempt'] and p['attempt'].get('total_score') is not None
+        ]
+        if scored_phases:
+            weights      = [p['attempt'].get('total_questions') or 1 for p in scored_phases]
+            total_weight = sum(weights)
+            combined_score = round(
+                sum(
+                    (p['attempt']['total_score'] or 0) * w
+                    for p, w in zip(scored_phases, weights)
+                ) / total_weight
+            )
+        else:
+            combined_score = 0
+
+        def _grade(s: int) -> str:
+            if s >= 80: return 'A'
+            if s >= 65: return 'B'
+            if s >= 50: return 'C'
+            if s >= 35: return 'D'
+            return 'F'
+
+        return Response({
+            'phases':           phases_data,
+            'combined_score':   combined_score,
+            'combined_grade':   _grade(combined_score),
+            'phases_completed': len(scored_phases),
+            'report_date':      timezone.now().date().isoformat(),
         })
 
     @action(detail=True, methods=['get'])

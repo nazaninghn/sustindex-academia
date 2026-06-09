@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -10,7 +10,7 @@ import { Icon } from '@/components/shared';
 import { attemptAPI, documentDownloadUrl } from '@/lib/api';
 import { sanitizeHtml, gradeColor, priorityColor } from '@/lib/utils';
 
-/* ─── Types ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 interface CategoryScore {
   id: number; key: string; name: string;
   score: number; max_score: number; percentage: number;
@@ -46,58 +46,58 @@ interface ListAttempt {
   completed_at: string | null; total_score: number; overall_grade: string;
 }
 
-/* ─── GRI Phase definitions ──────────────────────────────────── */
+/* â”€â”€â”€ GRI Phase definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const PHASE_DEFS = [
-  { phase: 1, labelEn: 'GRI 1: Foundation',          labelTr: 'GRI 1: Temel İlkeler',         match: 'GRI 1:',      standardsEn: 'GRI Universal Standards — Foundation', standardsTr: 'GRI Evrensel Standartları — Temel' },
-  { phase: 2, labelEn: 'GRI 2: General Disclosures', labelTr: 'GRI 2: Genel Açıklamalar',      match: 'GRI 2:',      standardsEn: 'Governance, Strategy, Stakeholder Engagement', standardsTr: 'Yönetişim, Strateji, Paydaş Katılımı' },
-  { phase: 3, labelEn: 'GRI 3: Material Topics',     labelTr: 'GRI 3: Önemli Konular',         match: 'GRI 3:',      standardsEn: 'Materiality Assessment, Impact Management', standardsTr: 'Önemlilik Değerlendirmesi, Etki Yönetimi' },
-  { phase: 4, labelEn: 'Sector Standard',             labelTr: 'Sektör Standardı',               match: 'GRI Sector:', standardsEn: 'Industry-Specific Sustainability Topics', standardsTr: 'Sektöre Özgü Sürdürülebilirlik Konuları' },
+  { phase: 1, labelEn: 'GRI 1: Foundation',          labelTr: 'GRI 1: Temel Ä°lkeler',         match: 'GRI 1:',      standardsEn: 'GRI Universal Standards â€” Foundation', standardsTr: 'GRI Evrensel StandartlarÄ± â€” Temel' },
+  { phase: 2, labelEn: 'GRI 2: General Disclosures', labelTr: 'GRI 2: Genel AÃ§Ä±klamalar',      match: 'GRI 2:',      standardsEn: 'Governance, Strategy, Stakeholder Engagement', standardsTr: 'YÃ¶netiÅŸim, Strateji, PaydaÅŸ KatÄ±lÄ±mÄ±' },
+  { phase: 3, labelEn: 'GRI 3: Material Topics',     labelTr: 'GRI 3: Ã–nemli Konular',         match: 'GRI 3:',      standardsEn: 'Materiality Assessment, Impact Management', standardsTr: 'Ã–nemlilik DeÄŸerlendirmesi, Etki YÃ¶netimi' },
+  { phase: 4, labelEn: 'Sector Standard',             labelTr: 'SektÃ¶r StandardÄ±',               match: 'GRI Sector:', standardsEn: 'Industry-Specific Sustainability Topics', standardsTr: 'SektÃ¶re Ã–zgÃ¼ SÃ¼rdÃ¼rÃ¼lebilirlik KonularÄ±' },
 ];
 
-/* ─── GRI Content Index data ─────────────────────────────────── */
+/* â”€â”€â”€ GRI Content Index data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const GRI_INDEX = [
   {
     section: { en: 'GRI 1: Foundation', tr: 'GRI 1: Temel' }, phase: 1,
     disclosures: [
-      { code: 'GRI 1-1', en: 'Purpose of GRI Standards',              tr: 'GRI Standartlarının Amacı' },
-      { code: 'GRI 1-2', en: 'System of GRI Standards',               tr: 'GRI Standartlarının Sistemi' },
+      { code: 'GRI 1-1', en: 'Purpose of GRI Standards',              tr: 'GRI StandartlarÄ±nÄ±n AmacÄ±' },
+      { code: 'GRI 1-2', en: 'System of GRI Standards',               tr: 'GRI StandartlarÄ±nÄ±n Sistemi' },
       { code: 'GRI 1-3', en: 'Mandatory Requirements',                 tr: 'Zorunlu Gereksinimler' },
-      { code: 'GRI 1-4', en: 'Statement of Use Requirements',          tr: 'Kullanım Beyanı Gereksinimleri' },
+      { code: 'GRI 1-4', en: 'Statement of Use Requirements',          tr: 'KullanÄ±m BeyanÄ± Gereksinimleri' },
       { code: 'GRI 1-5', en: 'Due Diligence',                          tr: 'Durum Tespiti' },
     ],
   },
   {
-    section: { en: 'GRI 2: General Disclosures', tr: 'GRI 2: Genel Açıklamalar' }, phase: 2,
+    section: { en: 'GRI 2: General Disclosures', tr: 'GRI 2: Genel AÃ§Ä±klamalar' }, phase: 2,
     disclosures: [
-      { code: 'GRI 2-1',  en: 'Organizational Details',                 tr: 'Kuruluş Detayları' },
-      { code: 'GRI 2-2',  en: 'Entities Included in Sustainability Reporting', tr: 'Sürdürülebilirlik Raporlamasındaki Varlıklar' },
-      { code: 'GRI 2-6',  en: 'Activities, Value Chain & Business Relationships', tr: 'Faaliyetler, Değer Zinciri ve İş İlişkileri' },
-      { code: 'GRI 2-9',  en: 'Governance Structure & Composition',     tr: 'Yönetim Yapısı ve Bileşimi' },
-      { code: 'GRI 2-14', en: 'Role of the Highest Governance Body',    tr: 'En Yüksek Yönetim Organının Rolü' },
-      { code: 'GRI 2-22', en: 'Statement on Sustainable Development Strategy', tr: 'Sürdürülebilir Kalkınma Stratejisi Beyanı' },
-      { code: 'GRI 2-25', en: 'Processes to Remediate Negative Impacts', tr: 'Olumsuz Etkilerin Giderilmesi Süreçleri' },
-      { code: 'GRI 2-29', en: 'Approach to Stakeholder Engagement',     tr: 'Paydaş Katılımına Yaklaşım' },
+      { code: 'GRI 2-1',  en: 'Organizational Details',                 tr: 'KuruluÅŸ DetaylarÄ±' },
+      { code: 'GRI 2-2',  en: 'Entities Included in Sustainability Reporting', tr: 'SÃ¼rdÃ¼rÃ¼lebilirlik RaporlamasÄ±ndaki VarlÄ±klar' },
+      { code: 'GRI 2-6',  en: 'Activities, Value Chain & Business Relationships', tr: 'Faaliyetler, DeÄŸer Zinciri ve Ä°ÅŸ Ä°liÅŸkileri' },
+      { code: 'GRI 2-9',  en: 'Governance Structure & Composition',     tr: 'YÃ¶netim YapÄ±sÄ± ve BileÅŸimi' },
+      { code: 'GRI 2-14', en: 'Role of the Highest Governance Body',    tr: 'En YÃ¼ksek YÃ¶netim OrganÄ±nÄ±n RolÃ¼' },
+      { code: 'GRI 2-22', en: 'Statement on Sustainable Development Strategy', tr: 'SÃ¼rdÃ¼rÃ¼lebilir KalkÄ±nma Stratejisi BeyanÄ±' },
+      { code: 'GRI 2-25', en: 'Processes to Remediate Negative Impacts', tr: 'Olumsuz Etkilerin Giderilmesi SÃ¼reÃ§leri' },
+      { code: 'GRI 2-29', en: 'Approach to Stakeholder Engagement',     tr: 'PaydaÅŸ KatÄ±lÄ±mÄ±na YaklaÅŸÄ±m' },
     ],
   },
   {
-    section: { en: 'GRI 3: Material Topics', tr: 'GRI 3: Önemli Konular' }, phase: 3,
+    section: { en: 'GRI 3: Material Topics', tr: 'GRI 3: Ã–nemli Konular' }, phase: 3,
     disclosures: [
-      { code: 'GRI 3-1', en: 'Process to Determine Material Topics',   tr: 'Önemli Konuların Belirlenmesi Süreci' },
-      { code: 'GRI 3-2', en: 'List of Material Topics',                tr: 'Önemli Konuların Listesi' },
-      { code: 'GRI 3-3', en: 'Management of Material Topics',          tr: 'Önemli Konuların Yönetimi' },
+      { code: 'GRI 3-1', en: 'Process to Determine Material Topics',   tr: 'Ã–nemli KonularÄ±n Belirlenmesi SÃ¼reci' },
+      { code: 'GRI 3-2', en: 'List of Material Topics',                tr: 'Ã–nemli KonularÄ±n Listesi' },
+      { code: 'GRI 3-3', en: 'Management of Material Topics',          tr: 'Ã–nemli KonularÄ±n YÃ¶netimi' },
     ],
   },
   {
-    section: { en: 'Sector Standard', tr: 'Sektör Standardı' }, phase: 4,
+    section: { en: 'Sector Standard', tr: 'SektÃ¶r StandardÄ±' }, phase: 4,
     disclosures: [
-      { code: 'Sector-1', en: 'Sector-Specific Environmental Topics',  tr: 'Sektöre Özgü Çevresel Konular' },
-      { code: 'Sector-2', en: 'Sector-Specific Social Topics',         tr: 'Sektöre Özgü Sosyal Konular' },
-      { code: 'Sector-3', en: 'Industry Governance & Compliance',      tr: 'Sektör Yönetişimi ve Uyum' },
+      { code: 'Sector-1', en: 'Sector-Specific Environmental Topics',  tr: 'SektÃ¶re Ã–zgÃ¼ Ã‡evresel Konular' },
+      { code: 'Sector-2', en: 'Sector-Specific Social Topics',         tr: 'SektÃ¶re Ã–zgÃ¼ Sosyal Konular' },
+      { code: 'Sector-3', en: 'Industry Governance & Compliance',      tr: 'SektÃ¶r YÃ¶netiÅŸimi ve Uyum' },
     ],
   },
 ];
 
-/* ─── Colour helpers ─────────────────────────────────────────── */
+/* â”€â”€â”€ Colour helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function scoreColor(pct: number): string {
   if (pct >= 80) return 'var(--olive-deep)';
   if (pct >= 60) return '#4a7c6f';
@@ -106,10 +106,10 @@ function scoreColor(pct: number): string {
   return 'var(--danger)';
 }
 function scoreLabel(pct: number, lang: string): string {
-  if (pct >= 80) return lang === 'tr' ? 'Mükemmel' : 'Excellent';
-  if (pct >= 60) return lang === 'tr' ? 'İyi'       : 'Good';
-  if (pct >= 40) return lang === 'tr' ? 'Gelişiyor' : 'Developing';
-  if (pct >= 20) return lang === 'tr' ? 'Başlangıç' : 'Initial';
+  if (pct >= 80) return lang === 'tr' ? 'MÃ¼kemmel' : 'Excellent';
+  if (pct >= 60) return lang === 'tr' ? 'Ä°yi'       : 'Good';
+  if (pct >= 40) return lang === 'tr' ? 'GeliÅŸiyor' : 'Developing';
+  if (pct >= 20) return lang === 'tr' ? 'BaÅŸlangÄ±Ã§' : 'Initial';
   return lang === 'tr' ? 'Kritik' : 'Critical';
 }
 function deriveGrade(score: number): string {
@@ -121,30 +121,30 @@ function deriveGrade(score: number): string {
 }
 function maturityLabel(score: number, lang: string): string {
   if (score >= 80) return lang === 'tr' ? 'Lider'     : 'Leader';
-  if (score >= 65) return lang === 'tr' ? 'Gelişmiş'  : 'Advanced';
-  if (score >= 50) return lang === 'tr' ? 'Yönetilen' : 'Managed';
-  if (score >= 35) return lang === 'tr' ? 'Gelişiyor' : 'Developing';
-  return lang === 'tr' ? 'Başlangıç' : 'Initial';
+  if (score >= 65) return lang === 'tr' ? 'GeliÅŸmiÅŸ'  : 'Advanced';
+  if (score >= 50) return lang === 'tr' ? 'YÃ¶netilen' : 'Managed';
+  if (score >= 35) return lang === 'tr' ? 'GeliÅŸiyor' : 'Developing';
+  return lang === 'tr' ? 'BaÅŸlangÄ±Ã§' : 'Initial';
 }
 function maturityNarrative(score: number, lang: string): string {
   if (score >= 80) return lang === 'tr'
-    ? 'Kuruluşunuz GRI standartlarına tam uyum sağlamış ve sektörde lider konumdadır. ESG performansı sistematik olarak izlenmekte ve kamuoyuyla paylaşılmaktadır.'
+    ? 'KuruluÅŸunuz GRI standartlarÄ±na tam uyum saÄŸlamÄ±ÅŸ ve sektÃ¶rde lider konumdadÄ±r. ESG performansÄ± sistematik olarak izlenmekte ve kamuoyuyla paylaÅŸÄ±lmaktadÄ±r.'
     : 'Your organisation demonstrates full GRI alignment and leads the sector in sustainability maturity. ESG performance is systematically monitored and publicly disclosed.';
   if (score >= 65) return lang === 'tr'
-    ? 'GRI uygulaması gelişmiş düzeyde olup çoğu alanda güçlü sistemler mevcuttur. Bazı boşluklar kapatıldığında sektör liderliğine ulaşılabilir.'
+    ? 'GRI uygulamasÄ± geliÅŸmiÅŸ dÃ¼zeyde olup Ã§oÄŸu alanda gÃ¼Ã§lÃ¼ sistemler mevcuttur. BazÄ± boÅŸluklar kapatÄ±ldÄ±ÄŸÄ±nda sektÃ¶r liderliÄŸine ulaÅŸÄ±labilir.'
     : 'GRI implementation is advanced with strong systems in most areas. Closing remaining gaps will position your organisation as a sector leader.';
   if (score >= 50) return lang === 'tr'
-    ? 'Temel GRI çerçevesi uygulanmaktadır ancak tutarlılık ve derinlik artırılmalıdır. Ölçüm ve raporlama sistemlerinin güçlendirilmesi öncelikli odak noktası olmalıdır.'
+    ? 'Temel GRI Ã§erÃ§evesi uygulanmaktadÄ±r ancak tutarlÄ±lÄ±k ve derinlik artÄ±rÄ±lmalÄ±dÄ±r. Ã–lÃ§Ã¼m ve raporlama sistemlerinin gÃ¼Ã§lendirilmesi Ã¶ncelikli odak noktasÄ± olmalÄ±dÄ±r.'
     : 'Core GRI framework is in place but consistency and depth need strengthening. Prioritise measurement systems and formalising reporting processes.';
   if (score >= 35) return lang === 'tr'
-    ? 'GRI uyumuna yönelik ilk adımlar atılmış, ancak sistematik bir yaklaşım henüz geliştirilmemiştir. Politikaların resmileştirilmesi ve hedef belirlenmesi kritik öneme sahiptir.'
+    ? 'GRI uyumuna yÃ¶nelik ilk adÄ±mlar atÄ±lmÄ±ÅŸ, ancak sistematik bir yaklaÅŸÄ±m henÃ¼z geliÅŸtirilmemiÅŸtir. PolitikalarÄ±n resmileÅŸtirilmesi ve hedef belirlenmesi kritik Ã¶neme sahiptir.'
     : 'Initial steps toward GRI alignment have been taken but a systematic approach is not yet in place. Formalising policies and setting measurable targets is the critical next step.';
   return lang === 'tr'
-    ? 'GRI uyumu için önemli çalışmalar gerekmektedir. Acil öncelikler: temel politikaların yazılı hale getirilmesi, sorumlu kişilerin atanması ve veri toplama altyapısının kurulması.'
+    ? 'GRI uyumu iÃ§in Ã¶nemli Ã§alÄ±ÅŸmalar gerekmektedir. Acil Ã¶ncelikler: temel politikalarÄ±n yazÄ±lÄ± hale getirilmesi, sorumlu kiÅŸilerin atanmasÄ± ve veri toplama altyapÄ±sÄ±nÄ±n kurulmasÄ±.'
     : 'Significant work is required for GRI alignment. Immediate priorities: documenting baseline policies, assigning owners, and establishing data collection infrastructure.';
 }
 
-/* ─── Score Ring SVG ─────────────────────────────────────────── */
+/* â”€â”€â”€ Score Ring SVG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function ScoreRing({ score, grade, size = 136 }: { score: number; grade: string; size?: number }) {
   const r = 52 * (size / 136);
   const cx = size / 2, cy = size / 2, stroke = 6;
@@ -168,7 +168,7 @@ function ScoreRing({ score, grade, size = 136 }: { score: number; grade: string;
   );
 }
 
-/* ─── Mini gauge bar ─────────────────────────────────────────── */
+/* â”€â”€â”€ Mini gauge bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function MiniGauge({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div style={{ flex: 1, minWidth: 140 }}>
@@ -183,17 +183,21 @@ function MiniGauge({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Combined Report Page
-   ═══════════════════════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 export default function CombinedReportPage() {
   const router = useRouter();
   const { lang } = useLang();
   const { user, isLoading: authLoading } = useAuth();
 
-  const [phases,  setPhases]  = useState<(FullAttempt | null)[]>([null, null, null, null]);
-  const [loading, setLoading] = useState(true);
-  const [tab,     setTab]     = useState<'overview' | 'actions' | 'evidence' | 'index'>('overview');
+  const [phases,         setPhases]         = useState<(FullAttempt | null)[]>([null, null, null, null]);
+  const [combinedScore,  setCombinedScore]  = useState(0);
+  const [combinedGrade,  setCombinedGrade]  = useState('');
+  const [phasesComplete, setPhasesComplete] = useState(0);
+  const [loading,        setLoading]        = useState(true);
+  const [fetchError,     setFetchError]     = useState('');
+  const [tab,            setTab]            = useState<'overview' | 'actions' | 'evidence' | 'index'>('overview');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -203,23 +207,18 @@ export default function CombinedReportPage() {
     if (!user) return;
     (async () => {
       try {
-        const list = await attemptAPI.getMyAttempts();
-        const allAttempts: ListAttempt[] = Array.isArray(list) ? list : (list?.results ?? []);
-        const completed = allAttempts.filter((a) => a.is_completed);
-
-        const phaseAttempts = await Promise.all(
-          PHASE_DEFS.map(async (def) => {
-            const matches = completed
-              .filter((a) => a.survey_name?.includes(def.match))
-              .sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime());
-            if (!matches.length) return null;
-            try { return await attemptAPI.getAttempt(matches[0].id); }
-            catch { return null; }
-          })
+        // Single API call â€” backend returns all phases + combined metrics
+        const report = await attemptAPI.getCombinedReport();
+        const phaseAttempts: (FullAttempt | null)[] = (report.phases ?? []).map(
+          (p: { attempt: FullAttempt | null }) => p.attempt ?? null
         );
         setPhases(phaseAttempts);
+        setCombinedScore(report.combined_score ?? 0);
+        setCombinedGrade(report.combined_grade ?? 'â€”');
+        setPhasesComplete(report.phases_completed ?? 0);
       } catch (e) {
         console.error('[combined-report] load error', e);
+        setFetchError(lang === 'tr' ? 'Rapor yÃ¼klenemedi.' : 'Failed to load report.');
       } finally {
         setLoading(false);
       }
@@ -227,13 +226,13 @@ export default function CombinedReportPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  /* ── Loading ── */
+  /* â”€â”€ Loading â”€â”€ */
   if (authLoading || loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
         <div style={{ width: 36, height: 36, border: '2px solid var(--line)', borderTop: '2px solid var(--olive-deep)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {lang === 'tr' ? 'GRI raporu hazırlanıyor…' : 'Preparing GRI report…'}
+          {lang === 'tr' ? 'GRI raporu hazÄ±rlanÄ±yorâ€¦' : 'Preparing GRI reportâ€¦'}
         </span>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -241,9 +240,24 @@ export default function CombinedReportPage() {
   }
 
   const completedPhases = phases.filter(Boolean) as FullAttempt[];
-  const phasesCompleted = completedPhases.length;
+  const phasesCompleted = phasesComplete || completedPhases.length;
 
-  /* ── Empty state ── */
+  /* â”€â”€ Fetch error â”€â”€ */
+  if (fetchError) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
+        <div className="no-print"><AppNav /></div>
+        <main className="wrap" style={{ padding: '64px 32px', textAlign: 'center' }}>
+          <p style={{ fontSize: 13, color: 'var(--danger)' }}>{fetchError}</p>
+          <Link href="/history" style={{ textDecoration: 'none' }}>
+            <button className="btn btn-outline" style={{ marginTop: 16 }}>â† {lang === 'tr' ? 'Geri' : 'Back'}</button>
+          </Link>
+        </main>
+      </div>
+    );
+  }
+
+  /* â”€â”€ Empty state â”€â”€ */
   if (phasesCompleted === 0) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
@@ -251,16 +265,16 @@ export default function CombinedReportPage() {
         <main className="wrap" style={{ padding: '80px 32px', textAlign: 'center', maxWidth: 600 }}>
           <p style={{ fontSize: 36, fontWeight: 300, letterSpacing: '-0.03em', marginBottom: 12 }}>0</p>
           <h2 style={{ fontSize: 20, fontWeight: 400, marginBottom: 10 }}>
-            {lang === 'tr' ? 'Tamamlanmış değerlendirme bulunamadı' : 'No completed assessments found'}
+            {lang === 'tr' ? 'TamamlanmÄ±ÅŸ deÄŸerlendirme bulunamadÄ±' : 'No completed assessments found'}
           </h2>
           <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 32, lineHeight: 1.6 }}>
             {lang === 'tr'
-              ? 'Birleştirilmiş GRI raporu için en az bir aşama (GRI 1, 2, 3 veya Sektör) tamamlanmalıdır.'
+              ? 'BirleÅŸtirilmiÅŸ GRI raporu iÃ§in en az bir aÅŸama (GRI 1, 2, 3 veya SektÃ¶r) tamamlanmalÄ±dÄ±r.'
               : 'Complete at least one GRI phase (GRI 1, 2, 3 or Sector) to generate your consolidated report.'}
           </p>
           <Link href="/surveys" style={{ textDecoration: 'none' }}>
             <button className="btn btn-primary">
-              {lang === 'tr' ? 'Değerlendirmeye Başla' : 'Start GRI Assessment'} <Icon.arrow />
+              {lang === 'tr' ? 'DeÄŸerlendirmeye BaÅŸla' : 'Start GRI Assessment'} <Icon.arrow />
             </button>
           </Link>
         </main>
@@ -268,11 +282,13 @@ export default function CombinedReportPage() {
     );
   }
 
-  /* ── Derived metrics ── */
-  const combinedScore = Math.round(
-    completedPhases.reduce((s, a) => s + (a.total_score ?? 0), 0) / phasesCompleted
-  );
-  const combinedGrade = deriveGrade(combinedScore);
+  /* â”€â”€ Derived metrics â€” prefer server-computed values (weighted), fallback to client avg â”€â”€ */
+  const effectiveCombinedScore = combinedScore > 0
+    ? combinedScore
+    : (completedPhases.length > 0
+        ? Math.round(completedPhases.reduce((s, a) => s + (a.total_score ?? 0), 0) / completedPhases.length)
+        : 0);
+  const effectiveCombinedGrade = combinedGrade ? combinedGrade : deriveGrade(effectiveCombinedScore);
   const companyName = (user as { company_name?: string; username?: string })?.company_name || user?.username || '';
   const reportDate  = new Date().toLocaleDateString(
     lang === 'tr' ? 'tr-TR' : 'en-GB',
@@ -289,13 +305,13 @@ export default function CombinedReportPage() {
     return acc;
   }, {} as Record<typeof pillarKeys[number], number>);
 
-  /* All categories sorted worst → best */
+  /* All categories sorted worst â†’ best */
   type CatWithPhase = CategoryScore & { phase: string };
   const allCategories: CatWithPhase[] = completedPhases
     .flatMap((p) => (p.category_scores ?? []).map((c) => ({ ...c, phase: p.survey_name })))
     .sort((a, b) => a.percentage - b.percentage);
 
-  /* All recommendations sorted High → Medium → Low */
+  /* All recommendations sorted High â†’ Medium â†’ Low */
   const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
   type RecWithPhase = Recommendation & { phase: string };
   const allRecs: RecWithPhase[] = completedPhases
@@ -321,9 +337,9 @@ export default function CombinedReportPage() {
 
   /* Pillar label/color helpers */
   const pillarLabel = (k: string) => ({
-    environmental: { en: 'Environmental', tr: 'Çevre' },
+    environmental: { en: 'Environmental', tr: 'Ã‡evre' },
     social:        { en: 'Social',        tr: 'Sosyal' },
-    governance:    { en: 'Governance',    tr: 'Yönetişim' },
+    governance:    { en: 'Governance',    tr: 'YÃ¶netiÅŸim' },
   }[k]?.[lang as 'en' | 'tr'] ?? k);
 
   const pillarColor = (k: string) => {
@@ -341,17 +357,17 @@ export default function CombinedReportPage() {
 
       <main className="wrap" style={{ padding: '32px 32px 100px', maxWidth: 980 }}>
 
-        {/* ── Toolbar ── */}
+        {/* â”€â”€ Toolbar â”€â”€ */}
         <div className="no-print" style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32,
         }}>
           <Link href="/history" style={{ textDecoration: 'none', fontSize: 11, color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            ← {lang === 'tr' ? 'Geçmişe Dön' : 'Back to History'}
+            â† {lang === 'tr' ? 'GeÃ§miÅŸe DÃ¶n' : 'Back to History'}
           </Link>
           <div style={{ display: 'flex', gap: 8 }}>
             <Link href="/surveys" style={{ textDecoration: 'none' }}>
               <button className="btn btn-outline btn-sm">
-                {lang === 'tr' ? 'Değerlendirmeler' : 'Assessments'} <Icon.plus />
+                {lang === 'tr' ? 'DeÄŸerlendirmeler' : 'Assessments'} <Icon.plus />
               </button>
             </Link>
             <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
@@ -360,9 +376,9 @@ export default function CombinedReportPage() {
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             REPORT HEADER
-            ══════════════════════════════════════════════════════ */}
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         <div className="print-section" style={{
           borderTop: '4px solid var(--ink)', paddingTop: 28, paddingBottom: 28,
         }}>
@@ -374,8 +390,8 @@ export default function CombinedReportPage() {
                 fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--ink-4)',
                 letterSpacing: '0.14em', textTransform: 'uppercase', display: 'block', marginBottom: 16,
               }}>
-                {lang === 'tr' ? 'BİRLEŞTİRİLMİŞ GRI DEĞERLENDİRME RAPORU' : 'CONSOLIDATED GRI COMPETENCY REPORT'}
-                {' · '}{reportDate}{' · '}SustIndex
+                {lang === 'tr' ? 'BÄ°RLEÅžTÄ°RÄ°LMÄ°Åž GRI DEÄžERLENDÄ°RME RAPORU' : 'CONSOLIDATED GRI COMPETENCY REPORT'}
+                {' Â· '}{reportDate}{' Â· '}SustIndex
               </span>
 
               <h1 style={{ fontSize: 26, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.15, marginBottom: 12 }}>
@@ -392,16 +408,16 @@ export default function CombinedReportPage() {
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 12 }}>
                 <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-                  <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Çerçeve:' : 'Framework:'}</strong>
-                  {' '}GRI Universal Standards · SASB · TCFD
+                  <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Ã‡erÃ§eve:' : 'Framework:'}</strong>
+                  {' '}GRI Universal Standards Â· SASB Â· TCFD
                 </span>
                 <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-                  <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Tamamlanan Aşama:' : 'Phases:'}</strong>
+                  <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Tamamlanan AÅŸama:' : 'Phases:'}</strong>
                   {' '}{phasesCompleted}/4
                 </span>
                 {totalQs > 0 && (
                   <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                    {totalQsAnswered}/{totalQs} {lang === 'tr' ? 'soru yanıtlandı' : 'questions answered'}{' · '}
+                    {totalQsAnswered}/{totalQs} {lang === 'tr' ? 'soru yanÄ±tlandÄ±' : 'questions answered'}{' Â· '}
                     {Math.round((totalQsAnswered / totalQs) * 100)}%
                   </span>
                 )}
@@ -410,11 +426,11 @@ export default function CombinedReportPage() {
               {/* Maturity badge */}
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
                 <span style={{
-                  background: scoreColor(combinedScore), color: '#fff',
+                  background: scoreColor(effectiveCombinedScore), color: '#fff',
                   fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 700,
                   letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 12px',
                 }}>
-                  {maturityLabel(combinedScore, lang)}
+                  {maturityLabel(effectiveCombinedScore, lang)}
                 </span>
                 <span style={{ fontSize: 10.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
                   {lang === 'tr' ? 'GRI Olgunluk Seviyesi' : 'GRI Maturity Level'}
@@ -424,12 +440,12 @@ export default function CombinedReportPage() {
 
             {/* Right: score ring */}
             <div style={{ textAlign: 'center', flexShrink: 0 }}>
-              <ScoreRing score={combinedScore} grade={combinedGrade} size={148} />
+              <ScoreRing score={effectiveCombinedScore} grade={effectiveCombinedGrade} size={148} />
               <span style={{
                 fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)',
                 letterSpacing: '0.1em', display: 'block', marginTop: 6, textTransform: 'uppercase',
               }}>
-                {lang === 'tr' ? 'Birleşik Skor' : 'Combined Score'}
+                {lang === 'tr' ? 'BirleÅŸik Skor' : 'Combined Score'}
               </span>
             </div>
           </div>
@@ -440,23 +456,23 @@ export default function CombinedReportPage() {
             background: 'var(--paper)', borderLeft: '3px solid var(--olive-deep)',
             fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7,
           }}>
-            {maturityNarrative(combinedScore, lang)}
+            {maturityNarrative(effectiveCombinedScore, lang)}
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             GRI PHASE SCORECARD
-            ══════════════════════════════════════════════════════ */}
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         <div className="print-section" style={{ marginTop: 20, background: 'var(--paper)', border: '1px solid var(--line)' }}>
           <div style={{
             padding: '12px 24px', borderBottom: '1px solid var(--line)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-              {lang === 'tr' ? 'GRI Aşama Kart Skoru' : 'GRI Phase Scorecard'}
+              {lang === 'tr' ? 'GRI AÅŸama Kart Skoru' : 'GRI Phase Scorecard'}
             </span>
             <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)' }}>
-              {phasesCompleted}/4 {lang === 'tr' ? 'tamamlandı' : 'complete'}
+              {phasesCompleted}/4 {lang === 'tr' ? 'tamamlandÄ±' : 'complete'}
             </span>
           </div>
 
@@ -525,7 +541,7 @@ export default function CombinedReportPage() {
                       )}
                     </>
                   ) : (
-                    <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>—</span>
+                    <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>â€”</span>
                   )}
                 </div>
 
@@ -536,7 +552,7 @@ export default function CombinedReportPage() {
                     color: grade ? gradeColor(grade) : 'var(--ink-4)',
                     letterSpacing: '-0.02em', lineHeight: 1,
                   }}>
-                    {grade ?? '—'}
+                    {grade ?? 'â€”'}
                   </span>
                 </div>
 
@@ -557,7 +573,7 @@ export default function CombinedReportPage() {
                           fontFamily: "'IBM Plex Mono', monospace",
                           letterSpacing: '0.04em', cursor: 'pointer',
                         }}>
-                          {lang === 'tr' ? 'detay →' : 'detail →'}
+                          {lang === 'tr' ? 'detay â†’' : 'detail â†’'}
                         </span>
                       </Link>
                     </div>
@@ -576,9 +592,9 @@ export default function CombinedReportPage() {
           })}
         </div>
 
-        {/* ══════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             COMBINED ESG PILLAR SCORES
-            ══════════════════════════════════════════════════════ */}
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         <div className="print-section" style={{
           marginTop: 16, padding: '20px 24px',
           background: 'var(--paper)', border: '1px solid var(--line)',
@@ -587,9 +603,9 @@ export default function CombinedReportPage() {
             fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--ink-4)',
             letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 18,
           }}>
-            {lang === 'tr' ? 'Birleşik ESG Boyut Puanları' : 'Combined ESG Pillar Scores'}
+            {lang === 'tr' ? 'BirleÅŸik ESG Boyut PuanlarÄ±' : 'Combined ESG Pillar Scores'}
             <span style={{ marginLeft: 10, fontWeight: 400, color: 'var(--ink-4)', fontSize: 8.5 }}>
-              {lang === 'tr' ? '(tüm aşamaların ortalaması)' : '(average across completed phases)'}
+              {lang === 'tr' ? '(tÃ¼m aÅŸamalarÄ±n ortalamasÄ±)' : '(average across completed phases)'}
             </span>
           </span>
           <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
@@ -599,18 +615,18 @@ export default function CombinedReportPage() {
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             TABS
-            ══════════════════════════════════════════════════════ */}
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         <div role="tablist" aria-label={lang === 'tr' ? 'Rapor sekmeleri' : 'Report tabs'}
           className="no-print" style={{
             display: 'flex', gap: 0, marginTop: 30, borderBottom: '1px solid var(--line)',
           }}>
           {([
             ['overview', lang === 'tr' ? `Performans Analizi (${allCategories.length})` : `Performance Analysis (${allCategories.length})`],
-            ['actions',  lang === 'tr' ? `Aksiyon Planı (${allRecs.length})` : `Action Plan (${allRecs.length})`],
-            ['evidence', lang === 'tr' ? `Kanıt Kaydı (${allEvidence.length})` : `Evidence Register (${allEvidence.length})`],
-            ['index',    lang === 'tr' ? 'GRI Açıklama Endeksi' : 'GRI Content Index'],
+            ['actions',  lang === 'tr' ? `Aksiyon PlanÄ± (${allRecs.length})` : `Action Plan (${allRecs.length})`],
+            ['evidence', lang === 'tr' ? `KanÄ±t KaydÄ± (${allEvidence.length})` : `Evidence Register (${allEvidence.length})`],
+            ['index',    lang === 'tr' ? 'GRI AÃ§Ä±klama Endeksi' : 'GRI Content Index'],
           ] as [typeof tab, string][]).map(([key, label]) => (
             <button key={key} id={`tab-${key}`} role="tab"
               aria-selected={tab === key} aria-controls={`tabpanel-${key}`}
@@ -628,19 +644,19 @@ export default function CombinedReportPage() {
           ))}
         </div>
 
-        {/* ══════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             TAB: PERFORMANCE ANALYSIS
-            ══════════════════════════════════════════════════════ */}
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {tab === 'overview' && (
           <div role="tabpanel" id="tabpanel-overview" aria-labelledby="tab-overview"
             className="print-section" style={{ marginTop: 24 }}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
               <h2 style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' }}>
-                {lang === 'tr' ? 'Tüm Aşamalarda Kategori Performansı' : 'Category Performance — All Phases'}
+                {lang === 'tr' ? 'TÃ¼m AÅŸamalarda Kategori PerformansÄ±' : 'Category Performance â€” All Phases'}
               </h2>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)' }}>
-                {allCategories.length} {lang === 'tr' ? 'kategori · en düşük → en yüksek' : 'categories · lowest → highest'}
+                {allCategories.length} {lang === 'tr' ? 'kategori Â· en dÃ¼ÅŸÃ¼k â†’ en yÃ¼ksek' : 'categories Â· lowest â†’ highest'}
               </span>
             </div>
 
@@ -697,11 +713,11 @@ export default function CombinedReportPage() {
             {/* Legend */}
             <div style={{ marginTop: 12, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {[
-                ['#c1121f', lang === 'tr' ? '0–19%  Kritik'    : '0–19%  Critical'   ],
-                ['#e07b39', lang === 'tr' ? '20–39% Başlangıç' : '20–39% Initial'    ],
-                ['#b5835a', lang === 'tr' ? '40–59% Gelişiyor' : '40–59% Developing' ],
-                ['#52796f', lang === 'tr' ? '60–79% İyi'       : '60–79% Good'       ],
-                ['#2d6a4f', lang === 'tr' ? '80–100% Mükemmel' : '80–100% Excellent' ],
+                ['#c1121f', lang === 'tr' ? '0â€“19%  Kritik'    : '0â€“19%  Critical'   ],
+                ['#e07b39', lang === 'tr' ? '20â€“39% BaÅŸlangÄ±Ã§' : '20â€“39% Initial'    ],
+                ['#b5835a', lang === 'tr' ? '40â€“59% GeliÅŸiyor' : '40â€“59% Developing' ],
+                ['#52796f', lang === 'tr' ? '60â€“79% Ä°yi'       : '60â€“79% Good'       ],
+                ['#2d6a4f', lang === 'tr' ? '80â€“100% MÃ¼kemmel' : '80â€“100% Excellent' ],
               ].map(([color, lbl]) => (
                 <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ width: 10, height: 10, borderRadius: 2, background: color as string, flexShrink: 0 }} />
@@ -722,8 +738,8 @@ export default function CombinedReportPage() {
                 </h3>
                 <p style={{ fontSize: 11, color: 'var(--ink-3)' }}>
                   {lang === 'tr'
-                    ? 'Tüm GRI aşamaları tek dosyada — yönetim kurulu ve yatırımcı sunumuna hazır.'
-                    : 'All GRI phases in a single document — board-ready and investor-ready.'}
+                    ? 'TÃ¼m GRI aÅŸamalarÄ± tek dosyada â€” yÃ¶netim kurulu ve yatÄ±rÄ±mcÄ± sunumuna hazÄ±r.'
+                    : 'All GRI phases in a single document â€” board-ready and investor-ready.'}
                 </p>
               </div>
               <button className="btn btn-primary btn-sm" onClick={() => window.print()} style={{ flexShrink: 0 }}>
@@ -733,19 +749,19 @@ export default function CombinedReportPage() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             TAB: ACTION PLAN
-            ══════════════════════════════════════════════════════ */}
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {tab === 'actions' && (
           <div role="tabpanel" id="tabpanel-actions" aria-labelledby="tab-actions"
             className="print-section" style={{ marginTop: 24 }}>
             {allRecs.length === 0 ? (
               <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', padding: '56px 40px', textAlign: 'center' }}>
                 <p style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
-                  {lang === 'tr' ? 'Tebrikler — Aksiyon önerisi bulunmuyor!' : 'Excellent — No Action Items Found!'}
+                  {lang === 'tr' ? 'Tebrikler â€” Aksiyon Ã¶nerisi bulunmuyor!' : 'Excellent â€” No Action Items Found!'}
                 </p>
                 <p style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                  {lang === 'tr' ? 'Tüm kategorilerde mükemmel performans.' : 'Excellent performance across all categories.'}
+                  {lang === 'tr' ? 'TÃ¼m kategorilerde mÃ¼kemmel performans.' : 'Excellent performance across all categories.'}
                 </p>
               </div>
             ) : (
@@ -753,9 +769,9 @@ export default function CombinedReportPage() {
                 {/* Priority summary */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
                   {[
-                    { count: highRecs.length,   label: lang === 'tr' ? 'Yüksek Öncelik' : 'High Priority',   color: '#c1121f' },
-                    { count: mediumRecs.length, label: lang === 'tr' ? 'Orta Öncelik'   : 'Medium Priority',  color: '#b5835a' },
-                    { count: lowRecs.length,    label: lang === 'tr' ? 'Düşük Öncelik'  : 'Low Priority',     color: '#52796f' },
+                    { count: highRecs.length,   label: lang === 'tr' ? 'YÃ¼ksek Ã–ncelik' : 'High Priority',   color: '#c1121f' },
+                    { count: mediumRecs.length, label: lang === 'tr' ? 'Orta Ã–ncelik'   : 'Medium Priority',  color: '#b5835a' },
+                    { count: lowRecs.length,    label: lang === 'tr' ? 'DÃ¼ÅŸÃ¼k Ã–ncelik'  : 'Low Priority',     color: '#52796f' },
                     { count: allRecs.length,    label: lang === 'tr' ? 'Toplam Aksiyon' : 'Total Actions',    color: 'var(--ink)' },
                   ].filter(({ count }) => count > 0).map(({ count, label, color }) => (
                     <div key={label} style={{
@@ -787,9 +803,9 @@ export default function CombinedReportPage() {
                               color: pColor, letterSpacing: '0.1em', textTransform: 'uppercase',
                               border: `1px solid ${pColor}`, padding: '2px 7px',
                             }}>
-                              {r.priority === 'High'   ? (lang === 'tr' ? 'Yüksek' : 'High')   :
+                              {r.priority === 'High'   ? (lang === 'tr' ? 'YÃ¼ksek' : 'High')   :
                                r.priority === 'Medium' ? (lang === 'tr' ? 'Orta'   : 'Medium') :
-                                                         (lang === 'tr' ? 'Düşük'  : 'Low')}
+                                                         (lang === 'tr' ? 'DÃ¼ÅŸÃ¼k'  : 'Low')}
                             </span>
                             <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: "'IBM Plex Mono', monospace" }}>{r.category}</span>
                             {r.gri_standard && (
@@ -822,9 +838,9 @@ export default function CombinedReportPage() {
                                 border: `1px solid ${r.effort === 'High' ? 'var(--danger)' : r.effort === 'Medium' ? 'var(--amber)' : 'var(--olive-deep)'}`,
                                 padding: '1px 6px',
                               }}>
-                                {r.effort === 'High'   ? (lang === 'tr' ? 'Yüksek Efor' : 'High Effort')   :
+                                {r.effort === 'High'   ? (lang === 'tr' ? 'YÃ¼ksek Efor' : 'High Effort')   :
                                  r.effort === 'Medium' ? (lang === 'tr' ? 'Orta Efor'   : 'Medium Effort') :
-                                                         (lang === 'tr' ? 'Düşük Efor'  : 'Low Effort')}
+                                                         (lang === 'tr' ? 'DÃ¼ÅŸÃ¼k Efor'  : 'Low Effort')}
                               </span>
                             )}
                             {r.timeline_days && (
@@ -832,7 +848,7 @@ export default function CombinedReportPage() {
                                 fontSize: 9, fontFamily: "'IBM Plex Mono', monospace",
                                 color: 'var(--ink-4)', background: 'var(--cream-deep)', padding: '2px 7px',
                               }}>
-                                {r.timeline_days}{lang === 'tr' ? ' gün' : 'd'}
+                                {r.timeline_days}{lang === 'tr' ? ' gÃ¼n' : 'd'}
                               </span>
                             )}
                           </div>
@@ -855,7 +871,7 @@ export default function CombinedReportPage() {
                               fontFamily: "'IBM Plex Mono', monospace", fontSize: 8.5, color: 'var(--olive-deep)',
                               letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, flexShrink: 0, paddingTop: 1,
                             }}>
-                              {lang === 'tr' ? 'Hızlı Kazanım' : 'Quick Win'}
+                              {lang === 'tr' ? 'HÄ±zlÄ± KazanÄ±m' : 'Quick Win'}
                             </span>
                             <span style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55 }}>{r.quick_win}</span>
                           </div>
@@ -871,13 +887,13 @@ export default function CombinedReportPage() {
                     fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--ink-4)',
                     letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 16,
                   }}>
-                    {lang === 'tr' ? 'Uygulama Yol Haritası' : 'Implementation Roadmap'}
+                    {lang === 'tr' ? 'Uygulama Yol HaritasÄ±' : 'Implementation Roadmap'}
                   </span>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
                     {[
-                      { days: 90,  label: lang === 'tr' ? '0–90 Gün'   : '0–90 Days',  sub: lang === 'tr' ? 'Hızlı kazanımlar' : 'Quick wins'   },
-                      { days: 180, label: lang === 'tr' ? '90–180 Gün' : '90–180 Days', sub: lang === 'tr' ? 'Orta vadeli'      : 'Mid-term'     },
-                      { days: 365, label: lang === 'tr' ? '180–365 Gün': '180–365 Days',sub: lang === 'tr' ? 'Uzun vadeli'      : 'Long-term'    },
+                      { days: 90,  label: lang === 'tr' ? '0â€“90 GÃ¼n'   : '0â€“90 Days',  sub: lang === 'tr' ? 'HÄ±zlÄ± kazanÄ±mlar' : 'Quick wins'   },
+                      { days: 180, label: lang === 'tr' ? '90â€“180 GÃ¼n' : '90â€“180 Days', sub: lang === 'tr' ? 'Orta vadeli'      : 'Mid-term'     },
+                      { days: 365, label: lang === 'tr' ? '180â€“365 GÃ¼n': '180â€“365 Days',sub: lang === 'tr' ? 'Uzun vadeli'      : 'Long-term'    },
                     ].map(({ days, label, sub }) => {
                       const lowerBound: Record<number, number> = { 90: 0, 180: 90, 365: 180 };
                       const bucket = allRecs.filter((r) => {
@@ -891,7 +907,7 @@ export default function CombinedReportPage() {
                             {label}
                           </div>
                           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', marginBottom: 10 }}>
-                            {bucket.length} {lang === 'tr' ? 'aksiyon' : 'actions'} · {sub}
+                            {bucket.length} {lang === 'tr' ? 'aksiyon' : 'actions'} Â· {sub}
                           </div>
                           {bucket.slice(0, 5).map((r, j) => (
                             <div key={j} style={{
@@ -916,18 +932,18 @@ export default function CombinedReportPage() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             TAB: EVIDENCE REGISTER
-            ══════════════════════════════════════════════════════ */}
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {tab === 'evidence' && (
           <div role="tabpanel" id="tabpanel-evidence" aria-labelledby="tab-evidence" style={{ marginTop: 24 }}>
             {allEvidence.length === 0 ? (
               <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', padding: '56px 40px', textAlign: 'center' }}>
                 <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 8 }}>
-                  {lang === 'tr' ? 'Hiçbir aşamada not veya belge eklenmemiş.' : 'No notes or documents added across any phase.'}
+                  {lang === 'tr' ? 'HiÃ§bir aÅŸamada not veya belge eklenmemiÅŸ.' : 'No notes or documents added across any phase.'}
                 </p>
                 <p style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                  {lang === 'tr' ? 'Değerlendirme sırasında soru başına not ve kanıt dosyası ekleyebilirsiniz.' : 'Add per-question notes and evidence files during the assessment.'}
+                  {lang === 'tr' ? 'DeÄŸerlendirme sÄ±rasÄ±nda soru baÅŸÄ±na not ve kanÄ±t dosyasÄ± ekleyebilirsiniz.' : 'Add per-question notes and evidence files during the assessment.'}
                 </p>
               </div>
             ) : (
@@ -989,7 +1005,7 @@ export default function CombinedReportPage() {
                               onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
                               onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
                             >
-                              <span style={{ fontSize: 16 }}>📎</span>
+                              <span style={{ fontSize: 16 }}>ðŸ“Ž</span>
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>{doc.title}</div>
                                 {doc.file_size_display && (
@@ -999,7 +1015,7 @@ export default function CombinedReportPage() {
                                 )}
                               </div>
                               <span style={{ fontSize: 10, color: 'var(--olive-deep)' }}>
-                                {lang === 'tr' ? 'İndir ↓' : 'Download ↓'}
+                                {lang === 'tr' ? 'Ä°ndir â†“' : 'Download â†“'}
                               </span>
                             </div>
                           </a>
@@ -1013,26 +1029,26 @@ export default function CombinedReportPage() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             TAB: GRI CONTENT INDEX
-            ══════════════════════════════════════════════════════ */}
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {tab === 'index' && (
           <div role="tabpanel" id="tabpanel-index" aria-labelledby="tab-index"
             className="print-section" style={{ marginTop: 24 }}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
               <h2 style={{ fontSize: 15, fontWeight: 600 }}>
-                {lang === 'tr' ? 'GRI İçerik Endeksi' : 'GRI Content Index'}
+                {lang === 'tr' ? 'GRI Ä°Ã§erik Endeksi' : 'GRI Content Index'}
               </h2>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)' }}>
-                GRI 1 · GRI 2 · GRI 3 · {lang === 'tr' ? 'Sektör' : 'Sector'}
+                GRI 1 Â· GRI 2 Â· GRI 3 Â· {lang === 'tr' ? 'SektÃ¶r' : 'Sector'}
               </span>
             </div>
 
             <div style={{ marginBottom: 16, padding: '12px 16px', background: 'var(--paper)', border: '1px solid var(--line)', fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6 }}>
               {lang === 'tr'
-                ? 'Bu tablo, kuruluşunuzun hangi GRI açıklamalarını kapsadığını gösterir. Tamamlanmış aşamalar ✓ ile işaretlenmiştir.'
-                : 'This table shows which GRI disclosures are covered by your organisation\'s completed assessments. Completed phases are marked ✓.'}
+                ? 'Bu tablo, kuruluÅŸunuzun hangi GRI aÃ§Ä±klamalarÄ±nÄ± kapsadÄ±ÄŸÄ±nÄ± gÃ¶sterir. TamamlanmÄ±ÅŸ aÅŸamalar âœ“ ile iÅŸaretlenmiÅŸtir.'
+                : 'This table shows which GRI disclosures are covered by your organisation\'s completed assessments. Completed phases are marked âœ“.'}
             </div>
 
             {GRI_INDEX.map(({ section, phase, disclosures }) => {
@@ -1056,7 +1072,7 @@ export default function CombinedReportPage() {
                           marginLeft: 12, fontFamily: "'IBM Plex Mono', monospace",
                           fontSize: 10, color: gradeColor(attempt.overall_grade),
                         }}>
-                          {Math.round(attempt.total_score)}% · {attempt.overall_grade}
+                          {Math.round(attempt.total_score)}% Â· {attempt.overall_grade}
                         </span>
                       )}
                     </div>
@@ -1068,7 +1084,7 @@ export default function CombinedReportPage() {
                       border: completed ? 'none' : '1px solid var(--ink-4)',
                     }}>
                       {completed
-                        ? (lang === 'tr' ? '✓ Tamamlandı' : '✓ Completed')
+                        ? (lang === 'tr' ? 'âœ“ TamamlandÄ±' : 'âœ“ Completed')
                         : (lang === 'tr' ? 'Bekliyor' : 'Pending')}
                     </span>
                   </div>
@@ -1078,8 +1094,8 @@ export default function CombinedReportPage() {
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--line)' }}>
                         {[
-                          lang === 'tr' ? 'Açıklama' : 'Disclosure',
-                          lang === 'tr' ? 'Başlık' : 'Title',
+                          lang === 'tr' ? 'AÃ§Ä±klama' : 'Disclosure',
+                          lang === 'tr' ? 'BaÅŸlÄ±k' : 'Title',
                           lang === 'tr' ? 'Durum' : 'Status',
                           lang === 'tr' ? 'Konum' : 'Location',
                         ].map((h) => (
@@ -1112,13 +1128,13 @@ export default function CombinedReportPage() {
                               color: completed ? 'var(--olive-deep)' : 'var(--ink-4)',
                               fontWeight: completed ? 700 : 400,
                             }}>
-                              {completed ? (lang === 'tr' ? '✓ Kapsandı' : '✓ Covered') : '—'}
+                              {completed ? (lang === 'tr' ? 'âœ“ KapsandÄ±' : 'âœ“ Covered') : 'â€”'}
                             </span>
                           </td>
                           <td style={{ padding: '10px 16px', fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
                             {completed && attempt
                               ? `${lang === 'tr' ? 'Rapor' : 'Report'} REF-${String(attempt.id).padStart(4, '0')}`
-                              : '—'}
+                              : 'â€”'}
                           </td>
                         </tr>
                       ))}
@@ -1136,15 +1152,15 @@ export default function CombinedReportPage() {
                     fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--olive-deep)',
                     letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 700,
                   }}>
-                    {lang === 'tr' ? 'GRI Kullanım Beyanı' : 'GRI Statement of Use'}
+                    {lang === 'tr' ? 'GRI KullanÄ±m BeyanÄ±' : 'GRI Statement of Use'}
                   </div>
                   <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.65, maxWidth: 620 }}>
                     {companyName
                       ? `${companyName} ${lang === 'tr'
-                          ? `bu raporu GRI Standartları çerçevesini referans alarak hazırlamıştır. ${phasesCompleted}/4 aşama tamamlanmıştır.`
+                          ? `bu raporu GRI StandartlarÄ± Ã§erÃ§evesini referans alarak hazÄ±rlamÄ±ÅŸtÄ±r. ${phasesCompleted}/4 aÅŸama tamamlanmÄ±ÅŸtÄ±r.`
                           : `has prepared this report with reference to the GRI Standards framework. ${phasesCompleted}/4 phases completed.`}`
                       : lang === 'tr'
-                        ? `Bu rapor GRI Standartları çerçevesini referans alarak hazırlanmıştır. ${phasesCompleted}/4 aşama tamamlanmıştır.`
+                        ? `Bu rapor GRI StandartlarÄ± Ã§erÃ§evesini referans alarak hazÄ±rlanmÄ±ÅŸtÄ±r. ${phasesCompleted}/4 aÅŸama tamamlanmÄ±ÅŸtÄ±r.`
                         : `This report has been prepared with reference to the GRI Standards framework. ${phasesCompleted}/4 phases completed.`}
                   </p>
                 </div>
@@ -1159,7 +1175,7 @@ export default function CombinedReportPage() {
           </div>
         )}
 
-        {/* ── Final PDF CTA ── */}
+        {/* â”€â”€ Final PDF CTA â”€â”€ */}
         <div className="no-print" style={{
           marginTop: 40, padding: '24px 28px',
           background: 'var(--ink)', color: 'var(--cream)',
@@ -1167,12 +1183,12 @@ export default function CombinedReportPage() {
         }}>
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 500, marginBottom: 4, color: '#fff' }}>
-              {lang === 'tr' ? 'Birleştirilmiş GRI Raporunuzu PDF Olarak Kaydedin' : 'Save Your Consolidated GRI Report as PDF'}
+              {lang === 'tr' ? 'BirleÅŸtirilmiÅŸ GRI Raporunuzu PDF Olarak Kaydedin' : 'Save Your Consolidated GRI Report as PDF'}
             </h3>
             <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
               {lang === 'tr'
-                ? 'Tüm GRI aşamaları, aksiyon planı ve kanıt kaydı tek belgede — yönetim kurulu ve yatırımcı sunumuna hazır.'
-                : 'All GRI phases, action plan and evidence register in one document — board-ready and investor-ready.'}
+                ? 'TÃ¼m GRI aÅŸamalarÄ±, aksiyon planÄ± ve kanÄ±t kaydÄ± tek belgede â€” yÃ¶netim kurulu ve yatÄ±rÄ±mcÄ± sunumuna hazÄ±r.'
+                : 'All GRI phases, action plan and evidence register in one document â€” board-ready and investor-ready.'}
             </p>
           </div>
           <button
