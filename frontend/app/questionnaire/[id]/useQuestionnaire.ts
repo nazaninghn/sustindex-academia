@@ -56,10 +56,27 @@ export function useQuestionnaire() {
   const [pendingFiles, setPendingFiles] = useState<Record<number, File[]>>({});
   /** N/A toggle — keyed by question.id. When true, the question is excluded from scoring. */
   const [naAnswers,    setNaAnswers]    = useState<Record<number, boolean>>({});
+  /** Bookmarked/flagged questions — persisted to localStorage, keyed by question.id. */
+  const [bookmarks,    setBookmarks]    = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
+
+  /* ── Bookmarks: load from localStorage on mount, persist on change ── */
+  const BOOKMARK_KEY = `sx_bookmarks_${id}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(BOOKMARK_KEY);
+      if (raw) setBookmarks(JSON.parse(raw));
+    } catch { /* incognito / quota — ignore */ }
+  // Only run once on mount; id is stable for the lifetime of the component
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem(BOOKMARK_KEY, JSON.stringify(bookmarks)); }
+    catch { /* ignore */ }
+  }, [BOOKMARK_KEY, bookmarks]);
 
   /**
    * Lightweight re-fetch: only updates question texts + survey name.
@@ -159,7 +176,10 @@ export function useQuestionnaire() {
   const textAns     = q ? (textAnswers[q.id]  || '') : '';
   const files       = q ? (pendingFiles[q.id] || []) : [];
   /** Whether the current question has been marked Not Applicable */
-  const isNA        = q ? (naAnswers[q.id] ?? false) : false;
+  const isNA           = q ? (naAnswers[q.id]   ?? false) : false;
+  /** Whether the current question is bookmarked for review */
+  const isBookmarked   = q ? (bookmarks[q.id]   ?? false) : false;
+  const bookmarkedCount = Object.values(bookmarks).filter(Boolean).length;
 
   // Fix R5-M-01: count questions with a choice, text answer, or N/A flag
   const answeredCount = questions.filter((qItem) =>
@@ -295,6 +315,13 @@ export function useQuestionnaire() {
   const updateNote = (val: string) => {
     if (!q) return;
     setNotes((prev) => ({ ...prev, [q.id]: val }));
+  };
+
+  /** Bookmark / un-bookmark the current question for later review. */
+  const toggleBookmark = () => {
+    if (!q) return;
+    const qid = q.id;
+    setBookmarks((prev) => ({ ...prev, [qid]: !prev[qid] }));
   };
 
   /** Toggle the Not-Applicable flag for the current question.
@@ -538,6 +565,9 @@ export function useQuestionnaire() {
     files,
     isNA,
     naAnswers,
+    isBookmarked,
+    bookmarkedCount,
+    bookmarks,
     progress,
     isTextType,
     isMixedType,
@@ -553,6 +583,7 @@ export function useQuestionnaire() {
     /* handlers */
     toggleChoice,
     toggleNA,
+    toggleBookmark,
     addFiles,
     removeFile,
     updateTextAnswer,

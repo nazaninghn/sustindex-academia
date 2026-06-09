@@ -12,6 +12,8 @@ interface Props {
   currentIdx: number;
   answers: Record<number, number[]>;
   textAnswers: Record<number, string>;
+  bookmarks?: Record<number, boolean>;
+  naAnswers?: Record<number, boolean>;
   unlockedUpToPhase: number;
   lang: string;
   isFirst: boolean;
@@ -30,6 +32,8 @@ export function QuestionNav({
   currentIdx,
   answers,
   textAnswers,
+  bookmarks = {},
+  naAnswers = {},
   unlockedUpToPhase,
   lang,
   isFirst,
@@ -69,19 +73,20 @@ export function QuestionNav({
         {/* Dot progress */}
         <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', maxWidth: 400, justifyContent: 'center' }}>
           {questions.map((qItem, i) => {
-            const dotPhaseNum = GRI_PHASE_DEFS.find(({ match }) => qItem.category_name?.includes(match))?.num ?? 1;
-            const isLocked    = dotPhaseNum > unlockedUpToPhase;
-            const isAnswered  = (answers[qItem.id] ?? []).length > 0 || (textAnswers[qItem.id] ?? '').trim().length > 0;
+            const dotPhaseNum  = GRI_PHASE_DEFS.find(({ match }) => qItem.category_name?.includes(match))?.num ?? 1;
+            const isLocked     = dotPhaseNum > unlockedUpToPhase;
+            const isAnswered   = naAnswers[qItem.id] || (answers[qItem.id] ?? []).length > 0 || (textAnswers[qItem.id] ?? '').trim().length > 0;
+            const isBookmarked = bookmarks[qItem.id] ?? false;
             return (
               <span
                 key={qItem.id}
                 role={isLocked ? undefined : 'button'}
                 tabIndex={isLocked ? -1 : 0}
-                aria-label={`Question ${i + 1}${isAnswered ? ' (answered)' : ''}${isLocked ? ' (locked)' : ''}`}
+                aria-label={`Question ${i + 1}${isAnswered ? ' (answered)' : ''}${isLocked ? ' (locked)' : ''}${isBookmarked ? ' (flagged)' : ''}`}
                 aria-current={i === currentIdx ? 'step' : undefined}
                 onClick={() => { if (!isLocked) onJumpTo(i); }}
                 onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onJumpTo(i); } }}
-                title={`${i + 1}`}
+                title={`Q${i + 1}${isBookmarked ? ' 🔖' : ''}`}
                 style={{
                   width:  i === currentIdx ? 18 : 5, height: 5,
                   background: isLocked
@@ -92,9 +97,11 @@ export function QuestionNav({
                   borderRadius: 3, transition: 'all 0.2s ease',
                   cursor: isLocked ? 'default' : 'pointer',
                   outline: 'none', opacity: isLocked ? 0.35 : 1,
+                  // Amber glow on bookmarked dots
+                  boxShadow: isBookmarked ? '0 0 0 2px var(--amber)' : undefined,
                 }}
-                onFocus={(e) => { if (!isLocked) e.currentTarget.style.boxShadow = '0 0 0 2px var(--olive)'; }}
-                onBlur={(e)  => { e.currentTarget.style.boxShadow = 'none'; }}
+                onFocus={(e) => { if (!isLocked) e.currentTarget.style.boxShadow = isBookmarked ? '0 0 0 2px var(--amber), 0 0 0 3px var(--olive)' : '0 0 0 2px var(--olive)'; }}
+                onBlur={(e)  => { e.currentTarget.style.boxShadow = isBookmarked ? '0 0 0 2px var(--amber)' : 'none'; }}
               />
             );
           })}

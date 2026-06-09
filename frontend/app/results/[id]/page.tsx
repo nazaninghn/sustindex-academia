@@ -261,6 +261,28 @@ export default function ResultsPage() {
                 {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'} <Icon.plus />
               </button>
             </Link>
+            {/* Email report link — opens default mail client with pre-filled subject/body */}
+            {attempt && (
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => {
+                  const subject = encodeURIComponent(
+                    lang === 'tr'
+                      ? `GRI Sürdürülebilirlik Raporu — ${attempt.survey_name} — ${Math.round(attempt.total_score || 0)}%`
+                      : `GRI Sustainability Report — ${attempt.survey_name} — ${Math.round(attempt.total_score || 0)}%`
+                  );
+                  const url    = `${window.location.origin}/results/${id}`;
+                  const body   = encodeURIComponent(
+                    lang === 'tr'
+                      ? `Merhaba,\n\nSürdürülebilirlik değerlendirme raporum ile paylaşmak istedim.\n\nAnket: ${attempt.survey_name}\nPuan: ${Math.round(attempt.total_score || 0)}%  |  Not: ${attempt.overall_grade}\n\nRaporu görüntülemek için:\n${url}\n\nİyi çalışmalar.`
+                      : `Hello,\n\nI wanted to share my sustainability assessment report with you.\n\nSurvey: ${attempt.survey_name}\nScore: ${Math.round(attempt.total_score || 0)}%  |  Grade: ${attempt.overall_grade}\n\nView the full report:\n${url}\n\nBest regards.`
+                  );
+                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                }}
+              >
+                ✉ {lang === 'tr' ? 'E-posta ile Paylaş' : 'Share via Email'}
+              </button>
+            )}
             <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
               {/* Fix R6-18 / L-11: window.print() opens the browser print dialog.
                   PDF export via jspdf/html2canvas was removed (R5-L-01). */}

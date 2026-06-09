@@ -370,6 +370,26 @@ export default function CombinedReportPage() {
                 {lang === 'tr' ? 'DeÄŸerlendirmeler' : 'Assessments'} <Icon.plus />
               </button>
             </Link>
+            {/* Email share button */}
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => {
+                const subject = encodeURIComponent(
+                  lang === 'tr'
+                    ? `Birleşik GRI Raporu — ${effectiveCombinedScore}%`
+                    : `Combined GRI Report — ${effectiveCombinedScore}%`
+                );
+                const url  = `${window.location.origin}/results/combined`;
+                const body = encodeURIComponent(
+                  lang === 'tr'
+                    ? `Merhaba,\n\nBirleşik GRI sürdürülebilirlik raporumu paylaşmak istedim.\n\nGenel Puan: ${effectiveCombinedScore}%  |  Not: ${effectiveCombinedGrade}\n\nRapor: ${url}`
+                    : `Hello,\n\nI wanted to share my Combined GRI Sustainability Report.\n\nOverall Score: ${effectiveCombinedScore}%  |  Grade: ${effectiveCombinedGrade}\n\nReport: ${url}`
+                );
+                window.location.href = `mailto:?subject=${subject}&body=${body}`;
+              }}
+            >
+              ✉ {lang === 'tr' ? 'E-posta ile Paylaş' : 'Share via Email'}
+            </button>
             <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
               <Icon.download /> {lang === 'tr' ? 'PDF Kaydet' : 'Save as PDF'}
             </button>

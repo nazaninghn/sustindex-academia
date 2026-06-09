@@ -21,12 +21,14 @@ interface Props {
   isMixedType: boolean;
   hasChoices: boolean;
   isNA: boolean;
+  isBookmarked: boolean;
   GRI_PHASES: GriPhase[];
   currentPhase: GriPhase | null;
   unlockedUpToPhase: number;
   onToggleChoice: (choiceId: number) => void;
   onTextChange: (val: string) => void;
   onToggleNA: () => void;
+  onToggleBookmark: () => void;
 }
 
 export function QuestionView({
@@ -42,12 +44,14 @@ export function QuestionView({
   isMixedType,
   hasChoices,
   isNA,
+  isBookmarked,
   GRI_PHASES,
   currentPhase,
   unlockedUpToPhase,
   onToggleChoice,
   onTextChange,
   onToggleNA,
+  onToggleBookmark,
 }: Props) {
   return (
     <>
@@ -144,6 +148,33 @@ export function QuestionView({
         )}
       </div>
 
+      {/* Not-Applicable toggle + Bookmark button */}
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {/* Bookmark button */}
+        <button
+          type="button"
+          onClick={onToggleBookmark}
+          aria-pressed={isBookmarked}
+          title={lang === 'tr'
+            ? (isBookmarked ? 'Yer imini kaldır' : 'Bu soruyu yer imine ekle')
+            : (isBookmarked ? 'Remove bookmark' : 'Bookmark this question')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '5px 10px',
+            background: isBookmarked ? 'rgba(181,138,46,0.12)' : 'transparent',
+            border: `1px solid ${isBookmarked ? 'var(--amber)' : 'var(--line)'}`,
+            color: isBookmarked ? 'var(--amber)' : 'var(--ink-4)',
+            cursor: 'pointer',
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5,
+            letterSpacing: '0.06em',
+            transition: 'all 0.15s',
+          }}
+        >
+          {isBookmarked ? '🔖' : '🏷'} {isBookmarked
+            ? (lang === 'tr' ? 'İşaretlendi' : 'Flagged')
+            : (lang === 'tr' ? 'İşaretle' : 'Flag')}
+        </button>
+      </div>
       {/* Not-Applicable toggle */}
       <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
         <button

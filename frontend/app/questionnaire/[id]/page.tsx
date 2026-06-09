@@ -78,6 +78,16 @@ export default function QuestionnairePage() {
                 {qs.progress}%
               </span>
             </div>
+            {/* Bookmark indicator — shows count when questions are flagged */}
+            {qs.bookmarkedCount > 0 && (
+              <span style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 10, color: 'var(--amber)',
+                letterSpacing: '0.06em',
+              }}>
+                🔖 {qs.bookmarkedCount}
+              </span>
+            )}
             {/* Auto-save flash indicator */}
             <span style={{
               fontFamily: "'IBM Plex Mono', monospace",
@@ -161,12 +171,14 @@ export default function QuestionnairePage() {
           isMixedType={qs.isMixedType}
           hasChoices={qs.hasChoices}
           isNA={qs.isNA}
+          isBookmarked={qs.isBookmarked}
           GRI_PHASES={qs.GRI_PHASES}
           currentPhase={qs.currentPhase}
           unlockedUpToPhase={qs.unlockedUpToPhase}
           onToggleChoice={qs.toggleChoice}
           onTextChange={qs.updateTextAnswer}
           onToggleNA={qs.toggleNA}
+          onToggleBookmark={qs.toggleBookmark}
         />
 
         <EvidencePanel
@@ -184,6 +196,8 @@ export default function QuestionnairePage() {
           currentIdx={qs.currentIdx}
           answers={qs.answers}
           textAnswers={qs.textAnswers}
+          bookmarks={qs.bookmarks}
+          naAnswers={qs.naAnswers}
           unlockedUpToPhase={qs.unlockedUpToPhase}
           lang={qs.lang}
           isFirst={qs.isFirst}
