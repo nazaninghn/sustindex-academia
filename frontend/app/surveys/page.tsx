@@ -298,65 +298,70 @@ function StepCard({
           </div>
         </div>
 
-        {/* ── Completed attempts: show score row(s) ── */}
+        {/* ── Completed: score + Results ── */}
         {isDone && done && (
           <div style={{
             marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            flexWrap: 'wrap', gap: 10,
           }}>
-            {/* Most-recent completed attempt score */}
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              flexWrap: 'wrap', gap: 10,
-            }}>
-              <div style={{ display: 'flex', gap: 20, alignItems: 'baseline' }}>
-                <div>
-                  <span style={{
-                    fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-                    fontSize: 26, letterSpacing: '-0.04em',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {Math.round(done.total_score ?? 0)}
-                  </span>
-                  <span style={{ fontSize: 10, color: 'var(--ink-3)', marginLeft: 4 }}>pts</span>
-                </div>
-                {done.overall_grade && (
-                  <span style={{
-                    fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600,
-                    fontSize: 18, color: gradeColor(done.overall_grade),
-                  }}>
-                    {done.overall_grade}
-                  </span>
-                )}
-                {done.completed_at && (
-                  <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                    {new Date(done.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB')}
-                  </span>
-                )}
-                {allDone.length > 1 && (
-                  <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                    +{allDone.length - 1} {lang === 'tr' ? 'önceki' : 'prev'}
-                  </span>
-                )}
+            <div style={{ display: 'flex', gap: 20, alignItems: 'baseline' }}>
+              <div>
+                <span style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                  fontSize: 26, letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {Math.round(done.total_score ?? 0)}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--ink-3)', marginLeft: 4 }}>pts</span>
               </div>
+              {done.overall_grade && (
+                <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 18, color: gradeColor(done.overall_grade) }}>
+                  {done.overall_grade}
+                </span>
+              )}
+              {done.completed_at && (
+                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                  {new Date(done.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB')}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {allDone.length > 1 && (
+                <a href="/history" style={{ textDecoration: 'none' }}>
+                  <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", cursor: 'pointer' }}>
+                    +{allDone.length - 1} {lang === 'tr' ? 'önceki →' : 'prev →'}
+                  </span>
+                </a>
+              )}
               <a href={`/results/${done.id}`} style={{ textDecoration: 'none' }}>
                 <button className="btn btn-outline btn-sm">
                   {lang === 'tr' ? 'Sonuçlar' : 'Results'} <Icon.arrow />
                 </button>
               </a>
+              {/* Start New alongside Results — clearly separated */}
+              {canStart && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => onStart(step)}
+                  disabled={starting}
+                >
+                  {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? '+ Yeni' : '+ New')} <Icon.arrow />
+                </button>
+              )}
             </div>
           </div>
         )}
 
-        {/* ── In-progress: continue button ── */}
+        {/* ── In-progress: continue ── */}
         {isLive && live && (
           <div style={{
-            marginTop: 12, paddingTop: 12,
-            borderTop: isDone ? 'none' : '1px solid var(--line)',
+            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             flexWrap: 'wrap', gap: 8,
           }}>
-            <span style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 500 }}>
-              ● {lang === 'tr' ? 'Devam eden değerlendirme' : 'Assessment in progress'}
+            <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+              {lang === 'tr' ? 'Kaldığınız yerden devam edin.' : 'Pick up where you left off.'}
             </span>
             <button
               className="btn btn-primary btn-sm"
@@ -368,29 +373,24 @@ function StepCard({
           </div>
         )}
 
-        {/* ── Start New: always visible when not locked (phases 1–3) ── */}
-        {canStart && (
+        {/* ── Active (no attempts yet): start ── */}
+        {isActive && phase < 4 && !isDone && !isLive && (
           <div style={{
-            marginTop: 12, paddingTop: 12,
-            borderTop: (isDone || isLive) ? '1px dashed var(--line)' : '1px solid var(--line)',
+            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
-            <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-              {isDone || isLive
-                ? (lang === 'tr' ? 'Yeni ve bağımsız bir değerlendirme başlat' : 'Start a fresh independent assessment')
-                : (lang === 'tr' ? 'Değerlendirmeyi başlat' : 'Begin this assessment')}
-            </span>
+            {!step.survey ? (
+              <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em' }}>
+                ⚠ {lang === 'tr' ? 'Anket verisi henüz yüklenmedi.' : 'Survey data not loaded yet.'}
+              </span>
+            ) : <span />}
             <button
               className="btn btn-primary btn-sm"
               onClick={() => onStart(step)}
-              disabled={starting}
-              style={(isDone || isLive) ? { background: 'var(--ink)', color: 'var(--cream)' } : {}}
+              disabled={starting || !step.survey}
+              style={!step.survey ? { opacity: 0.35, cursor: 'not-allowed' } : {}}
             >
-              {starting
-                ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…')
-                : isDone || isLive
-                  ? (lang === 'tr' ? '+ Yeni Başlat' : '+ Start New')
-                  : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
+              {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
             </button>
           </div>
         )}
@@ -513,12 +513,15 @@ export default function SurveysPage() {
       ? (surveys.find((s) => sname(s).includes(def.nameMatch)) ?? null)
       : null;  // sector survey resolved later by selected sector
 
-    // Attempt match
-    const stepAttempts = attempts.filter((a) => aname(a).includes(def.nameMatch));
-    // All completed + newest in-progress
-    const allDone = stepAttempts.filter((a) =>  a.is_completed);
-    const done    = allDone[0] ?? null;   // most recent completed (for score display)
+    // Attempt match — sort by id desc so index 0 = most recent
+    const stepAttempts = attempts
+      .filter((a) => aname(a).includes(def.nameMatch))
+      .sort((a, b) => b.id - a.id);
+
+    // Most-recent attempt drives the card state (no mixing old + new)
     const live    = stepAttempts.find((a) => !a.is_completed) ?? null;
+    const done    = live ? null : (stepAttempts.find((a) => a.is_completed) ?? null);
+    const allDone = stepAttempts.filter((a) => a.is_completed);
 
     // Status
     let status: StepStatus;
@@ -597,6 +600,12 @@ export default function SurveysPage() {
     handleStart(step);
   }, [handleStart]);
 
+  // New Cycle = start GRI 1 fresh (triggers new cycle for all phases)
+  const handleNewCycle = useCallback(() => {
+    const gri1Step = steps.find((s) => s.phase === 1);
+    if (gri1Step) handleStart(gri1Step);
+  }, [steps, handleStart]);
+
   /* ── Loading ─────────────────────────────────────────────── */
   if (authLoading || loading) {
     return (
@@ -621,25 +630,46 @@ export default function SurveysPage() {
       <main className="wrap" style={{ padding: '40px 32px 80px', maxWidth: 760 }}>
 
         {/* ── Page header ─────────────────────────────────── */}
-        <div style={{ marginBottom: 40 }}>
-          <span style={{
-            fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 10, color: 'var(--ink-4)',
-            letterSpacing: '0.14em', textTransform: 'uppercase',
-            display: 'block', marginBottom: 10,
-          }}>
-            GRI Universal Standards · {lang === 'tr' ? '4 Aşama' : '4 Phases'} · 180 Q
-          </span>
-          <h1 style={{ fontSize: 32, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 8 }}>
-            {lang === 'tr'
-              ? <><em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>GRI</em> Değerlendirme Yolculuğu</>
-              : <><em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>GRI</em> Assessment Journey</>}
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6, maxWidth: 520 }}>
-            {lang === 'tr'
-              ? 'Her aşamayı sırayla tamamlayın. Bir sonraki aşama, bir öncekini bitirdikten sonra açılır.'
-              : 'Complete each phase in order. The next phase unlocks when you finish the previous one.'}
-          </p>
+        <div style={{ marginBottom: 40, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div>
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 10, color: 'var(--ink-4)',
+              letterSpacing: '0.14em', textTransform: 'uppercase',
+              display: 'block', marginBottom: 10,
+            }}>
+              GRI Universal Standards · {lang === 'tr' ? '4 Aşama' : '4 Phases'} · 180 Q
+            </span>
+            <h1 style={{ fontSize: 32, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 8 }}>
+              {lang === 'tr'
+                ? <><em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>GRI</em> Değerlendirme Yolculuğu</>
+                : <><em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>GRI</em> Assessment Journey</>}
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6, maxWidth: 520 }}>
+              {lang === 'tr'
+                ? 'Her aşamayı sırayla tamamlayın. Bir sonraki aşama, bir öncekini bitirdikten sonra açılır.'
+                : 'Complete each phase in order. The next phase unlocks when you finish the previous one.'}
+            </p>
+          </div>
+          {/* New Assessment Cycle — only shown when at least one attempt exists */}
+          {attempts.length > 0 && (
+            <div style={{ flexShrink: 0 }}>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={handleNewCycle}
+                disabled={starting}
+                title={lang === 'tr' ? 'Tüm aşamalar için yeni bağımsız değerlendirme başlat' : 'Start a new independent assessment cycle for all phases'}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {lang === 'tr' ? '+ Yeni Döngü' : '+ New Cycle'}
+              </button>
+              <div style={{ marginTop: 4, fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", textAlign: 'center' }}>
+                <a href="/history" style={{ color: 'inherit' }}>
+                  {lang === 'tr' ? 'geçmişi gör' : 'view history'}
+                </a>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Progress strip ───────────────────────────────── */}
