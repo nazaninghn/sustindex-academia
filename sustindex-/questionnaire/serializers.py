@@ -43,20 +43,51 @@ class LocalisedRepresentationMixin:
         return raw if raw in ('tr', 'en') else ''
 
     @staticmethod
+    def _split_bilingual(text: str, lang: str) -> str:
+        """
+        Split combined "Turkish part / English part" stored by the v5 importer.
+        The separator is always ' / ' (space-slash-space).
+        Internal slashes like "ISO 27001/NIST" have no surrounding spaces and
+        are therefore never mistaken for language separators.
+        Returns the language-appropriate half, or the original string unchanged.
+        """
+        if not text:
+            return text
+        sep = text.find(' / ')
+        if sep == -1:
+            return text
+        tr_part = text[:sep].strip()
+        en_part = text[sep + 3:].strip()
+        if tr_part and en_part:
+            return tr_part if lang == 'tr' else en_part
+        return text
+
+    @staticmethod
     def _localise(representation: dict, instance, lang: str, mapping: dict) -> dict:
         """
         Mutate *representation* in-place for each entry in *mapping*.
         mapping = { canonical_field: (tr_attr, en_attr) }
+
+        Priority:
+          1. Dedicated lang-specific DB field (text_tr / text_en) — set by
+             the translation pipeline for v4 data.
+          2. Split combined "TR / EN" text — used by the v5 importer which
+             stores bilingual choices as e.g. "Evet / Yes" in a single field.
+          3. Leave the canonical field unchanged (already set by super()).
         """
         for field, (tr_attr, en_attr) in mapping.items():
-            if lang == 'tr':
-                val = getattr(instance, tr_attr, None) or ''
+            if lang in ('tr', 'en'):
+                attr = tr_attr if lang == 'tr' else en_attr
+                val = getattr(instance, attr, None) or ''
                 if val:
+                    # Priority 1: dedicated field present
                     representation[field] = val
-            elif lang == 'en':
-                val = getattr(instance, en_attr, None) or ''
-                if val:
-                    representation[field] = val
+                else:
+                    # Priority 2: try to split the combined "TR / EN" value
+                    raw = representation.get(field) or ''
+                    split = LocalisedRepresentationMixin._split_bilingual(raw, lang)
+                    if split != raw:
+                        representation[field] = split
         return representation
 
 
