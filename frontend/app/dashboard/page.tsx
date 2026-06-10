@@ -551,7 +551,7 @@ export default function DashboardPage() {
                               fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 700,
                               fontSize: 11, color: 'var(--olive-deep)', letterSpacing: '0.02em',
                             }}>
-                              {cat.key || cat.name?.[0] || '·'}
+                              {cat.name?.[0]?.toUpperCase() || '·'}
                             </span>
                             <div>
                               <div style={{ fontSize: 11.5, marginBottom: 5, color: 'var(--ink-2)', fontWeight: 500 }}>
