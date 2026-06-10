@@ -48,36 +48,70 @@ else:
 EOF
 
 echo ""
-echo "Importing GRI questionnaire data..."
-# Fix #18: use absolute path derived from SCRIPT_DIR so this works from any CWD.
-# v4 file follows the actual GRI hierarchy: GRI 1 Foundation → GRI 2 General
-# Disclosures → GRI 3 Material Topics → Sector Standard.
-python manage.py import_gri_questionnaire "$SCRIPT_DIR/data/GRI_Questionnaire_v4_STRUCTURED.xlsx"
+echo "Importing GRI questionnaire data (legacy v4 — kept for backwards compatibility)..."
+python manage.py import_gri_questionnaire "$SCRIPT_DIR/data/GRI_Questionnaire_v4_STRUCTURED.xlsx" || echo "v4 import failed (non-fatal)"
 
 echo ""
 echo "Translating questionnaire to Turkish..."
 python manage.py translate_questionnaire --survey GRI || echo "Translation step failed (non-fatal)"
 
 echo ""
-echo "Building combined GRI Complete Assessment survey..."
-# Rebuilds the single hierarchical survey from the 12 imported source surveys.
-# --clear : drops and fully rebuilds the combined survey on each deploy.
-# NOTE: --hide-components is intentionally NOT used here.
-#   The /surveys page now renders a 4-step GRI wizard that looks up each phase
-#   survey by name (nameMatch: 'GRI 1:', 'GRI 2:', 'GRI 3:', 'GRI Sector:').
-#   The surveys API only returns is_active=True surveys, so hiding the component
-#   surveys would leave step.survey=null and silently disable the Start buttons.
-#   The combined survey ("GRI Complete Assessment") is still created for
-#   admin/reporting use, but the wizard drives the user journey.
-# Non-fatal: use || so a failure here doesn't abort the entire deploy.
-python manage.py create_combined_survey --clear && echo "[OK] Combined survey built." || {
-    echo ""
-    echo "=========================================================="
-    echo " WARNING: create_combined_survey failed."
-    echo " The 12 individual surveys remain visible."
-    echo " Check the lines above for the Python traceback."
-    echo "=========================================================="
-}
+echo "=========================================================="
+echo " Importing GRI v5 data (4 core sections + 8 sector modules)"
+echo "=========================================================="
+
+V5="$SCRIPT_DIR/data/v5"
+
+echo ""
+echo "--- Core: Governance (G1-G16) ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Bolum1_Governance.xlsx" --clear
+
+echo ""
+echo "--- Core: Environmental (E1-E14) ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Bolum2_Environmental.xlsx" --clear
+
+echo ""
+echo "--- Core: Social (S1-S24) ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Bolum3_Social.xlsx" --clear
+
+echo ""
+echo "--- Core: Economic (EC1-EC9) ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Bolum4_Economic.xlsx" --clear
+
+echo ""
+echo "--- Sector: Technology & IT ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Technology.xlsx" --clear
+
+echo ""
+echo "--- Sector: Manufacturing & Industry ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Manufacturing.xlsx" --clear
+
+echo ""
+echo "--- Sector: Financial Services ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Financial.xlsx" --clear
+
+echo ""
+echo "--- Sector: Healthcare & Pharma ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Healthcare.xlsx" --clear
+
+echo ""
+echo "--- Sector: Energy & Utilities ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Energy.xlsx" --clear
+
+echo ""
+echo "--- Sector: Agriculture & Food ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Agriculture.xlsx" --clear
+
+echo ""
+echo "--- Sector: Construction & Real Estate ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Construction.xlsx" --clear
+
+echo ""
+echo "--- Sector: Retail & Trade ---"
+python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Retail.xlsx" --clear
+
+echo ""
+echo "[OK] All GRI v5 data imported: 4 core sections + 8 sector modules"
 
 echo ""
 echo "Build completed successfully!"
