@@ -347,22 +347,36 @@ function StepCard({
           </div>
         )}
 
-        {/* In-progress: continue button */}
+        {/* In-progress: continue + start-new buttons */}
         {isLive && live && (
           <div style={{
             marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            flexWrap: 'wrap', gap: 8,
           }}>
             <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
               {lang === 'tr' ? 'Kaldığınız yerden devam edin.' : 'Pick up where you left off.'}
             </span>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => onContinue(live)}
-              disabled={starting}
-            >
-              {lang === 'tr' ? 'Devam Et' : 'Continue'} <Icon.arrow />
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {/* Start fresh — creates a brand-new attempt */}
+              {step.survey && phase < 4 && (
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => onStart(step)}
+                  disabled={starting}
+                  title={lang === 'tr' ? 'Yeni başlangıç' : 'Start from scratch'}
+                >
+                  {lang === 'tr' ? 'Yeniden Başla' : 'Restart'}
+                </button>
+              )}
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => onContinue(live)}
+                disabled={starting}
+              >
+                {lang === 'tr' ? 'Devam Et' : 'Continue'} <Icon.arrow />
+              </button>
+            </div>
           </div>
         )}
 
