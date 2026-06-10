@@ -49,11 +49,12 @@ interface WizardStep {
   nameMatch: string;
   status: StepStatus;
   survey: Survey | null;
-  done: Attempt | null;   // most recent completed attempt
-  live: Attempt | null;   // in-progress attempt
+  done: Attempt | null;      // most recent completed attempt (for score display)
+  allDone: Attempt[];        // all completed attempts for this phase
+  live: Attempt | null;      // most recent in-progress attempt
 }
 
-const STEP_DEFS: Omit<WizardStep, 'status' | 'survey' | 'done' | 'live'>[] = [
+const STEP_DEFS: Omit<WizardStep, 'status' | 'survey' | 'done' | 'allDone' | 'live'>[] = [
   {
     phase: 1,
     labelEn: 'GRI 1: Foundation',
@@ -200,15 +201,17 @@ function StepCard({
   onSectorChange: (v: string) => void;
   onStart: (step: WizardStep, sector?: string) => void;
   onContinue: (attempt: Attempt) => void;
-  onRetry: (step: WizardStep) => void;
+  onRetry: (step: WizardStep) => void;  // kept for sector phase 4 compat
   starting: boolean;
   stepErr?: string;
 }) {
-  const { status, phase, done, live } = step;
+  const { status, phase, done, allDone, live } = step;
   const isLocked   = status === 'locked';
   const isActive   = status === 'active';
-  const isDone     = status === 'completed';
-  const isLive     = status === 'in_progress';
+  const isDone     = allDone.length > 0;   // has at least one completed attempt
+  const isLive     = live !== null;         // has an in-progress attempt
+  // Can start a new attempt: not locked and survey data loaded
+  const canStart   = !isLocked && phase < 4 && !!step.survey;
 
   const label = lang === 'tr' ? step.labelTr : step.labelEn;
   const desc  = lang === 'tr' ? step.descTr  : step.descEn;
@@ -295,119 +298,105 @@ function StepCard({
           </div>
         </div>
 
-        {/* Completed: show score + actions */}
+        {/* ── Completed attempts: show score row(s) ── */}
         {isDone && done && (
           <div style={{
             marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            flexWrap: 'wrap', gap: 10,
           }}>
-            <div style={{ display: 'flex', gap: 20, alignItems: 'baseline' }}>
-              <div>
-                <span style={{
-                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-                  fontSize: 26, letterSpacing: '-0.04em',
-                  fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {Math.round(done.total_score ?? 0)}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--ink-3)', marginLeft: 4 }}>pts</span>
+            {/* Most-recent completed attempt score */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              flexWrap: 'wrap', gap: 10,
+            }}>
+              <div style={{ display: 'flex', gap: 20, alignItems: 'baseline' }}>
+                <div>
+                  <span style={{
+                    fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                    fontSize: 26, letterSpacing: '-0.04em',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {Math.round(done.total_score ?? 0)}
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--ink-3)', marginLeft: 4 }}>pts</span>
+                </div>
+                {done.overall_grade && (
+                  <span style={{
+                    fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600,
+                    fontSize: 18, color: gradeColor(done.overall_grade),
+                  }}>
+                    {done.overall_grade}
+                  </span>
+                )}
+                {done.completed_at && (
+                  <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                    {new Date(done.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB')}
+                  </span>
+                )}
+                {allDone.length > 1 && (
+                  <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                    +{allDone.length - 1} {lang === 'tr' ? 'önceki' : 'prev'}
+                  </span>
+                )}
               </div>
-              {done.overall_grade && (
-                <span style={{
-                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600,
-                  fontSize: 18, color: gradeColor(done.overall_grade),
-                }}>
-                  {done.overall_grade}
-                </span>
-              )}
-              {done.completed_at && (
-                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                  {new Date(done.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB')}
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
               <a href={`/results/${done.id}`} style={{ textDecoration: 'none' }}>
                 <button className="btn btn-outline btn-sm">
                   {lang === 'tr' ? 'Sonuçlar' : 'Results'} <Icon.arrow />
                 </button>
               </a>
-              {/* Retry only for steps 1-3 (sector retry requires new sector pick) */}
-              {phase < 4 && (
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() => onRetry(step)}
-                  disabled={starting}
-                >
-                  {lang === 'tr' ? 'Tekrar' : 'Retry'}
-                </button>
-              )}
             </div>
           </div>
         )}
 
-        {/* In-progress: continue + start-new buttons */}
+        {/* ── In-progress: continue button ── */}
         {isLive && live && (
           <div style={{
-            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
+            marginTop: 12, paddingTop: 12,
+            borderTop: isDone ? 'none' : '1px solid var(--line)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             flexWrap: 'wrap', gap: 8,
           }}>
-            <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-              {lang === 'tr' ? 'Kaldığınız yerden devam edin.' : 'Pick up where you left off.'}
+            <span style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 500 }}>
+              ● {lang === 'tr' ? 'Devam eden değerlendirme' : 'Assessment in progress'}
             </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {/* Start fresh — creates a brand-new attempt */}
-              {step.survey && phase < 4 && (
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() => onStart(step)}
-                  disabled={starting}
-                  title={lang === 'tr' ? 'Yeni başlangıç' : 'Start from scratch'}
-                >
-                  {lang === 'tr' ? 'Yeniden Başla' : 'Restart'}
-                </button>
-              )}
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => onContinue(live)}
-                disabled={starting}
-              >
-                {lang === 'tr' ? 'Devam Et' : 'Continue'} <Icon.arrow />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Active (step 1–3): start button */}
-        {isActive && phase < 4 && (
-          <div style={{
-            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
-            {!step.survey ? (
-              <span style={{
-                fontSize: 10, color: 'var(--ink-4)',
-                fontFamily: "'IBM Plex Mono', monospace",
-                letterSpacing: '0.06em',
-              }}>
-                ⚠ {lang === 'tr' ? 'Anket verisi henüz yüklenmedi.' : 'Survey data not loaded yet.'}
-              </span>
-            ) : <span />}
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => onStart(step)}
-              disabled={starting || !step.survey}
-              style={!step.survey ? { opacity: 0.35, cursor: 'not-allowed' } : {}}
+              onClick={() => onContinue(live)}
+              disabled={starting}
             >
-              {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
+              {lang === 'tr' ? 'Devam Et' : 'Continue'} <Icon.arrow />
             </button>
           </div>
         )}
 
-        {/* Active (step 4): sector picker + start */}
-        {isActive && phase === 4 && (
+        {/* ── Start New: always visible when not locked (phases 1–3) ── */}
+        {canStart && (
+          <div style={{
+            marginTop: 12, paddingTop: 12,
+            borderTop: (isDone || isLive) ? '1px dashed var(--line)' : '1px solid var(--line)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+              {isDone || isLive
+                ? (lang === 'tr' ? 'Yeni ve bağımsız bir değerlendirme başlat' : 'Start a fresh independent assessment')
+                : (lang === 'tr' ? 'Değerlendirmeyi başlat' : 'Begin this assessment')}
+            </span>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => onStart(step)}
+              disabled={starting}
+              style={(isDone || isLive) ? { background: 'var(--ink)', color: 'var(--cream)' } : {}}
+            >
+              {starting
+                ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…')
+                : isDone || isLive
+                  ? (lang === 'tr' ? '+ Yeni Başlat' : '+ Start New')
+                  : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
+            </button>
+          </div>
+        )}
+
+        {/* Step 4 (Sector): sector picker + start — shown whenever not locked */}
+        {!isLocked && phase === 4 && (
           <>
             <SectorPicker
               lang={lang}
@@ -526,9 +515,10 @@ export default function SurveysPage() {
 
     // Attempt match
     const stepAttempts = attempts.filter((a) => aname(a).includes(def.nameMatch));
-    // Newest completed + newest in-progress
-    const done = stepAttempts.find((a) =>  a.is_completed) ?? null;
-    const live = stepAttempts.find((a) => !a.is_completed) ?? null;
+    // All completed + newest in-progress
+    const allDone = stepAttempts.filter((a) =>  a.is_completed);
+    const done    = allDone[0] ?? null;   // most recent completed (for score display)
+    const live    = stepAttempts.find((a) => !a.is_completed) ?? null;
 
     // Status
     let status: StepStatus;
@@ -541,7 +531,7 @@ export default function SurveysPage() {
       status = prevDone ? 'active' : 'locked';
     }
 
-    return { ...def, survey, done, live, status };
+    return { ...def, survey, done, allDone, live, status };
   });
 
   /* ── Handlers ───────────────────────────────────────────── */
