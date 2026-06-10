@@ -741,14 +741,17 @@ class AnswerViewSet(viewsets.ModelViewSet):
                     if not Choice.objects.filter(id=choice, question=existing.question).exists():
                         raise DRFValidationError({'choice': 'Choice does not belong to this question.'})
 
+                numerical_value = serializer.validated_data.get('numerical_value', None)
+
                 existing.not_applicable = not_applicable
                 existing.choice_id = choice
                 existing.text_answer = text_answer
                 existing.notes = notes
+                existing.numerical_value = numerical_value
                 # Fix R5-M-09: save only the mutated columns to avoid unnecessary
                 # full-row writes and reduce the risk of concurrent-update collisions
                 # on unrelated fields.
-                existing.save(update_fields=['not_applicable', 'choice_id', 'text_answer', 'notes'])
+                existing.save(update_fields=['not_applicable', 'choice_id', 'text_answer', 'notes', 'numerical_value'])
 
                 # Fix D (Round 2): always sync M2M — empty list clears stale multi-select choices.
                 # Fix BUG-29: filter by question so IDs from other questions are rejected.

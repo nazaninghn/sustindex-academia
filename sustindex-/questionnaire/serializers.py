@@ -94,7 +94,10 @@ class QuestionSerializer(LocalisedRepresentationMixin, serializers.ModelSerializ
         fields = ['id', 'survey', 'category', 'category_name', 'category_name_en', 'category_name_tr',
                   'text', 'text_tr', 'text_en',
                   'question_type', 'order', 'is_active', 'allow_multiple', 'attachment',
-                  'sector', 'choices']
+                  'sector', 'choices',
+                  'is_gate', 'criterion_code', 'layer',
+                  'numerical_thresholds',
+                  'conditional_on_question', 'conditional_on_min_score', 'bonus_points']
 
     def to_representation(self, instance):
         # Fix P: super() already serializes `choices` via the field definition AND
@@ -327,7 +330,7 @@ class AnswerSerializer(serializers.ModelSerializer):
         model = Answer
         fields = ['id', 'question', 'question_text', 'choice', 'choice_text',
                   'choices', 'choices_display', 'text_answer', 'notes', 'not_applicable',
-                  'answered_at', 'total_score', 'documents']
+                  'numerical_value', 'answered_at', 'total_score', 'documents']
     
     def get_choice_text(self, obj):
         if obj.choice:
@@ -351,7 +354,7 @@ class AnswerCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Answer
-        fields = ['id', 'attempt', 'question', 'choice', 'choices_ids', 'text_answer', 'notes', 'not_applicable']
+        fields = ['id', 'attempt', 'question', 'choice', 'choices_ids', 'text_answer', 'notes', 'not_applicable', 'numerical_value']
         read_only_fields = ['id']
         # Fix UPSERT-01: disable the auto-generated UniqueTogetherValidator for
         # (attempt, question).  Without this, DRF rejects a second POST for the

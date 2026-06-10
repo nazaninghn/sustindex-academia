@@ -204,9 +204,13 @@ class Category(models.Model):
 class Question(models.Model):
     """Questionnaire questions"""
     QUESTION_TYPE_CHOICES = [
-        ('choice', _('Choice (select from options)')),
-        ('text', _('Text (open-ended answer)')),
-        ('mixed', _('Mixed (choices + text)')),
+        ('single',    _('Single Choice')),
+        ('choice',    _('Single Choice (legacy)')),
+        ('binary',    _('Binary (Yes / No)')),
+        ('multi',     _('Multi-select')),
+        ('numerical', _('Numerical Input')),
+        ('text',      _('Text (open-ended)')),
+        ('mixed',     _('Mixed')),
     ]
 
     # Branching by sector: blank = universal (shown to every respondent);
@@ -248,7 +252,54 @@ class Question(models.Model):
             "who selected that sector when starting their attempt."
         ),
     )
-    
+
+    # PDCA / criterion grouping
+    criterion_code = models.CharField(
+        max_length=20, blank=True, default='',
+        verbose_name=_('Criterion Code'),
+        help_text=_('e.g. G1, E3, S12 — groups questions belonging to the same PDCA criterion'),
+        db_index=True,
+    )
+    layer = models.CharField(
+        max_length=12, blank=True, default='',
+        verbose_name=_('PDCA Layer'),
+        help_text=_('GATE | P | I | M | R | CONDITIONAL'),
+    )
+
+    # Gate question
+    is_gate = models.BooleanField(
+        default=False,
+        verbose_name=_('Gate Question'),
+        help_text=_('If Yes/high-score → criterion continues; if No/0 → all other questions in the criterion are skipped (score 0, excluded from max).'),
+    )
+
+    # Numerical thresholds
+    numerical_thresholds = models.JSONField(
+        null=True, blank=True,
+        verbose_name=_('Numerical Thresholds'),
+        help_text=_('For numerical questions: list of {min, max, score} bands. Evaluated top-to-bottom; first match wins.'),
+    )
+
+    # Conditional follow-up logic
+    conditional_on_question = models.ForeignKey(
+        'self',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='conditional_questions',
+        verbose_name=_('Conditional On Question'),
+        help_text=_('This question is shown only when the referenced question has a qualifying answer.'),
+    )
+    conditional_on_min_score = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name=_('Conditional Min Score'),
+        help_text=_('Show this question only when the parent question scores ≥ this value (default 1 = any non-zero answer).'),
+    )
+    bonus_points = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name=_('Bonus Points'),
+        help_text=_('Extra points awarded when this conditional follow-up is answered correctly (added on top of the layer max).'),
+    )
+
     class Meta:
         verbose_name = _('Question')
         verbose_name_plural = _('Questions')
@@ -288,15 +339,20 @@ class Question(models.Model):
         return super().save(*args, **kwargs)
 
     def get_max_possible_score(self):
-        """Calculate max possible score based on question type.
+        """Max points this question can contribute.
 
         Fix BUG-05: use list() so the prefetch_related cache is used instead of
         issuing .exists() + extra queryset evaluation (N+1 in scoring hot path).
         """
+        if self.question_type == 'numerical':
+            thresholds = self.numerical_thresholds or []
+            return max((int(t.get('score', 0)) for t in thresholds), default=0)
+        if self.conditional_on_question_id and self.bonus_points > 0:
+            return self.bonus_points
         choices = list(self.choices.all())  # hits prefetch cache, not DB
         if not choices:
             return 0
-        if self.allow_multiple:
+        if self.allow_multiple or self.question_type == 'multi':
             return sum(c.score for c in choices if c.score > 0)
         return max((c.score for c in choices), default=0)
 
@@ -462,6 +518,29 @@ class QuestionnaireAttempt(models.Model):
         all_answers = list(self.answers.all())
         answers_by_qid = {a.question_id: a for a in all_answers}
 
+        # ── Gate skip logic ──────────────────────────────────────────────────
+        # For each criterion that has a gate question, if the gate answer scores 0
+        # (or is unanswered), all non-gate questions in that criterion are excluded
+        # from both the score numerator AND the max_possible denominator.
+        from collections import defaultdict as _dd
+        gate_skipped_qids: set = set()
+
+        criteria_map: dict = _dd(list)
+        for q in all_questions:
+            if q.criterion_code:
+                criteria_map[q.criterion_code].append(q)
+
+        for code, cq_list in criteria_map.items():
+            gate_q = next((q for q in cq_list if q.is_gate), None)
+            if gate_q is None:
+                continue
+            gate_ans = answers_by_qid.get(gate_q.id)
+            gate_score = gate_ans.get_total_score() if gate_ans else 0
+            if gate_score == 0:
+                for q in cq_list:
+                    if not q.is_gate:
+                        gate_skipped_qids.add(q.id)
+
         category_scores = []
         total_score_sum = 0
         total_possible_sum = 0
@@ -473,6 +552,8 @@ class QuestionnaireAttempt(models.Model):
             cat_possible = 0
 
             for question in cat_questions:
+                if question.id in gate_skipped_qids:
+                    continue  # excluded by gate — contributes 0 to both score and max
                 answer = answers_by_qid.get(question.id)
                 # N/A: exclude the question entirely (no score, no max_possible denominator).
                 # This prevents N/A from penalising the percentage — it's treated as if
@@ -629,6 +710,12 @@ class Answer(models.Model):
     text_answer = models.TextField(blank=True, null=True, verbose_name=_('Text Answer'), help_text=_('Open-ended text answer for text-type questions'))
     notes = models.TextField(blank=True, null=True, verbose_name=_('Notes/Comments'), help_text=_('Additional notes or comments for this answer'))
     not_applicable = models.BooleanField(default=False, verbose_name=_('Not Applicable'), help_text=_('User marked this question as not applicable to their organisation. Excluded from score calculation.'))
+    numerical_value = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        null=True, blank=True,
+        verbose_name=_('Numerical Value'),
+        help_text=_('Stored answer for numerical-type questions. Score is derived via question.numerical_thresholds.'),
+    )
     answered_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Answered At'))
     
     class Meta:
@@ -652,9 +739,30 @@ class Answer(models.Model):
         """
         if self.not_applicable:
             return 0
-        if self.question.allow_multiple:
+        q = self.question
+        qt = q.question_type
+        if qt == 'numerical':
+            return self._score_numerical()
+        if q.allow_multiple or qt == 'multi':
             return sum(c.score for c in list(self.choices.all()))
+        # binary / single / choice / mixed / text
         return self.choice.score if self.choice else 0
+
+    def _score_numerical(self):
+        """Apply threshold table to self.numerical_value. First match wins."""
+        val = self.numerical_value
+        if val is None:
+            return 0
+        thresholds = self.question.numerical_thresholds or []
+        fval = float(val)
+        for t in thresholds:
+            mn = t.get('min')
+            mx = t.get('max')
+            lower_ok = (mn is None) or (fval >= float(mn))
+            upper_ok = (mx is None) or (fval <= float(mx))
+            if lower_ok and upper_ok:
+                return int(t.get('score', 0))
+        return 0
     
     def is_cannot_answer(self):
         """Check if user selected 'cannot answer'.
