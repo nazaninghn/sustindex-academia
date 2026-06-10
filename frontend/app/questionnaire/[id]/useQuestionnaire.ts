@@ -52,7 +52,8 @@ export function useQuestionnaire() {
   /* ── Answer state — keyed by question.id ── */
   const [answers,      setAnswers]      = useState<Record<number, number[]>>({});
   const [notes,        setNotes]        = useState<Record<number, string>>({});
-  const [textAnswers,  setTextAnswers]  = useState<Record<number, string>>({});
+  const [textAnswers,      setTextAnswers]      = useState<Record<number, string>>({});
+  const [numericalAnswers, setNumericalAnswers] = useState<Record<number, string>>({});
   const [pendingFiles, setPendingFiles] = useState<Record<number, File[]>>({});
   /** N/A toggle — keyed by question.id. When true, the question is excluded from scoring. */
   const [naAnswers,    setNaAnswers]    = useState<Record<number, boolean>>({});
@@ -173,7 +174,8 @@ export function useQuestionnaire() {
   const isLast      = currentIdx === total - 1;
   const selection   = q ? (answers[q.id]      || []) : [];
   const note        = q ? (notes[q.id]        || '') : '';
-  const textAns     = q ? (textAnswers[q.id]  || '') : '';
+  const textAns        = q ? (textAnswers[q.id]      || '') : '';
+  const numericalValue = q ? (numericalAnswers[q.id] || '') : '';
   const files       = q ? (pendingFiles[q.id] || []) : [];
   /** Whether the current question has been marked Not Applicable */
   const isNA           = q ? (naAnswers[q.id]   ?? false) : false;
@@ -181,24 +183,28 @@ export function useQuestionnaire() {
   const isBookmarked   = q ? (bookmarks[q.id]   ?? false) : false;
   const bookmarkedCount = Object.values(bookmarks).filter(Boolean).length;
 
-  // Fix R5-M-01: count questions with a choice, text answer, or N/A flag
+  // Fix R5-M-01: count questions with a choice, text answer, numerical value, or N/A flag
   const answeredCount = questions.filter((qItem) =>
     naAnswers[qItem.id] ||
     (answers[qItem.id] ?? []).length > 0 ||
-    (textAnswers[qItem.id] ?? '').trim().length > 0
+    (textAnswers[qItem.id] ?? '').trim().length > 0 ||
+    (numericalAnswers[qItem.id] ?? '').trim().length > 0
   ).length;
   const progress      = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
 
-  const isTextType  = q?.question_type === 'text' || q?.choices?.length === 0;
+  const isNumericalType = q?.question_type === 'numerical';
+  const isBinaryType    = q?.question_type === 'binary';
+  const isTextType  = q?.question_type === 'text' || (!isNumericalType && !isBinaryType && q?.choices?.length === 0);
   const isMixedType = q?.question_type === 'mixed';
-  const hasChoices  = (q?.choices?.length ?? 0) > 0 && !isTextType;
+  const hasChoices  = (q?.choices?.length ?? 0) > 0 && !isTextType && !isNumericalType;
 
   const canSubmit =
     isNA ||
     (hasChoices && selection.length > 0) ||
+    (isNumericalType && numericalValue.trim().length > 0) ||
     (isTextType && textAns.trim().length > 0) ||
     (isMixedType && (selection.length > 0 || textAns.trim().length > 0)) ||
-    (!hasChoices && !isTextType);
+    (!hasChoices && !isTextType && !isNumericalType);
 
   /* qText / choiceText: use `text` directly — after refreshTexts() the API already
    * returns the correct language in `text`.  loc() is kept as extra safety for
@@ -245,9 +251,10 @@ export function useQuestionnaire() {
     return boundary.qIds.every((qid) =>
       naAnswers[qid] ||
       (answers[qid] ?? []).length > 0 ||
-      (textAnswers[qid] ?? '').trim().length > 0
+      (textAnswers[qid] ?? '').trim().length > 0 ||
+      (numericalAnswers[qid] ?? '').trim().length > 0
     );
-  }, [phaseBoundaries, naAnswers, answers, textAnswers]);
+  }, [phaseBoundaries, naAnswers, answers, textAnswers, numericalAnswers]);
 
   /**
    * The highest GRI phase the user may currently access.
@@ -312,6 +319,11 @@ export function useQuestionnaire() {
     setTextAnswers((prev) => ({ ...prev, [q.id]: val }));
   };
 
+  const updateNumericalAnswer = (val: string) => {
+    if (!q) return;
+    setNumericalAnswers((prev) => ({ ...prev, [q.id]: val }));
+  };
+
   const updateNote = (val: string) => {
     if (!q) return;
     setNotes((prev) => ({ ...prev, [q.id]: val }));
@@ -354,6 +366,9 @@ export function useQuestionnaire() {
     if (isNA) {
       const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns, true);
       answerId = res?.id ?? null;
+    } else if (isNumericalType && numericalValue.trim()) {
+      const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns, false, numericalValue);
+      answerId = res?.id ?? null;
     } else if (hasChoices && q.allow_multiple && selection.length > 0) {
       const res = await attemptAPI.submitAnswer(Number(id), q.id, null, selection, note, textAns, false);
       answerId = res?.id ?? null;
@@ -363,14 +378,14 @@ export function useQuestionnaire() {
     } else if (textAns.trim() || note.trim()) {
       const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns, false);
       answerId = res?.id ?? null;
-    } else if (saveEmpty && !hasChoices && !isTextType) {
+    } else if (saveEmpty && !hasChoices && !isTextType && !isNumericalType) {
       // Fix C-07: "no-choice, non-text" question — still needs an answer record
       // for progress to be recorded server-side.
       const res = await attemptAPI.submitAnswer(Number(id), q.id, null, undefined, note, textAns, false);
       answerId = res?.id ?? null;
     }
     return answerId;
-  }, [q, id, isNA, hasChoices, isTextType, selection, note, textAns]);
+  }, [q, id, isNA, hasChoices, isTextType, isNumericalType, selection, note, textAns, numericalValue]);
 
   /** Flash the "✓ Saved" indicator for 1.8 s */
   const flashSaved = useCallback(() => {
@@ -562,6 +577,7 @@ export function useQuestionnaire() {
     selection,
     note,
     textAns,
+    numericalValue,
     files,
     isNA,
     naAnswers,
@@ -571,6 +587,8 @@ export function useQuestionnaire() {
     progress,
     isTextType,
     isMixedType,
+    isNumericalType,
+    isBinaryType,
     hasChoices,
     canSubmit,
     qText,
@@ -587,6 +605,7 @@ export function useQuestionnaire() {
     addFiles,
     removeFile,
     updateTextAnswer,
+    updateNumericalAnswer,
     updateNote,
     handleNext,
     handlePrev,

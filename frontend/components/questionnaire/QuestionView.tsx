@@ -8,6 +8,16 @@ import { API_URL } from '@/lib/api';
 import { LETTERS, loc, PaperclipIcon } from './utils';
 import type { Question, GriPhase } from './types';
 
+/* ── Layer badge helpers ────────────────────────────────────────── */
+const LAYER_LABEL: Record<string, { en: string; tr: string; color: string }> = {
+  GATE:        { en: 'Gate',            tr: 'Kapı',             color: '#c0392b' },
+  P:           { en: 'Policy',          tr: 'Politika',         color: '#2980b9' },
+  I:           { en: 'Implementation',  tr: 'Uygulama',         color: '#27ae60' },
+  M:           { en: 'Measurement',     tr: 'Ölçüm',            color: '#8e44ad' },
+  R:           { en: 'Results',         tr: 'Sonuçlar',         color: '#d35400' },
+  CONDITIONAL: { en: 'Bonus',           tr: 'Bonus',            color: '#b5891b' },
+};
+
 interface Props {
   q: Question;
   currentIdx: number;
@@ -17,6 +27,7 @@ interface Props {
   qText: string;
   selection: number[];
   textAns: string;
+  numericalValue: string;
   isTextType: boolean;
   isMixedType: boolean;
   hasChoices: boolean;
@@ -27,6 +38,7 @@ interface Props {
   unlockedUpToPhase: number;
   onToggleChoice: (choiceId: number) => void;
   onTextChange: (val: string) => void;
+  onNumericalChange: (val: string) => void;
   onToggleNA: () => void;
   onToggleBookmark: () => void;
 }
@@ -40,6 +52,7 @@ export function QuestionView({
   qText,
   selection,
   textAns,
+  numericalValue,
   isTextType,
   isMixedType,
   hasChoices,
@@ -50,11 +63,79 @@ export function QuestionView({
   unlockedUpToPhase,
   onToggleChoice,
   onTextChange,
+  onNumericalChange,
   onToggleNA,
   onToggleBookmark,
 }: Props) {
+  const isNumerical = q.question_type === 'numerical';
+  const isBinary    = q.question_type === 'binary';
+  const layerInfo   = q.layer ? LAYER_LABEL[q.layer] : null;
+
   return (
     <>
+      {/* ── Criterion header (v5 questions only) ── */}
+      {q.criterion_code && (
+        <div style={{
+          marginBottom: 20,
+          padding: '10px 14px',
+          background: 'var(--paper)',
+          border: '1px solid var(--line)',
+          borderLeft: '3px solid var(--olive-deep)',
+          display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '6px 12px',
+        }}>
+          {/* Criterion code + title from category_name */}
+          <span style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+            color: 'var(--ink)',
+          }}>
+            {q.criterion_code}
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--ink-3)', flex: 1 }}>
+            {(lang === 'tr' ? q.category_name_tr : q.category_name_en) || q.category_name}
+          </span>
+
+          {/* Layer badge */}
+          {layerInfo && (
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
+              padding: '2px 7px',
+              border: `1px solid ${layerInfo.color}`,
+              color: layerInfo.color,
+              borderRadius: 2,
+              flexShrink: 0,
+            }}>
+              {lang === 'tr' ? layerInfo.tr : layerInfo.en}
+            </span>
+          )}
+
+          {/* Gate warning */}
+          {q.is_gate && (
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 9, letterSpacing: '0.08em',
+              color: '#c0392b', opacity: 0.8,
+            }}>
+              {lang === 'tr'
+                ? '⚡ Kapı sorusu — Hayır cevabı bu kriteri atlar'
+                : '⚡ Gate question — No answer skips this criterion'}
+            </span>
+          )}
+
+          {/* Bonus badge for conditional */}
+          {q.layer === 'CONDITIONAL' && (q.bonus_points ?? 0) > 0 && (
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 9, letterSpacing: '0.08em',
+              color: '#b5891b',
+            }}>
+              +{q.bonus_points} {lang === 'tr' ? 'bonus puan' : 'bonus pts'}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* GRI phase stepper — shown only when phase info is available */}
       {currentPhase && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 28, overflowX: 'auto' }}>
@@ -216,8 +297,98 @@ export function QuestionView({
         )}
       </div>
 
-      {/* Choices */}
-      {hasChoices && (
+      {/* ── Binary (Yes / No) renderer ── */}
+      {isBinary && hasChoices && (
+        <div style={{
+          display: 'flex', gap: 12, marginBottom: 32,
+          opacity: isNA ? 0.35 : 1, pointerEvents: isNA ? 'none' : 'auto',
+          transition: 'opacity 0.2s',
+        }}>
+          {q.choices.map((choice) => {
+            const isSel    = selection.includes(choice.id);
+            const label    = loc(choice, lang) || choice.text;
+            const isYes    = choice.order === 1;
+            const selColor = isYes ? 'var(--olive-deep)' : '#c0392b';
+            return (
+              <button
+                key={choice.id}
+                type="button"
+                role="button"
+                aria-pressed={isSel}
+                onClick={() => onToggleChoice(choice.id)}
+                style={{
+                  flex: 1, padding: '22px 16px',
+                  background: isSel ? selColor : 'var(--paper)',
+                  color:      isSel ? '#fff'   : 'var(--ink)',
+                  border:     `2px solid ${isSel ? selColor : 'var(--line)'}`,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span style={{ fontSize: 28 }}>{isYes ? '✓' : '✕'}</span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Numerical input renderer ── */}
+      {isNumerical && (
+        <div style={{
+          marginBottom: 32,
+          opacity: isNA ? 0.35 : 1, pointerEvents: isNA ? 'none' : 'auto',
+          transition: 'opacity 0.2s',
+        }}>
+          <label htmlFor="qa-numerical" style={{
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
+            color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
+            display: 'block', marginBottom: 8,
+          }}>
+            {lang === 'tr' ? 'Sayısal değer girin' : 'Enter numerical value'}
+          </label>
+          <input
+            id="qa-numerical"
+            type="number"
+            value={numericalValue}
+            onChange={(e) => onNumericalChange(e.target.value)}
+            placeholder="0"
+            style={{
+              width: '100%', maxWidth: 240, padding: '12px 16px',
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              borderLeft: '3px solid var(--olive-deep)',
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 18,
+              color: 'var(--ink)', outline: 'none', borderRadius: 0,
+              transition: 'border-color 0.15s',
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink)')}
+            onBlur={(e)  => (e.currentTarget.style.borderColor = 'var(--line)')}
+          />
+          {/* Show threshold bands as hint */}
+          {q.numerical_thresholds && q.numerical_thresholds.length > 0 && (
+            <div style={{
+              marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6,
+            }}>
+              {q.numerical_thresholds.map((t, i) => (
+                <span key={i} style={{
+                  fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+                  padding: '2px 7px', border: '1px solid var(--line)',
+                  color: 'var(--ink-4)', letterSpacing: '0.04em',
+                }}>
+                  {t.min !== null && t.min !== undefined ? `≥${t.min}` : ''}
+                  {t.min !== null && t.min !== undefined && t.max !== null && t.max !== undefined ? ' – ' : ''}
+                  {t.max !== null && t.max !== undefined ? `≤${t.max}` : ''}
+                  {' → '}{t.score} {lang === 'tr' ? 'pt' : 'pts'}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Standard Choices (single / multi) ── */}
+      {!isBinary && !isNumerical && hasChoices && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 32, opacity: isNA ? 0.35 : 1, pointerEvents: isNA ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
           {q.choices.map((choice, i) => {
             const isSel = selection.includes(choice.id);

@@ -10,6 +10,12 @@ export interface Choice {
   order: number;
 }
 
+export interface NumericalThreshold {
+  min: number | null;
+  max: number | null;
+  score: number;
+}
+
 export interface Question {
   id: number;
   text: string;
@@ -21,9 +27,17 @@ export interface Question {
   category_name_tr?: string;
   order: number;
   allow_multiple: boolean;
-  question_type: string;
+  question_type: string;   // 'binary' | 'single' | 'multi' | 'numerical' | 'text' | 'choice' | 'mixed'
   choices: Choice[];
   attachment?: string;
+  // v5 fields
+  criterion_code?: string;
+  layer?: string;          // 'GATE' | 'P' | 'I' | 'M' | 'R' | 'CONDITIONAL'
+  is_gate?: boolean;
+  numerical_thresholds?: NumericalThreshold[] | null;
+  conditional_on_question?: number | null;
+  conditional_on_min_score?: number;
+  bonus_points?: number;
 }
 
 /** GRI phase with localised display label (lang-dependent, built in useQuestionnaire) */

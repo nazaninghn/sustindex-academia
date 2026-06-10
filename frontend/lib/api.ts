@@ -148,13 +148,14 @@ export const attemptAPI = {
   },
 
   submitAnswer: async (
-    attemptId:      number,
-    questionId:     number,
-    choiceId:       number | null,
-    choiceIds?:     number[],
-    notes?:         string,
-    textAnswer?:    string,
-    notApplicable?: boolean,
+    attemptId:       number,
+    questionId:      number,
+    choiceId:        number | null,
+    choiceIds?:      number[],
+    notes?:          string,
+    textAnswer?:     string,
+    notApplicable?:  boolean,
+    numericalValue?: string,
   ) => {
     const payload: Record<string, number | number[] | string | boolean | null | undefined> = {
       attempt: attemptId,
@@ -168,9 +169,12 @@ export const attemptAPI = {
     // Fix M-29: always include notes/text_answer even when empty so the backend
     // clears the field if the user had previously typed something and then erased it.
     // The old `if (notes)` guard skipped the empty string, leaving stale data on the server.
-    payload.notes          = notes          ?? '';
-    payload.text_answer    = textAnswer     ?? '';
-    payload.not_applicable = notApplicable  ?? false;
+    payload.notes           = notes           ?? '';
+    payload.text_answer     = textAnswer      ?? '';
+    payload.not_applicable  = notApplicable   ?? false;
+    if (numericalValue !== undefined && numericalValue !== '') {
+      payload.numerical_value = numericalValue;
+    }
     const { data } = await api.post('/api/v1/answers/', payload);
     return data;  // includes { id, ... }
   },

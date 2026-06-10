@@ -167,6 +167,7 @@ export default function QuestionnairePage() {
           qText={qs.qText}
           selection={qs.selection}
           textAns={qs.textAns}
+          numericalValue={qs.numericalValue}
           isTextType={qs.isTextType}
           isMixedType={qs.isMixedType}
           hasChoices={qs.hasChoices}
@@ -177,6 +178,7 @@ export default function QuestionnairePage() {
           unlockedUpToPhase={qs.unlockedUpToPhase}
           onToggleChoice={qs.toggleChoice}
           onTextChange={qs.updateTextAnswer}
+          onNumericalChange={qs.updateNumericalAnswer}
           onToggleNA={qs.toggleNA}
           onToggleBookmark={qs.toggleBookmark}
         />
