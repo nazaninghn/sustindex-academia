@@ -15,14 +15,36 @@ export const GRI_PHASE_DEFS = [
   { match: 'Sector',              num: 4 as const },
 ] as const;
 
-/** Resolve the localised text field of a translatable object */
+/** Resolve the localised text field of a translatable object.
+ *
+ * Priority:
+ *  1. Dedicated text_tr / text_en field (set by translation pipeline)
+ *  2. Split combined "Turkish / English" text on the first " / " separator
+ *     (v5 import stores choices as "Evet / Yes", "Hayır / No", etc.)
+ *  3. Raw text as-is
+ */
 export function loc(
   obj: { text?: string; text_en?: string; text_tr?: string },
   lang: string
 ): string {
   if (lang === 'tr' && obj.text_tr) return obj.text_tr;
   if (lang === 'en' && obj.text_en) return obj.text_en;
-  return obj.text || '';
+
+  const raw = obj.text || '';
+
+  // Try to split "TR part / EN part" on the FIRST " / " (space–slash–space).
+  // Internal slashes like "ISO 27001/NIST" have no surrounding spaces, so
+  // they are not mistakenly treated as language separators.
+  const sepIdx = raw.indexOf(' / ');
+  if (sepIdx !== -1) {
+    const trPart = raw.slice(0, sepIdx).trim();
+    const enPart = raw.slice(sepIdx + 3).trim();
+    if (trPart && enPart) {
+      return lang === 'en' ? enPart : trPart;
+    }
+  }
+
+  return raw;
 }
 
 /**
