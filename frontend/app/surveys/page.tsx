@@ -40,7 +40,7 @@ interface Attempt {
 type StepStatus = 'completed' | 'in_progress' | 'active' | 'locked';
 
 interface WizardStep {
-  phase: 1 | 2 | 3 | 4;
+  phase: 1 | 2 | 3 | 4 | 5;
   labelEn: string;
   labelTr: string;
   descEn: string;
@@ -57,38 +57,47 @@ interface WizardStep {
 const STEP_DEFS: Omit<WizardStep, 'status' | 'survey' | 'done' | 'allDone' | 'live'>[] = [
   {
     phase: 1,
-    labelEn: 'GRI 1: Foundation',
-    labelTr: 'GRI 1: Temel',
-    descEn:  'Understanding GRI reporting requirements and principles',
-    descTr:  'GRI raporlama gereksinimleri ve ilkelerini anlama',
-    questions: 32,
-    nameMatch: 'GRI 1:',
+    labelEn: 'Governance & Strategy',
+    labelTr: 'Yönetişim ve Strateji',
+    descEn:  'Corporate governance, ethics, board oversight and strategic sustainability commitments (G1–G16)',
+    descTr:  'Kurumsal yönetişim, etik, yönetim kurulu gözetimi ve stratejik sürdürülebilirlik taahhütleri (G1–G16)',
+    questions: 82,
+    nameMatch: 'Strateji',
   },
   {
     phase: 2,
-    labelEn: 'GRI 2: General Disclosures',
-    labelTr: 'GRI 2: Genel Açıklamalar',
-    descEn:  'Organisational profile, governance and stakeholder engagement',
-    descTr:  'Kuruluş profili, yönetişim ve paydaş katılımı',
-    questions: 80,
-    nameMatch: 'GRI 2:',
+    labelEn: 'Environmental Performance',
+    labelTr: 'Çevre Performansı',
+    descEn:  'Climate, energy, water, biodiversity and circular economy (E1–E14)',
+    descTr:  'İklim, enerji, su, biyoçeşitlilik ve döngüsel ekonomi (E1–E14)',
+    questions: 74,
+    nameMatch: 'Cevre',
   },
   {
     phase: 3,
-    labelEn: 'GRI 3: Material Topics',
-    labelTr: 'GRI 3: Önemli Konular',
-    descEn:  'Materiality assessment and management approach for key topics',
-    descTr:  'Önemlilik değerlendirmesi ve temel konular için yönetim yaklaşımı',
-    questions: 60,
-    nameMatch: 'GRI 3:',
+    labelEn: 'Social Performance',
+    labelTr: 'Sosyal Performans',
+    descEn:  'Workforce, health & safety, community, human rights and diversity (S1–S24)',
+    descTr:  'İşgücü, iş sağlığı güvenliği, toplum, insan hakları ve çeşitlilik (S1–S24)',
+    questions: 116,
+    nameMatch: 'Sosyal',
   },
   {
     phase: 4,
+    labelEn: 'Economic Performance',
+    labelTr: 'Ekonomik Performans',
+    descEn:  'Economic value, procurement, tax transparency and anti-corruption (EC1–EC9)',
+    descTr:  'Ekonomik değer, tedarik, vergi şeffaflığı ve yolsuzlukla mücadele (EC1–EC9)',
+    questions: 44,
+    nameMatch: 'Ekonomik',
+  },
+  {
+    phase: 5,
     labelEn: 'Sector Standard',
     labelTr: 'Sektör Standardı',
-    descEn:  'Industry-specific sustainability topics for your sector',
-    descTr:  'Sektörünüze özgü sürdürülebilirlik konuları',
-    questions: 8,
+    descEn:  'Industry-specific sustainability topics for your sector (3 criteria · 14 questions)',
+    descTr:  'Sektörünüze özgü sürdürülebilirlik konuları (3 kriter · 14 soru)',
+    questions: 14,
     nameMatch: 'GRI Sector:',
   },
 ];
@@ -211,7 +220,7 @@ function StepCard({
   const isDone     = allDone.length > 0;   // has at least one completed attempt
   const isLive     = live !== null;         // has an in-progress attempt
   // Can start a new attempt: not locked and survey data loaded
-  const canStart   = !isLocked && phase < 4 && !!step.survey;
+  const canStart   = !isLocked && phase < 5 && !!step.survey;
 
   const label = lang === 'tr' ? step.labelTr : step.labelEn;
   const desc  = lang === 'tr' ? step.descTr  : step.descEn;
@@ -374,7 +383,7 @@ function StepCard({
         )}
 
         {/* ── Active (no attempts yet): start ── */}
-        {isActive && phase < 4 && !isDone && !isLive && (
+        {isActive && phase < 5 && !isDone && !isLive && (
           <div style={{
             marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -395,8 +404,8 @@ function StepCard({
           </div>
         )}
 
-        {/* Step 4 (Sector): sector picker + start — shown whenever not locked */}
-        {!isLocked && phase === 4 && (
+        {/* Step 5 (Sector): sector picker + start — shown whenever not locked */}
+        {!isLocked && phase === 5 && (
           <>
             <SectorPicker
               lang={lang}
@@ -415,6 +424,7 @@ function StepCard({
                 {stepErr}
               </div>
             )}
+
             <div style={{
               marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -443,8 +453,8 @@ function StepCard({
           <div style={{ marginTop: 10 }}>
             <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
               {lang === 'tr'
-                ? `GRI ${phase - 1} tamamlandıktan sonra açılır`
-                : `Unlock after completing GRI ${phase === 4 ? '3' : phase - 1}`}
+                ? `${STEP_DEFS[phase - 2]?.labelTr ?? `Aşama ${phase - 1}`} tamamlandıktan sonra açılır`
+                : `Unlock after completing ${STEP_DEFS[phase - 2]?.labelEn ?? `Phase ${phase - 1}`}`}
             </span>
           </div>
         )}
@@ -638,7 +648,7 @@ export default function SurveysPage() {
               letterSpacing: '0.14em', textTransform: 'uppercase',
               display: 'block', marginBottom: 10,
             }}>
-              GRI Universal Standards · {lang === 'tr' ? '4 Aşama' : '4 Phases'} · 180 Q
+              GRI v5 · {lang === 'tr' ? '5 Aşama' : '5 Phases'} · 330 Q
             </span>
             <h1 style={{ fontSize: 32, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 8 }}>
               {lang === 'tr'
@@ -684,11 +694,11 @@ export default function SurveysPage() {
                 {lang === 'tr' ? 'İlerleme' : 'Progress'}
               </span>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--olive-deep)', fontWeight: 600 }}>
-                {completedPhases} / 4 {lang === 'tr' ? 'aşama' : 'phases'}
+                {completedPhases} / 5 {lang === 'tr' ? 'aşama' : 'phases'}
               </span>
             </div>
             <div className="bar bar-olive">
-              <span style={{ width: `${(completedPhases / 4) * 100}%`, transition: 'width 0.4s ease' }} />
+              <span style={{ width: `${(completedPhases / 5) * 100}%`, transition: 'width 0.4s ease' }} />
             </div>
           </div>
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -772,7 +782,7 @@ export default function SurveysPage() {
               onContinue={handleContinue}
               onRetry={handleRetry}
               starting={starting}
-              stepErr={step.phase === 4 && step.status === 'active' ? startErr : undefined}
+              stepErr={step.phase === 5 && step.status === 'active' ? startErr : undefined}
             />
           ))}
         </div>
@@ -783,7 +793,7 @@ export default function SurveysPage() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-            {lang === 'tr' ? 'Toplam 180 soru · GRI 1 + GRI 2 + GRI 3 + Sektör' : 'Total 180 questions · GRI 1 + GRI 2 + GRI 3 + Sector'}
+            {lang === 'tr' ? 'Toplam 330 soru · Yönetişim + Çevre + Sosyal + Ekonomik + Sektör' : 'Total 330 questions · Governance + Environmental + Social + Economic + Sector'}
           </span>
           <a href="/history" style={{ textDecoration: 'none', fontSize: 11, color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             {lang === 'tr' ? 'Geçmiş' : 'History'} <Icon.arrow />
