@@ -518,8 +518,8 @@ export default function SurveysPage() {
     const sname = (s: Survey) => s.name_en || s.name || '';
     const aname = (a: Attempt) => a.survey_name || '';
 
-    // Survey match for steps 1-3 (exact phase prefix)
-    const survey = def.phase < 4
+    // Survey match for steps 1-4 (core phases); sector (phase 5) resolved later
+    const survey = def.phase < 5
       ? (surveys.find((s) => sname(s).includes(def.nameMatch)) ?? null)
       : null;  // sector survey resolved later by selected sector
 
@@ -554,7 +554,7 @@ export default function SurveysPage() {
 
     let survey = step.survey;
 
-    if (step.phase === 4 && sector) {
+    if (step.phase === 5 && sector) {
       const sectorDef = SECTORS.find((s) => s.value === sector);
       if (sectorDef) {
         survey = surveys.find((s) =>
