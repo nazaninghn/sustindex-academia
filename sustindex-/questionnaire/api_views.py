@@ -323,12 +323,12 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
 
             # Fix START-4: enforce GRI phase ordering at the backend.
             # Phase 2 requires a completed Phase 1; Phase 3 requires Phase 2;
-            # Sector requires Phase 3.  The UI already gates navigation but
-            # without backend enforcement a direct API call can skip phases.
+            # Sector requires Phase 3 (v4) OR Economic/Bolum4 (v5).
+            # The UI already gates navigation but without backend enforcement
+            # a direct API call can skip phases.
             PHASE_PREREQS = [
                 ('GRI 2:',      'GRI 1:'),
                 ('GRI 3:',      'GRI 2:'),
-                ('GRI Sector:', 'GRI 3:'),
             ]
             survey_name = (survey.name or '') if survey else ''
             for current_prefix, required_prefix in PHASE_PREREQS:
@@ -348,6 +348,26 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
                             'prerequisite': required_label,
                         })
                     break  # only the first matching rule applies
+
+            # Fix START-4b: GRI Sector requires EITHER old v4 "GRI 3:" OR
+            # v5 "Bolum 4: Ekonomik" to be completed (accept both naming schemes).
+            if survey_name.startswith('GRI Sector:'):
+                from django.db.models import Q as _Q
+                has_prereq = QuestionnaireAttempt.objects.filter(
+                    user=user,
+                    is_completed=True,
+                ).filter(
+                    _Q(survey__name__startswith='GRI 3:') |
+                    _Q(survey__name__icontains='Ekonomik')
+                ).exists()
+                if not has_prereq:
+                    raise DRFValidationError({
+                        'detail': (
+                            'You must complete Economic Performance before '
+                            'starting the Sector Standard.'
+                        ),
+                        'prerequisite': 'Economic Performance',
+                    })
 
             serializer.save(user=self.request.user)
 
