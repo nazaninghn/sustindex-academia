@@ -609,9 +609,11 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
     # Fix #10: guard against null FK (survey/session may be null)
     survey_name  = serializers.SerializerMethodField()
     session_name = serializers.SerializerMethodField()
-    category_scores = serializers.SerializerMethodField()
-    total_score = serializers.SerializerMethodField()
-    overall_grade = serializers.SerializerMethodField()
+    category_scores  = serializers.SerializerMethodField()
+    total_score      = serializers.SerializerMethodField()
+    overall_grade    = serializers.SerializerMethodField()
+    answered_count   = serializers.SerializerMethodField()
+    total_questions  = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionnaireAttempt
@@ -620,6 +622,7 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
             'session', 'session_name', 'started_at', 'completed_at',
             'is_completed', 'total_score', 'overall_grade',
             'selected_sector', 'cycle_name',
+            'answered_count', 'total_questions',
             'category_scores',
         ]
 
@@ -642,6 +645,16 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
 
     def get_category_scores(self, obj):
         return self._breakdown(obj)['categories']
+
+    def get_answered_count(self, obj):
+        """How many questions have been answered (or marked N/A) in this attempt."""
+        return obj.answers.count()
+
+    def get_total_questions(self, obj):
+        """Effective question count for this attempt's survey (sector-aware)."""
+        if not obj.survey_id or not obj.survey:
+            return 0
+        return _effective_question_count(obj.survey)
 
 
 class QuestionnaireAttemptCreateSerializer(serializers.ModelSerializer):

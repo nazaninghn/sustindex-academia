@@ -21,6 +21,10 @@ interface DashAttempt {
   total_score: number | null;
   overall_grade: string;
   category_scores?: { id: number; key: string; name: string; percentage: number }[];
+  answered_count: number;
+  total_questions: number;
+  started_at: string;
+  cycle_name: string;
 }
 
 interface StripCourse {
@@ -35,6 +39,70 @@ interface StripCourse {
   total_lessons: number;
   progress_percentage: number;
   order: number;
+}
+
+function timeAgo(isoDate: string | null, lang: string): string {
+  if (!isoDate) return '';
+  const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);
+  if (diff < 60) return lang === 'tr' ? 'Az önce' : 'Just now';
+  if (diff < 3600) {
+    const m = Math.floor(diff / 60);
+    return lang === 'tr' ? `${m} dk önce` : `${m}m ago`;
+  }
+  if (diff < 86400) {
+    const h = Math.floor(diff / 3600);
+    return lang === 'tr' ? `${h} sa önce` : `${h}h ago`;
+  }
+  const d = Math.floor(diff / 86400);
+  return lang === 'tr' ? `${d} gün önce` : `${d}d ago`;
+}
+
+const V5_PHASES = [
+  { key: 'Strateji', labelEn: 'Governance', labelTr: 'Yönetişim' },
+  { key: 'Cevre',    labelEn: 'Environment', labelTr: 'Çevre' },
+  { key: 'Sosyal',   labelEn: 'Social',      labelTr: 'Sosyal' },
+  { key: 'Ekonomik', labelEn: 'Economic',    labelTr: 'Ekonomik' },
+  { key: 'GRI Sector:', labelEn: 'Sector',   labelTr: 'Sektör' },
+];
+
+function PhaseTracker({ attempts, lang }: { attempts: DashAttempt[]; lang: string }) {
+  return (
+    <div style={{
+      background: 'var(--paper)', border: '1px solid var(--line)',
+      padding: '16px 20px', marginBottom: 24,
+      display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto',
+    }}>
+      <span style={{
+        fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+        letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-4)',
+        marginRight: 20, flexShrink: 0,
+      }}>
+        {lang === 'tr' ? 'AŞAMALAR' : 'PHASES'}
+      </span>
+      {V5_PHASES.map((phase, i) => {
+        const phaseAttempts = attempts.filter(a => (a.survey_name || '').includes(phase.key));
+        const isCompleted   = phaseAttempts.some(a => a.is_completed);
+        const isInProgress  = !isCompleted && phaseAttempts.some(a => !a.is_completed);
+        const icon = isCompleted ? '✓' : isInProgress ? '⏳' : '○';
+        const color = isCompleted ? 'var(--olive-deep)' : isInProgress ? 'var(--amber)' : 'var(--ink-4)';
+        const label = lang === 'tr' ? phase.labelTr : phase.labelEn;
+        return (
+          <div key={phase.key} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px' }}>
+              <span style={{ fontSize: 11, color }}>{icon}</span>
+              <span style={{
+                fontSize: 11, fontWeight: isCompleted ? 600 : 400,
+                color: isCompleted ? 'var(--ink)' : isInProgress ? 'var(--ink)' : 'var(--ink-4)',
+              }}>{label}</span>
+            </div>
+            {i < V5_PHASES.length - 1 && (
+              <span style={{ color: 'var(--line)', fontSize: 12, padding: '0 2px' }}>›</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function courseStatus(c: StripCourse): 'done' | 'active' | 'new' {
@@ -396,6 +464,11 @@ export default function DashboardPage() {
                   ? (lang === 'tr' ? `${inProgress.length} değerlendirme devam ediyor.` : `${inProgress.length} assessment${inProgress.length !== 1 ? 's' : ''} in progress.`)
                   : (lang === 'tr' ? `${completed.length} değerlendirme tamamlandı.` : `${completed.length} assessment${completed.length !== 1 ? 's' : ''} completed.`)}
             </p>
+            {activeAttempt && (
+              <p style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 4, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em' }}>
+                {lang === 'tr' ? 'Son aktivite:' : 'Last activity:'} {timeAgo(activeAttempt.started_at, lang)}
+              </p>
+            )}
           </div>
           <div className="dash-header-actions">
             <Link href="/history"  style={{ textDecoration: 'none' }}>
@@ -498,6 +571,8 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+
+            <PhaseTracker attempts={attempts} lang={lang} />
 
             {/* ── 2-col: performance + sidebar ── */}
             <div className="content-grid-main">
@@ -633,6 +708,41 @@ export default function DashboardPage() {
                       ? (lang === 'tr' ? 'Kaldığınız yerden devam edin.' : 'Pick up where you left off.')
                       : (lang === 'tr' ? 'ESG performansınızı ölçün.' : 'Measure your ESG performance now.')}
                   </p>
+                  {activeAttempt && (() => {
+                    const phaseIdx = V5_PHASES.findIndex(p => (activeAttempt.survey_name || '').includes(p.key));
+                    const phaseNum = phaseIdx >= 0 ? phaseIdx + 1 : null;
+                    const answered = activeAttempt.answered_count ?? 0;
+                    const total    = activeAttempt.total_questions ?? 0;
+                    const pct      = total > 0 ? Math.round((answered / total) * 100) : 0;
+                    const savedTime = activeAttempt.started_at
+                      ? new Date(activeAttempt.started_at).toLocaleTimeString(lang === 'tr' ? 'tr-TR' : 'en-GB', { hour: '2-digit', minute: '2-digit' })
+                      : null;
+                    return phaseNum ? (
+                      <div style={{ marginBottom: 16 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em' }}>
+                            {lang === 'tr' ? `AŞAMA ${phaseNum} / 5` : `PHASE ${phaseNum} OF 5`}
+                          </span>
+                          {savedTime && (
+                            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>
+                              {lang === 'tr' ? `Kaydedildi: ${savedTime}` : `Saved: ${savedTime}`}
+                            </span>
+                          )}
+                        </div>
+                        {total > 0 && (
+                          <>
+                            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>
+                              {lang === 'tr' ? `Soru ${answered} / ${total}` : `Question ${answered} / ${total}`}
+                              {' · '}{pct}% {lang === 'tr' ? 'tamamlandı' : 'complete'}
+                            </div>
+                            <div style={{ background: 'rgba(255,255,255,0.15)', height: 3, borderRadius: 2 }}>
+                              <div style={{ background: 'var(--olive)', width: `${pct}%`, height: '100%', borderRadius: 2, transition: 'width 0.3s' }} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : null;
+                  })()}
                   <Link
                     href={activeAttempt ? `/questionnaire/${activeAttempt.id}` : '/surveys'}
                     style={{ textDecoration: 'none', position: 'relative', display: 'block' }}
