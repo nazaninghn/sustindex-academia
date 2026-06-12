@@ -21,6 +21,7 @@ interface Attempt {
   total_score: number;
   overall_grade: string;
   category_scores: CategoryScore[];
+  cycle_name: string;
 }
 
 export default function HistoryPage() {
@@ -335,100 +336,140 @@ export default function HistoryPage() {
               </button>
             </Link>
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {visible.map((attempt) => (
-              <div key={attempt.id} style={{
-                background: 'var(--paper)', border: '1px solid var(--line)',
-                padding: 24, transition: 'border-color 0.15s',
-              }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24 }}>
+        ) : (() => {
+          // Group attempts by cycle_name preserving order of first appearance (most recent first)
+          const cycleGroups: { name: string; attempts: Attempt[] }[] = [];
+          const seen = new Set<string>();
+          for (const a of visible) {
+            const key = a.cycle_name || '';
+            if (!seen.has(key)) {
+              seen.add(key);
+              cycleGroups.push({ name: key, attempts: [] });
+            }
+            cycleGroups.find(g => g.name === key)!.attempts.push(a);
+          }
 
-                  {/* Left: info */}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>
-                        {attempt.survey_name}
-                      </h3>
-                      <span style={{
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
-                        padding: '2px 8px',
-                        border: `1px solid ${attempt.is_completed ? 'var(--olive)' : 'var(--amber)'}`,
-                        color: attempt.is_completed ? 'var(--olive-deep)' : 'var(--amber)',
-                        background: attempt.is_completed ? 'var(--olive-pale)' : 'rgba(217,148,68,0.08)',
-                      }}>
-                        {attempt.is_completed ? t('hist_status_done') : t('hist_status_ongoing')}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 20, fontSize: 11.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                      <span>{t('hist_started')} {new Date(attempt.started_at).toLocaleDateString()}</span>
-                      {attempt.is_completed && attempt.completed_at && (
-                        <span>{t('hist_finished')} {new Date(attempt.completed_at).toLocaleDateString()}</span>
-                      )}
-                    </div>
-
-                    {/* Category scores */}
-                    {attempt.is_completed && (attempt.category_scores?.length ?? 0) > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-                        {attempt.category_scores.map((cat) => (
-                          <div key={cat.id} style={{ minWidth: 120 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                              <span style={{ fontSize: 10.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
-                                {cat.name}
-                              </span>
-                              <span style={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink-2)' }}>
-                                {Math.round(cat.percentage)}%
-                              </span>
-                            </div>
-                            <div className="bar bar-olive">
-                              <span style={{ width: `${Math.min(cat.percentage, 100)}%` }}></span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+          return (
+            <div>
+              {cycleGroups.map((group) => (
+                <div key={group.name} style={{ marginBottom: 32 }}>
+                  {/* Cycle header */}
+                  <div style={{
+                    padding: '8px 0', marginBottom: 12,
+                    borderBottom: '1px solid var(--line)',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                  }}>
+                    <span style={{
+                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+                      letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-4)',
+                    }}>
+                      {lang === 'tr' ? 'DÖNGÜ' : 'CYCLE'}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
+                      {group.name || (lang === 'tr' ? 'Etiketlenmemiş' : 'Unlabeled')}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>
+                      · {group.attempts.length} {lang === 'tr' ? 'değerlendirme' : 'assessment(s)'}
+                    </span>
                   </div>
+                  {/* Attempts in this cycle */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {group.attempts.map((attempt) => (
+                      <div key={attempt.id} style={{
+                        background: 'var(--paper)', border: '1px solid var(--line)',
+                        padding: 24, transition: 'border-color 0.15s',
+                      }}
+                        onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24 }}>
 
-                  {/* Right: grade + action */}
-                  {attempt.is_completed ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{
-                          fontFamily: "'IBM Plex Sans', sans-serif",
-                          fontWeight: 300, fontSize: 40,
-                          letterSpacing: '-0.04em',
-                          color: gradeColor(attempt.overall_grade),
-                          lineHeight: 1,
-                          marginBottom: 4,
-                        }}>
-                          {attempt.overall_grade}
-                        </div>
-                        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)' }}>
-                          {Math.round(attempt.total_score)}%
+                          {/* Left: info */}
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                              <h3 style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>
+                                {attempt.survey_name}
+                              </h3>
+                              <span style={{
+                                fontFamily: "'IBM Plex Mono', monospace",
+                                fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
+                                padding: '2px 8px',
+                                border: `1px solid ${attempt.is_completed ? 'var(--olive)' : 'var(--amber)'}`,
+                                color: attempt.is_completed ? 'var(--olive-deep)' : 'var(--amber)',
+                                background: attempt.is_completed ? 'var(--olive-pale)' : 'rgba(217,148,68,0.08)',
+                              }}>
+                                {attempt.is_completed ? t('hist_status_done') : t('hist_status_ongoing')}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 20, fontSize: 11.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                              <span>{t('hist_started')} {new Date(attempt.started_at).toLocaleDateString()}</span>
+                              {attempt.is_completed && attempt.completed_at && (
+                                <span>{t('hist_finished')} {new Date(attempt.completed_at).toLocaleDateString()}</span>
+                              )}
+                            </div>
+
+                            {/* Category scores */}
+                            {attempt.is_completed && (attempt.category_scores?.length ?? 0) > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+                                {attempt.category_scores.map((cat) => (
+                                  <div key={cat.id} style={{ minWidth: 120 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                      <span style={{ fontSize: 10.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
+                                        {cat.name}
+                                      </span>
+                                      <span style={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink-2)' }}>
+                                        {Math.round(cat.percentage)}%
+                                      </span>
+                                    </div>
+                                    <div className="bar bar-olive">
+                                      <span style={{ width: `${Math.min(cat.percentage, 100)}%` }}></span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right: grade + action */}
+                          {attempt.is_completed ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{
+                                  fontFamily: "'IBM Plex Sans', sans-serif",
+                                  fontWeight: 300, fontSize: 40,
+                                  letterSpacing: '-0.04em',
+                                  color: gradeColor(attempt.overall_grade),
+                                  lineHeight: 1,
+                                  marginBottom: 4,
+                                }}>
+                                  {attempt.overall_grade}
+                                </div>
+                                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)' }}>
+                                  {Math.round(attempt.total_score)}%
+                                </div>
+                              </div>
+                              <Link href={`/results/${attempt.id}`} style={{ textDecoration: 'none' }}>
+                                <button className="btn btn-primary btn-sm">
+                                  {t('hist_view_results')} <Icon.arrow />
+                                </button>
+                              </Link>
+                            </div>
+                          ) : (
+                            <Link href={`/questionnaire/${attempt.id}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
+                              <button className="btn btn-outline btn-sm">
+                                {t('courses_resume')} <Icon.arrow />
+                              </button>
+                            </Link>
+                          )}
                         </div>
                       </div>
-                      <Link href={`/results/${attempt.id}`} style={{ textDecoration: 'none' }}>
-                        <button className="btn btn-primary btn-sm">
-                          {t('hist_view_results')} <Icon.arrow />
-                        </button>
-                      </Link>
-                    </div>
-                  ) : (
-                    <Link href={`/questionnaire/${attempt.id}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
-                      <button className="btn btn-outline btn-sm">
-                        {t('courses_resume')} <Icon.arrow />
-                      </button>
-                    </Link>
-                  )}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          );
+        })()}
       </main>
     </div>
   );

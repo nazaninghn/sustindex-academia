@@ -398,7 +398,14 @@ class QuestionnaireAttempt(models.Model):
         verbose_name=_('Selected Sector'),
         help_text=_('Industry sector chosen by the user at the start of this attempt.'),
     )
-    
+    cycle_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        verbose_name=_('Cycle Name'),
+        help_text=_('User-defined label for this assessment cycle (e.g. "Q1 2026"). All 5 phases started in one cycle share this name.'),
+    )
+
     class Meta:
         verbose_name = _('Questionnaire Attempt')
         verbose_name_plural = _('Questionnaire Attempts')

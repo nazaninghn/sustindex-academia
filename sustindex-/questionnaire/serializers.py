@@ -619,7 +619,7 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
             'id', 'user', 'user_name', 'survey', 'survey_name',
             'session', 'session_name', 'started_at', 'completed_at',
             'is_completed', 'total_score', 'overall_grade',
-            'selected_sector',
+            'selected_sector', 'cycle_name',
             'category_scores',
         ]
 
@@ -648,5 +648,5 @@ class QuestionnaireAttemptCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuestionnaireAttempt
         # selected_sector is optional: blank / omitted = universal (no sector filtering).
-        fields = ['id', 'survey', 'session', 'selected_sector']
+        fields = ['id', 'survey', 'session', 'selected_sector', 'cycle_name']
         read_only_fields = ['id']

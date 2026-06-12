@@ -140,9 +140,10 @@ export const attemptAPI = {
    *                     sector-specific questions are included in the questionnaire.
    *                     Omit or pass '' for a universal (no-sector) attempt.
    */
-  startAttempt: async (surveyId: number, sector?: string) => {
+  startAttempt: async (surveyId: number, sector?: string, cycleName?: string) => {
     const payload: Record<string, number | string> = { survey: surveyId };
     if (sector) payload.selected_sector = sector;
+    if (cycleName !== undefined && cycleName !== null) payload.cycle_name = cycleName;
     const { data } = await api.post('/api/v1/attempts/', payload);
     return data;
   },

@@ -35,6 +35,7 @@ interface Attempt {
   completed_at: string | null;
   total_score: number | null;
   overall_grade: string;
+  cycle_name: string;
 }
 
 type StepStatus = 'completed' | 'in_progress' | 'active' | 'locked';
@@ -479,6 +480,8 @@ export default function SurveysPage() {
   const [starting, setStarting] = useState(false);
   const [startErr, setStartErr] = useState('');
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
+  const [showNewCycleModal, setShowNewCycleModal] = useState(false);
+  const [newCycleName, setNewCycleName] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -513,6 +516,12 @@ export default function SurveysPage() {
     return () => controller.abort();
   }, [user]);
 
+  // Active cycle = cycle_name of the most recent attempt (sorted by id desc)
+  // Empty string means legacy/unnamed attempts
+  const activeCycleName = attempts.length > 0
+    ? (attempts.slice().sort((a, b) => b.id - a.id)[0].cycle_name ?? '')
+    : '';
+
   /* ── Build wizard steps ─────────────────────────────────── */
   const steps: WizardStep[] = STEP_DEFS.map((def, idx) => {
     const sname = (s: Survey) => s.name_en || s.name || '';
@@ -524,8 +533,9 @@ export default function SurveysPage() {
       : null;  // sector survey resolved later by selected sector
 
     // Attempt match — sort by id desc so index 0 = most recent
+    // Filter by activeCycleName so each cycle only shows its own attempts
     const stepAttempts = attempts
-      .filter((a) => aname(a).includes(def.nameMatch))
+      .filter((a) => aname(a).includes(def.nameMatch) && (a.cycle_name ?? '') === activeCycleName)
       .sort((a, b) => b.id - a.id);
 
     // Most-recent attempt (highest id) drives the card state.
@@ -552,7 +562,7 @@ export default function SurveysPage() {
   });
 
   /* ── Handlers ───────────────────────────────────────────── */
-  const handleStart = useCallback(async (step: WizardStep, sector?: string) => {
+  const handleStart = useCallback(async (step: WizardStep, sector?: string, cycleName?: string) => {
     if (submitLockRef.current) return;
     setStartErr('');
 
@@ -576,7 +586,7 @@ export default function SurveysPage() {
     submitLockRef.current = true;
     setStarting(true);
     try {
-      const attempt = await attemptAPI.startAttempt(survey.id, sector);
+      const attempt = await attemptAPI.startAttempt(survey.id, sector, cycleName ?? activeCycleName);
       router.push(`/questionnaire/${attempt.id}`);
     } catch (err: unknown) {
       // Fix START-1: parse the API error so the user sees WHY it failed.
@@ -603,7 +613,7 @@ export default function SurveysPage() {
     } finally {
       submitLockRef.current = false;
     }
-  }, [surveys, lang, router]);
+  }, [surveys, lang, router, activeCycleName]);
 
   const handleContinue = useCallback((attempt: Attempt) => {
     router.push(`/questionnaire/${attempt.id}`);
@@ -614,11 +624,18 @@ export default function SurveysPage() {
     handleStart(step);
   }, [handleStart]);
 
-  // New Cycle = start GRI 1 fresh (triggers new cycle for all phases)
+  // New Cycle = show modal to name the cycle, then start GRI 1
   const handleNewCycle = useCallback(() => {
+    setNewCycleName('');
+    setShowNewCycleModal(true);
+  }, []);
+
+  const handleNewCycleConfirm = useCallback(async () => {
+    const name = newCycleName.trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    setShowNewCycleModal(false);
     const gri1Step = steps.find((s) => s.phase === 1);
-    if (gri1Step) handleStart(gri1Step);
-  }, [steps, handleStart]);
+    if (gri1Step) await handleStart(gri1Step, undefined, name);
+  }, [newCycleName, steps, handleStart]);
 
   /* ── Loading ─────────────────────────────────────────────── */
   if (authLoading || loading) {
@@ -685,6 +702,21 @@ export default function SurveysPage() {
             </div>
           )}
         </div>
+
+        {/* Current cycle label */}
+        {activeCycleName && (
+          <div style={{
+            marginBottom: 24, padding: '8px 16px',
+            background: 'var(--cream-deep)', border: '1px solid var(--line)',
+            display: 'inline-flex', alignItems: 'center', gap: 10,
+            fontFamily: "'IBM Plex Mono', monospace",
+          }}>
+            <span style={{ fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-4)' }}>
+              {lang === 'tr' ? 'AKTİF DÖNGÜ' : 'ACTIVE CYCLE'}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--ink)', fontWeight: 500 }}>{activeCycleName}</span>
+          </div>
+        )}
 
         {/* ── Progress strip ───────────────────────────────── */}
         <div style={{
@@ -804,6 +836,65 @@ export default function SurveysPage() {
           </a>
         </div>
       </main>
+
+      {/* ── New Cycle Modal ── */}
+      {showNewCycleModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+        }} onClick={() => setShowNewCycleModal(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              padding: '36px 40px', maxWidth: 440, width: '100%',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            }}
+          >
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', display: 'block', marginBottom: 14 }}>
+              {lang === 'tr' ? 'Yeni Değerlendirme Döngüsü' : 'New Assessment Cycle'}
+            </span>
+            <h2 style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>
+              {lang === 'tr' ? 'Bu döngüye bir isim verin' : 'Name this cycle'}
+            </h2>
+            <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 24, lineHeight: 1.6 }}>
+              {lang === 'tr'
+                ? 'Tüm 5 aşama bu isimle kaydedilir. Geçmiş sayfasında döngülere göre filtreleyebilirsiniz.'
+                : 'All 5 phases will be saved under this name. Filter by cycle in the History page.'}
+            </p>
+            <input
+              type="text"
+              autoFocus
+              value={newCycleName}
+              onChange={(e) => setNewCycleName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleNewCycleConfirm()}
+              placeholder={lang === 'tr' ? 'örn. Q1 2026, Yıllık Değerlendirme…' : 'e.g. Q1 2026, Annual Review…'}
+              style={{
+                width: '100%', padding: '11px 14px',
+                border: '1px solid var(--line)', background: 'var(--cream)',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 13,
+                outline: 'none', marginBottom: 20, boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => setShowNewCycleModal(false)}
+              >
+                {lang === 'tr' ? 'İptal' : 'Cancel'}
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleNewCycleConfirm}
+                disabled={starting}
+              >
+                {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Starting…') : (lang === 'tr' ? 'Başlat' : 'Start')} →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
