@@ -247,6 +247,11 @@ export default function DashboardPage() {
   const [loading,     setLoading]     = useState(true);
   const [hasLoadErr,  setHasLoadErr]  = useState(false);
 
+  /* ── New Assessment modal state ── */
+  const [showNewModal,       setShowNewModal]       = useState(false);
+  const [newAssessmentName,  setNewAssessmentName]  = useState('');
+  const [newAssessmentDesc,  setNewAssessmentDesc]  = useState('');
+
   // Fix MED-05: track mounted state so async callbacks don't call setState
   // on an unmounted component (avoids React "can't perform state update" warnings).
   const mountedRef = useRef(true);
@@ -279,6 +284,23 @@ export default function DashboardPage() {
       })
       .finally(() => { if (mountedRef.current) setLoading(false); });
   }, [user]);
+
+  /** Open new-assessment modal */
+  const handleNewAssessmentClick = useCallback(() => {
+    setNewAssessmentName('');
+    setNewAssessmentDesc('');
+    setShowNewModal(true);
+  }, []);
+
+  /** Save name to localStorage so surveys page can pick it up, then navigate */
+  const handleNewAssessmentStart = useCallback(() => {
+    const name = newAssessmentName.trim() ||
+      new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB',
+        { day: '2-digit', month: 'short', year: 'numeric' });
+    try { localStorage.setItem('sx_pending_cycle', name); } catch { /* ignore */ }
+    setShowNewModal(false);
+    router.push('/surveys');
+  }, [newAssessmentName, lang, router]);
 
   /* Initial load */
   useEffect(() => {
@@ -378,11 +400,9 @@ export default function DashboardPage() {
             <Link href="/history"  style={{ textDecoration: 'none' }}>
               <button className="btn btn-outline btn-sm">{lang === 'tr' ? 'Geçmiş' : 'History'}</button>
             </Link>
-            <Link href="/surveys" style={{ textDecoration: 'none' }}>
-              <button className="btn btn-primary btn-sm">
-                {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'} <Icon.plus />
-              </button>
-            </Link>
+            <button className="btn btn-primary btn-sm" onClick={handleNewAssessmentClick}>
+              {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'} <Icon.plus />
+            </button>
           </div>
         </div>
 
@@ -758,6 +778,141 @@ export default function DashboardPage() {
           </>
         )}
       </main>
+
+      {/* ════════════════════════════════════════
+          NEW ASSESSMENT MODAL
+          ════════════════════════════════════════ */}
+      {showNewModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowNewModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              padding: '40px 44px', maxWidth: 480, width: '100%',
+              boxShadow: '0 12px 48px rgba(0,0,0,0.15)',
+            }}
+          >
+            {/* Modal header */}
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+              letterSpacing: '0.14em', textTransform: 'uppercase',
+              color: 'var(--ink-4)', display: 'block', marginBottom: 12,
+            }}>
+              {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'}
+            </span>
+            <h2 style={{ fontSize: 22, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 6 }}>
+              {lang === 'tr' ? 'Değerlendirmeyi başlat' : 'Start your assessment'}
+            </h2>
+            <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 28, lineHeight: 1.65 }}>
+              {lang === 'tr'
+                ? 'GRI v5 standartlarına göre 5 aşamalı ESG değerlendirmesi. İsteğe bağlı olarak bir isim ve açıklama ekleyebilirsiniz.'
+                : '5-phase ESG assessment based on GRI v5 standards. Optionally add a name and description to identify this cycle.'}
+            </p>
+
+            {/* Today's date info */}
+            <div style={{
+              padding: '10px 14px', background: 'var(--cream-deep)',
+              border: '1px solid var(--line)', marginBottom: 22,
+              display: 'flex', gap: 20, alignItems: 'center',
+            }}>
+              <div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: 'var(--ink-4)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 3 }}>
+                  {lang === 'tr' ? 'BUGÜN' : 'TODAY'}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>
+                  {new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: 'var(--ink-4)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 3 }}>
+                  {lang === 'tr' ? 'TOPLAM SORU' : 'TOTAL Q'}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>330</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: 'var(--ink-4)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 3 }}>
+                  {lang === 'tr' ? 'AŞAMA' : 'PHASES'}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>5</div>
+              </div>
+            </div>
+
+            {/* Assessment name */}
+            <label style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+              color: 'var(--ink-4)', letterSpacing: '0.12em',
+              textTransform: 'uppercase', display: 'block', marginBottom: 6,
+            }}>
+              {lang === 'tr' ? 'Değerlendirme Adı' : 'Assessment Name'}
+              <span style={{ color: 'var(--ink-4)', fontWeight: 400, marginLeft: 6 }}>
+                ({lang === 'tr' ? 'isteğe bağlı' : 'optional'})
+              </span>
+            </label>
+            <input
+              type="text"
+              autoFocus
+              value={newAssessmentName}
+              onChange={(e) => setNewAssessmentName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleNewAssessmentStart()}
+              placeholder={lang === 'tr' ? 'örn. Q1 2026, Yıllık Rapor…' : 'e.g. Q1 2026, Annual Report…'}
+              style={{
+                width: '100%', padding: '11px 14px',
+                border: '1px solid var(--line)', background: 'var(--cream)',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 13,
+                outline: 'none', marginBottom: 16, boxSizing: 'border-box',
+              }}
+            />
+
+            {/* Description */}
+            <label style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+              color: 'var(--ink-4)', letterSpacing: '0.12em',
+              textTransform: 'uppercase', display: 'block', marginBottom: 6,
+            }}>
+              {lang === 'tr' ? 'Açıklama' : 'Description'}
+              <span style={{ color: 'var(--ink-4)', fontWeight: 400, marginLeft: 6 }}>
+                ({lang === 'tr' ? 'isteğe bağlı' : 'optional'})
+              </span>
+            </label>
+            <textarea
+              value={newAssessmentDesc}
+              onChange={(e) => setNewAssessmentDesc(e.target.value)}
+              placeholder={lang === 'tr' ? 'Bu değerlendirme hakkında notlar…' : 'Notes about this assessment…'}
+              rows={3}
+              style={{
+                width: '100%', padding: '11px 14px',
+                border: '1px solid var(--line)', background: 'var(--cream)',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 13,
+                outline: 'none', marginBottom: 24, boxSizing: 'border-box',
+                resize: 'vertical',
+              }}
+            />
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => setShowNewModal(false)}
+              >
+                {lang === 'tr' ? 'İptal' : 'Cancel'}
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleNewAssessmentStart}
+              >
+                {lang === 'tr' ? 'Başlat' : 'Start Assessment'} →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -482,6 +482,19 @@ export default function SurveysPage() {
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [showNewCycleModal, setShowNewCycleModal] = useState(false);
   const [newCycleName, setNewCycleName] = useState('');
+  // Pending cycle name set by the Dashboard "New Assessment" form
+  const [pendingDashCycle, setPendingDashCycle] = useState<string | null>(null);
+
+  // On mount: pick up any cycle name stored by the Dashboard modal
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('sx_pending_cycle');
+      if (saved) {
+        setPendingDashCycle(saved);
+        localStorage.removeItem('sx_pending_cycle');
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -515,6 +528,18 @@ export default function SurveysPage() {
       });
     return () => controller.abort();
   }, [user]);
+
+  // Auto-start Phase 1 when arriving from Dashboard "New Assessment" modal
+  // (pendingDashCycle is set from localStorage by the Dashboard form)
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (!pendingDashCycle || loading || autoStartedRef.current) return;
+    const gri1Step = steps.find((s) => s.phase === 1);
+    if (!gri1Step || !gri1Step.survey) return;
+    autoStartedRef.current = true;
+    setPendingDashCycle(null);
+    handleStart(gri1Step, undefined, pendingDashCycle);
+  }, [pendingDashCycle, loading, steps, handleStart]);
 
   // Active cycle = cycle_name of the most recent attempt (sorted by id desc)
   // Empty string means legacy/unnamed attempts
