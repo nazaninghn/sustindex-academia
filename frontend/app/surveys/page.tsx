@@ -485,7 +485,8 @@ export default function SurveysPage() {
   // Pending cycle name set by the Dashboard "New Assessment" form
   const [pendingDashCycle, setPendingDashCycle] = useState<string | null>(null);
 
-  // On mount: pick up any cycle name stored by the Dashboard modal
+  // On mount: pick up any cycle name stored by the Dashboard "New Assessment" modal.
+  // We DON'T auto-start — just store it so the user can click Start on Phase 1.
   useEffect(() => {
     try {
       const saved = localStorage.getItem('sx_pending_cycle');
@@ -528,18 +529,6 @@ export default function SurveysPage() {
       });
     return () => controller.abort();
   }, [user]);
-
-  // Auto-start Phase 1 when arriving from Dashboard "New Assessment" modal
-  // (pendingDashCycle is set from localStorage by the Dashboard form)
-  const autoStartedRef = useRef(false);
-  useEffect(() => {
-    if (!pendingDashCycle || loading || autoStartedRef.current) return;
-    const gri1Step = steps.find((s) => s.phase === 1);
-    if (!gri1Step || !gri1Step.survey) return;
-    autoStartedRef.current = true;
-    setPendingDashCycle(null);
-    handleStart(gri1Step, undefined, pendingDashCycle);
-  }, [pendingDashCycle, loading, steps, handleStart]);
 
   // Active cycle = cycle_name of the most recent attempt (sorted by id desc)
   // Empty string means legacy/unnamed attempts
@@ -611,7 +600,10 @@ export default function SurveysPage() {
     submitLockRef.current = true;
     setStarting(true);
     try {
-      const attempt = await attemptAPI.startAttempt(survey.id, sector, cycleName ?? activeCycleName);
+      // Priority: explicit cycleName → pendingDashCycle (from dashboard form) → activeCycleName
+      const effectiveCycle = cycleName ?? pendingDashCycle ?? activeCycleName;
+      if (pendingDashCycle) setPendingDashCycle(null); // consume it
+      const attempt = await attemptAPI.startAttempt(survey.id, sector, effectiveCycle);
       router.push(`/questionnaire/${attempt.id}`);
     } catch (err: unknown) {
       // Fix START-1: parse the API error so the user sees WHY it failed.
@@ -638,7 +630,7 @@ export default function SurveysPage() {
     } finally {
       submitLockRef.current = false;
     }
-  }, [surveys, lang, router, activeCycleName]);
+  }, [surveys, lang, router, activeCycleName, pendingDashCycle]);
 
   const handleContinue = useCallback((attempt: Attempt) => {
     router.push(`/questionnaire/${attempt.id}`);
@@ -728,8 +720,27 @@ export default function SurveysPage() {
           )}
         </div>
 
+        {/* Pending cycle banner — shown when arriving from Dashboard "New Assessment" form */}
+        {pendingDashCycle && (
+          <div style={{
+            marginBottom: 16, padding: '12px 16px',
+            background: '#F0F7F0', border: '1px solid var(--olive-deep)',
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <span style={{ fontSize: 16 }}>✅</span>
+            <div>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--olive-deep)', marginBottom: 2 }}>
+                {lang === 'tr' ? 'Yeni Döngü Hazır' : 'New Cycle Ready'}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>
+                &ldquo;{pendingDashCycle}&rdquo; — {lang === 'tr' ? 'Başlamak için Aşama 1\'e tıklayın' : 'click Start on Phase 1 to begin'}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Current cycle label */}
-        {activeCycleName && (
+        {activeCycleName && !pendingDashCycle && (
           <div style={{
             marginBottom: 24, padding: '8px 16px',
             background: 'var(--cream-deep)', border: '1px solid var(--line)',

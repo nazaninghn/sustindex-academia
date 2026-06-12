@@ -292,14 +292,15 @@ export default function DashboardPage() {
     setShowNewModal(true);
   }, []);
 
-  /** Save name to localStorage so surveys page can pick it up, then navigate */
+  /** Save name to localStorage so surveys page can pre-fill it, then navigate */
   const handleNewAssessmentStart = useCallback(() => {
     const name = newAssessmentName.trim() ||
       new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB',
         { day: '2-digit', month: 'short', year: 'numeric' });
     try { localStorage.setItem('sx_pending_cycle', name); } catch { /* ignore */ }
     setShowNewModal(false);
-    router.push('/surveys');
+    // Small delay so modal closes before navigation
+    setTimeout(() => router.push('/surveys'), 80);
   }, [newAssessmentName, lang, router]);
 
   /* Initial load */
@@ -789,16 +790,28 @@ export default function DashboardPage() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             zIndex: 1000,
           }}
-          onClick={() => setShowNewModal(false)}
+          /* No backdrop click-to-close — user must use Cancel or × button */
         >
           <div
-            onClick={(e) => e.stopPropagation()}
             style={{
               background: 'var(--paper)', border: '1px solid var(--line)',
               padding: '40px 44px', maxWidth: 480, width: '100%',
               boxShadow: '0 12px 48px rgba(0,0,0,0.15)',
+              position: 'relative',
             }}
           >
+            {/* × close button */}
+            <button
+              onClick={() => setShowNewModal(false)}
+              style={{
+                position: 'absolute', top: 14, right: 16,
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 20, color: 'var(--ink-4)', lineHeight: 1,
+                padding: '2px 6px',
+              }}
+              aria-label="Close"
+            >×</button>
+
             {/* Modal header */}
             <span style={{
               fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
