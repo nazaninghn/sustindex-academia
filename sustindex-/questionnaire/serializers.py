@@ -80,8 +80,11 @@ class LocalisedRepresentationMixin:
                 attr = tr_attr if lang == 'tr' else en_attr
                 val = getattr(instance, attr, None) or ''
                 if val:
-                    # Priority 1: dedicated field present
-                    representation[field] = val
+                    # Priority 1: dedicated field present.
+                    # Also apply bilingual split in case the dedicated field itself
+                    # stores the combined "TR / EN" string (happens when the import
+                    # pipeline copied the combined text into both text_tr and text_en).
+                    representation[field] = LocalisedRepresentationMixin._split_bilingual(val, lang)
                 else:
                     # Priority 2: try to split the combined "TR / EN" value
                     raw = representation.get(field) or ''

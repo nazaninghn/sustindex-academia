@@ -23,28 +23,34 @@ export const GRI_PHASE_DEFS = [
  *     (v5 import stores choices as "Evet / Yes", "Hayır / No", etc.)
  *  3. Raw text as-is
  */
-export function loc(
-  obj: { text?: string; text_en?: string; text_tr?: string },
-  lang: string
-): string {
-  if (lang === 'tr' && obj.text_tr) return obj.text_tr;
-  if (lang === 'en' && obj.text_en) return obj.text_en;
-
-  const raw = obj.text || '';
-
-  // Try to split "TR part / EN part" on the FIRST " / " (space–slash–space).
-  // Internal slashes like "ISO 27001/NIST" have no surrounding spaces, so
-  // they are not mistakenly treated as language separators.
+/** Split a raw string on the FIRST " / " bilingual separator, returning the
+ *  language-appropriate half.  Returns the original string unchanged if no
+ *  valid separator is found (e.g. "ISO 27001/NIST" has no surrounding spaces).
+ */
+function splitBilingual(raw: string, lang: string): string {
   const sepIdx = raw.indexOf(' / ');
   if (sepIdx !== -1) {
     const trPart = raw.slice(0, sepIdx).trim();
     const enPart = raw.slice(sepIdx + 3).trim();
-    if (trPart && enPart) {
-      return lang === 'en' ? enPart : trPart;
-    }
+    if (trPart && enPart) return lang === 'en' ? enPart : trPart;
   }
-
   return raw;
+}
+
+export function loc(
+  obj: { text?: string; text_en?: string; text_tr?: string },
+  lang: string
+): string {
+  // Priority 1: dedicated language field — but ALSO split it in case the field
+  // itself stores the combined "TR / EN" string (import pipeline sometimes copies
+  // the combined value into text_tr/text_en instead of splitting it first).
+  if (lang === 'tr' && obj.text_tr) return splitBilingual(obj.text_tr, 'tr');
+  if (lang === 'en' && obj.text_en) return splitBilingual(obj.text_en, 'en');
+
+  // Priority 2: split the combined `text` field.
+  // Internal slashes like "ISO 27001/NIST" have no surrounding spaces, so
+  // they are not mistakenly treated as language separators.
+  return splitBilingual(obj.text || '', lang);
 }
 
 /**
