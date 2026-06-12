@@ -682,8 +682,8 @@ export default function SurveysPage() {
                 : 'Complete each phase in order. The next phase unlocks when you finish the previous one.'}
             </p>
           </div>
-          {/* New Assessment Cycle — only shown when at least one attempt exists */}
-          {attempts.length > 0 && (
+          {/* New Assessment Cycle — only shown when ALL 5 phases are completed */}
+          {allDone && (
             <div style={{ flexShrink: 0 }}>
               <button
                 className="btn btn-outline btn-sm"
@@ -856,12 +856,12 @@ export default function SurveysPage() {
               {lang === 'tr' ? 'Yeni Değerlendirme Döngüsü' : 'New Assessment Cycle'}
             </span>
             <h2 style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>
-              {lang === 'tr' ? 'Bu döngüye bir isim verin' : 'Name this cycle'}
+              {lang === 'tr' ? 'Yeni döngüyü başlat' : 'Start a new cycle'}
             </h2>
             <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 24, lineHeight: 1.6 }}>
               {lang === 'tr'
-                ? 'Tüm 5 aşama bu isimle kaydedilir. Geçmiş sayfasında döngülere göre filtreleyebilirsiniz.'
-                : 'All 5 phases will be saved under this name. Filter by cycle in the History page.'}
+                ? 'İsteğe bağlı: Bu döngüye bir isim verin. Boş bırakırsanız tarih otomatik atanır.'
+                : 'Optional: give this cycle a name. Leave blank to use today\'s date automatically.'}
             </p>
             <input
               type="text"
@@ -869,7 +869,7 @@ export default function SurveysPage() {
               value={newCycleName}
               onChange={(e) => setNewCycleName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleNewCycleConfirm()}
-              placeholder={lang === 'tr' ? 'örn. Q1 2026, Yıllık Değerlendirme…' : 'e.g. Q1 2026, Annual Review…'}
+              placeholder={lang === 'tr' ? 'örn. Q1 2026 (isteğe bağlı)' : 'e.g. Q1 2026 (optional)'}
               style={{
                 width: '100%', padding: '11px 14px',
                 border: '1px solid var(--line)', background: 'var(--cream)',
