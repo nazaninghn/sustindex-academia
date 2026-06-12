@@ -267,7 +267,10 @@ export default function DashboardPage() {
       .then((data: DashAttempt[] | { results: DashAttempt[] }) => {
         if (!mountedRef.current) return;
         const list = Array.isArray(data) ? data : (data?.results ?? []);
-        setAttempts(list);
+        // Filter to v5 surveys only — old v4 surveys (GRI 1: Foundation, etc.)
+        // have different name patterns and should not appear on the dashboard.
+        const V5_PATTERNS = ['Strateji', 'Cevre', 'Sosyal', 'Ekonomik', 'GRI Sector:'];
+        setAttempts(list.filter((a) => V5_PATTERNS.some((p) => (a.survey_name || '').includes(p))));
       })
       .catch(() => {
         // Fix #14: surface the error so users know a load failure happened.

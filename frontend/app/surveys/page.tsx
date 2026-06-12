@@ -528,9 +528,13 @@ export default function SurveysPage() {
       .filter((a) => aname(a).includes(def.nameMatch))
       .sort((a, b) => b.id - a.id);
 
-    // Most-recent attempt drives the card state (no mixing old + new)
-    const live    = stepAttempts.find((a) => !a.is_completed) ?? null;
-    const done    = live ? null : (stepAttempts.find((a) => a.is_completed) ?? null);
+    // Most-recent attempt (highest id) drives the card state.
+    // Old attempts superseded by the backend (set to is_completed=False when a
+    // newer attempt completes) must NOT be treated as "live" — only the single
+    // most-recent attempt determines whether this step is in_progress or completed.
+    const mostRecent = stepAttempts[0] ?? null;   // sorted by id desc above
+    const live    = mostRecent && !mostRecent.is_completed ? mostRecent : null;
+    const done    = mostRecent &&  mostRecent.is_completed ? mostRecent : null;
     const allDone = stepAttempts.filter((a) => a.is_completed);
 
     // Status
