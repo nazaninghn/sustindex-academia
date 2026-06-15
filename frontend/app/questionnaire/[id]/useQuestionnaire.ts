@@ -253,14 +253,9 @@ export function useQuestionnaire() {
       setTextAnswers(preText);
       setNaAnswers(preNA);
 
-      // Find the first VISIBLE question that hasn't been answered yet
-      const firstUnanswered = qs.findIndex(
-        (qq: Question, idx: number) =>
-          idx > 0 &&
-          !preAnswers[qq.id] &&
-          isQuestionVisible(qq, preAnswers, qs),
-      );
-      setCurrentIdx(firstUnanswered >= 0 ? firstUnanswered : qs.length - 1);
+      // Always start from question 1 (index 0) when opening the questionnaire.
+      // Users navigate forward/backward manually from there.
+      setCurrentIdx(0);
     } catch (err) {
       logger.error('Failed to load questionnaire:', err);
       setError(langRef.current === 'tr' ? 'Yüklenemedi.' : 'Failed to load.');

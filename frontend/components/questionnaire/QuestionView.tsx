@@ -307,7 +307,8 @@ export function QuestionView({
           {q.choices.map((choice) => {
             const isSel    = selection.includes(choice.id);
             const label    = loc(choice, lang) || choice.text;
-            const isYes    = choice.order === 1;
+            // Fix: determine Yes/No by score (positive = Yes), not by order
+            const isYes    = choice.score > 0;
             const selColor = isYes ? 'var(--olive-deep)' : '#c0392b';
             return (
               <button
@@ -434,17 +435,7 @@ export function QuestionView({
 
                 <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>{choiceText}</span>
 
-                {/* Score is hidden from non-staff by the backend (anti-gaming).
-                    Only render it when a non-null value is returned. */}
-                {choice.score !== null && choice.score !== undefined && (
-                  <span style={{
-                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5,
-                    opacity: isSel ? 0.65 : 0.4, letterSpacing: '0.04em',
-                    flexShrink: 0, fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {String(choice.score).padStart(3, '0')} {lang === 'tr' ? 'puan' : 'pts'}
-                  </span>
-                )}
+                {/* Score hidden from users — shown only in final report */}
               </button>
             );
           })}
