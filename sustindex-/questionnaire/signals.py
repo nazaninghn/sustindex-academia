@@ -149,6 +149,8 @@ def _ensure_default_text(instance, field, *fallbacks):
 @receiver(post_save, sender='questionnaire.Survey')
 def auto_translate_survey(sender, instance, **kwargs):
     """Auto-translate survey name and description after the row is saved."""
+    if _SKIP_TRANSLATION:
+        return
     jobs = _bilingual_fields(instance, [
         ('name_en', 'name_tr'),
         ('description_en', 'description_tr'),
@@ -158,6 +160,8 @@ def auto_translate_survey(sender, instance, **kwargs):
 
 @receiver(post_save, sender='questionnaire.Category')
 def auto_translate_category(sender, instance, **kwargs):
+    if _SKIP_TRANSLATION:
+        return
     jobs = _bilingual_fields(instance, [
         ('name_en', 'name_tr'),
         ('description_en', 'description_tr'),
@@ -167,11 +171,15 @@ def auto_translate_category(sender, instance, **kwargs):
 
 @receiver(post_save, sender='questionnaire.Question')
 def auto_translate_question(sender, instance, **kwargs):
+    if _SKIP_TRANSLATION:
+        return
     jobs = _bilingual_fields(instance, [('text_en', 'text_tr')])
     _schedule_translation(sender, instance.pk, jobs)
 
 
 @receiver(post_save, sender='questionnaire.Choice')
 def auto_translate_choice(sender, instance, **kwargs):
+    if _SKIP_TRANSLATION:
+        return
     jobs = _bilingual_fields(instance, [('text_en', 'text_tr')])
     _schedule_translation(sender, instance.pk, jobs)
