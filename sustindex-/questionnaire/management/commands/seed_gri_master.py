@@ -301,6 +301,9 @@ class Command(BaseCommand):
             # Step 4: Fix sector modules
             self._step4_fix_sectors(do_fix)
 
+            # Step 4b: Clean choice text (remove trailing arrows and pt suffixes)
+            self._step4b_clean_choice_text(do_fix)
+
             # Step 5: Validation report
             self._step5_validation_report()
 
@@ -664,6 +667,45 @@ class Command(BaseCommand):
         self.stdout.write(style(
             f'    {status} Max score: {actual_max}pt (expected {expected_max}pt)'
         ))
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # STEP 4b: Clean choice text (remove trailing arrows and pt suffixes)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _step4b_clean_choice_text(self, do_fix):
+        import re
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            '--- STEP 4b: Clean Choice Text (remove arrows and pt suffixes) ---'
+        ))
+
+        fixed = 0
+        for c in Choice.objects.all():
+            changed = False
+            for field in ('text', 'text_tr', 'text_en'):
+                val = getattr(c, field) or ''
+                original = val
+                # Remove trailing " ->" or unicode arrow
+                val = re.sub(r'\s*\u2192\s*$', '', val)
+                val = re.sub(r'\s*->\s*$', '', val)
+                # Remove trailing " 0 pt", " 1 pt", etc.
+                val = re.sub(r'\s+\d+\s*pt\s*$', '', val)
+                val = val.rstrip()
+                if val != original:
+                    setattr(c, field, val)
+                    changed = True
+            if changed:
+                if do_fix:
+                    c.save(update_fields=['text', 'text_tr', 'text_en'])
+                fixed += 1
+
+        if fixed > 0:
+            if do_fix:
+                self.stdout.write(self.style.SUCCESS(f'  Fixed {fixed} choice text(s)'))
+            else:
+                self.stdout.write(self.style.WARNING(f'  [DRY] Would fix {fixed} choice text(s)'))
+        else:
+            self.stdout.write(self.style.SUCCESS('  All choice texts are clean.'))
+        self.stdout.write('')
 
     # ═══════════════════════════════════════════════════════════════════════════
     # STEP 5: Validation Report
