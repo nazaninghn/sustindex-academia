@@ -13,6 +13,100 @@ import logger from '@/lib/logger';
 import { GRI_PHASE_DEFS, loc, cleanQuestionText } from '@/components/questionnaire/utils';
 import type { Question, GriPhase, PhaseBoundary } from '@/components/questionnaire/types';
 
+// ─── Gate / Conditional navigation helpers ─────────────────────────────────
+
+/**
+ * Returns true when a question should be displayed to the user given current answers.
+ * A question is hidden when:
+ *  1. It is a CONDITIONAL question and its parent hasn't scored ≥ conditional_on_min_score.
+ *  2. It belongs to a criterion whose GATE question was answered "No" (score 0).
+ */
+function isQuestionVisible(
+  q: Question,
+  answers: Record<number, number[]>,
+  allQuestions: Question[],
+): boolean {
+  // Conditional: only show when parent question was answered with a qualifying score
+  if (q.layer === 'CONDITIONAL' && q.conditional_on_question != null) {
+    const parentQ = allQuestions.find(pq => pq.id === q.conditional_on_question);
+    const minScore = q.conditional_on_min_score ?? 1;
+    if (parentQ) {
+      const parentSel = answers[parentQ.id] || [];
+      const parentScore = parentQ.choices
+        .filter(c => parentSel.includes(c.id))
+        .reduce((max, c) => Math.max(max, c.score), 0);
+      if (parentScore < minScore) return false;
+    }
+  }
+
+  // Gate-protected: non-GATE questions in a criterion whose gate was answered 0
+  if (q.criterion_code && q.layer !== 'GATE' && !q.is_gate) {
+    const gateQ = allQuestions.find(
+      pq => pq.criterion_code === q.criterion_code && (pq.is_gate || pq.layer === 'GATE'),
+    );
+    if (gateQ) {
+      const gateSel = answers[gateQ.id] || [];
+      const gateChoice = gateQ.choices.find(c => gateSel.includes(c.id));
+      // gateChoice?.score === 0 → "No" was chosen → skip all layers
+      if (gateChoice !== undefined && gateChoice.score === 0) return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Find the next index to navigate TO after currentIdx,
+ * honouring gate-skip and conditional-skip rules.
+ */
+function computeNextIdx(
+  currentIdx: number,
+  questions: Question[],
+  answers: Record<number, number[]>,
+): number {
+  const q = questions[currentIdx];
+  if (!q) return Math.min(currentIdx + 1, questions.length - 1);
+
+  // GATE answered No → jump to first question outside this criterion
+  if ((q.is_gate || q.layer === 'GATE') && q.criterion_code) {
+    const sel = answers[q.id] || [];
+    const chosen = q.choices.find(c => sel.includes(c.id));
+    if (chosen !== undefined && chosen.score === 0) {
+      const skipIdx = questions.findIndex(
+        (qq, i) => i > currentIdx && qq.criterion_code !== q.criterion_code,
+      );
+      return skipIdx >= 0 ? skipIdx : questions.length - 1;
+    }
+  }
+
+  // Advance one step at a time, skipping invisible questions.
+  // Returns questions.length (out-of-bounds sentinel) when no visible question remains.
+  let next = currentIdx + 1;
+  while (next < questions.length) {
+    if (isQuestionVisible(questions[next], answers, questions)) break;
+    next++;
+  }
+  return next;  // may equal questions.length → caller treats as "complete"
+}
+
+/**
+ * Find the previous index to navigate TO before currentIdx,
+ * honouring gate-skip and conditional-skip rules.
+ */
+function computePrevIdx(
+  currentIdx: number,
+  questions: Question[],
+  answers: Record<number, number[]>,
+): number {
+  let prev = currentIdx - 1;
+  while (prev > 0 && !isQuestionVisible(questions[prev], answers, questions)) {
+    prev--;
+  }
+  return Math.max(0, prev);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 export function useQuestionnaire() {
   const { id }   = useParams<{ id: string }>();
   const router   = useRouter();
@@ -153,7 +247,13 @@ export function useQuestionnaire() {
       setTextAnswers(preText);
       setNaAnswers(preNA);
 
-      const firstUnanswered = qs.findIndex((q: Question) => !preAnswers[q.id]);
+      // Find the first VISIBLE question that hasn't been answered yet
+      const firstUnanswered = qs.findIndex(
+        (qq: Question, idx: number) =>
+          idx > 0 &&
+          !preAnswers[qq.id] &&
+          isQuestionVisible(qq, preAnswers, qs),
+      );
       setCurrentIdx(firstUnanswered >= 0 ? firstUnanswered : qs.length - 1);
     } catch (err) {
       logger.error('Failed to load questionnaire:', err);
@@ -169,9 +269,14 @@ export function useQuestionnaire() {
 
   /* ── Derived ── */
   const q           = questions[currentIdx];
-  const total       = questions.length;
+  const total       = questions.length;          // full list (for index math)
   const isFirst     = currentIdx === 0;
-  const isLast      = currentIdx === total - 1;
+  // isLast = true when there are no more visible questions after the current one
+  const isLast      = useMemo(() => {
+    if (currentIdx >= total - 1) return true;
+    const nextIdx = computeNextIdx(currentIdx, questions, answers);
+    return nextIdx >= total;
+  }, [currentIdx, questions, answers, total]);
   const selection   = q ? (answers[q.id]      || []) : [];
   const note        = q ? (notes[q.id]        || '') : '';
   const textAns        = q ? (textAnswers[q.id]      || '') : '';
@@ -183,14 +288,20 @@ export function useQuestionnaire() {
   const isBookmarked   = q ? (bookmarks[q.id]   ?? false) : false;
   const bookmarkedCount = Object.values(bookmarks).filter(Boolean).length;
 
+  // Only count VISIBLE questions (gate-passed + conditional-triggered) in progress
+  const visibleQuestions = useMemo(
+    () => questions.filter(qq => isQuestionVisible(qq, answers, questions)),
+    [questions, answers],
+  );
   // Fix R5-M-01: count questions with a choice, text answer, numerical value, or N/A flag
-  const answeredCount = questions.filter((qItem) =>
+  const answeredCount = visibleQuestions.filter((qItem) =>
     naAnswers[qItem.id] ||
     (answers[qItem.id] ?? []).length > 0 ||
     (textAnswers[qItem.id] ?? '').trim().length > 0 ||
     (numericalAnswers[qItem.id] ?? '').trim().length > 0
   ).length;
-  const progress      = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
+  const visibleTotal  = visibleQuestions.length;
+  const progress      = visibleTotal > 0 ? Math.round((answeredCount / visibleTotal) * 100) : 0;
 
   const isNumericalType = q?.question_type === 'numerical';
   const isBinaryType    = q?.question_type === 'binary';
@@ -429,6 +540,17 @@ export function useQuestionnaire() {
         emitDataChange({ source: 'questionnaire', id });
         router.push(`/results/${id}`);
       } else {
+        // ── Gate / Conditional aware next-question navigation ──────────
+        const nextIdx = computeNextIdx(currentIdx, questions, answers);
+
+        // If no more visible questions remain, complete the attempt
+        if (nextIdx >= questions.length) {
+          await attemptAPI.completeAttempt(Number(id));
+          emitDataChange({ source: 'questionnaire', id });
+          router.push(`/results/${id}`);
+          return;
+        }
+
         // Sequential phase gate: show the interstitial when the user just completed
         // an entire phase for the first time (unlockedUpToPhase advances to phaseNum+1).
         const qPhaseNum = GRI_PHASE_DEFS.find(({ match }) => q.category_name?.includes(match))?.num ?? 1;
@@ -442,7 +564,7 @@ export function useQuestionnaire() {
         ) {
           setPhaseComplete(qPhaseNum);
         } else {
-          setCurrentIdx((i) => i + 1);
+          setCurrentIdx(nextIdx);
         }
       }
     } catch (err) {
@@ -454,7 +576,9 @@ export function useQuestionnaire() {
     }
   };
 
-  const handlePrev = () => { if (!isFirst) setCurrentIdx((i) => i - 1); };
+  const handlePrev = () => {
+    if (!isFirst) setCurrentIdx(computePrevIdx(currentIdx, questions, answers));
+  };
 
   const handleJumpTo = async (targetIdx: number) => {
     if (targetIdx === currentIdx) return;
@@ -463,6 +587,8 @@ export function useQuestionnaire() {
     if (targetQItem) {
       const targetPhaseNum = GRI_PHASE_DEFS.find(({ match }) => targetQItem.category_name?.includes(match))?.num ?? 1;
       if (targetPhaseNum > unlockedUpToPhase) return;
+      // Gate / conditional gate — block navigation to questions that are currently hidden
+      if (!isQuestionVisible(targetQItem, answers, questions)) return;
     }
     if (q && (selection.length > 0 || note.trim() || textAns.trim())) {
       try {
@@ -571,7 +697,7 @@ export function useQuestionnaire() {
     fileInputRef,
     /* derived — current question */
     q,
-    total,
+    total: visibleTotal,    // expose visible count so UI shows correct "X of Y"
     isFirst,
     isLast,
     selection,

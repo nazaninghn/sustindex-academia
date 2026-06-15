@@ -11,8 +11,11 @@ export interface Choice {
 }
 
 export interface NumericalThreshold {
-  min: number | null;
-  max: number | null;
+  /** Human-readable range label, e.g. "≥ 4 toplantı" or "0–1" */
+  range?: string;
+  /** Legacy numeric bounds (kept for backward compat) */
+  min?: number | null;
+  max?: number | null;
   score: number;
 }
 

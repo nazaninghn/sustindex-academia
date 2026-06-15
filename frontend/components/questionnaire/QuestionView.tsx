@@ -376,9 +376,11 @@ export function QuestionView({
                   padding: '2px 7px', border: '1px solid var(--line)',
                   color: 'var(--ink-4)', letterSpacing: '0.04em',
                 }}>
-                  {t.min !== null && t.min !== undefined ? `≥${t.min}` : ''}
-                  {t.min !== null && t.min !== undefined && t.max !== null && t.max !== undefined ? ' – ' : ''}
-                  {t.max !== null && t.max !== undefined ? `≤${t.max}` : ''}
+                  {t.range
+                    ? t.range
+                    : t.min != null
+                      ? `≥${t.min}${t.max != null ? ` – ≤${t.max}` : ''}`
+                      : t.max != null ? `≤${t.max}` : ''}
                   {' → '}{t.score} {lang === 'tr' ? 'pt' : 'pts'}
                 </span>
               ))}
