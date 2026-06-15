@@ -47,12 +47,21 @@ else:
 EOF
 
 echo ""
-echo "Importing GRI questionnaire data (legacy v4 — kept for backwards compatibility)..."
-python manage.py import_gri_questionnaire "$SCRIPT_DIR/data/GRI_Questionnaire_v4_STRUCTURED.xlsx" || echo "v4 import failed (non-fatal)"
+echo "Skipping legacy v4 import (superseded by v5)..."
 
 echo ""
-echo "Translating questionnaire to Turkish..."
-python manage.py translate_questionnaire --survey GRI || echo "Translation step failed (non-fatal)"
+echo "=========================================================="
+echo " CLEANING ALL QUESTIONNAIRE DATA (fresh import)"
+echo "=========================================================="
+python manage.py shell -c "
+from questionnaire.models import Survey, Category, Question, Choice
+print(f'Deleting: {Survey.objects.count()} surveys, {Question.objects.count()} questions, {Choice.objects.count()} choices')
+Choice.objects.all().delete()
+Question.objects.all().delete()
+Category.objects.all().delete()
+Survey.objects.all().delete()
+print('Done - database clean for fresh import')
+"
 
 echo ""
 echo "=========================================================="
