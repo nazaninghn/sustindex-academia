@@ -69,6 +69,22 @@ print('All questionnaire data deleted.')
 "
 
 echo ""
+echo "=== Resetting survey ID sequence (so seed_gri_master IDs 18-29 align) ==="
+python -c "
+import os, django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sustindex.settings')
+django.setup()
+from django.db import connection
+vendor = connection.vendor
+if vendor == 'postgresql':
+    with connection.cursor() as c:
+        c.execute(\"SELECT setval(pg_get_serial_sequence('questionnaire_survey', 'id'), 17, true)\")
+    print('PostgreSQL: survey sequence reset to 17 → next insert will be ID 18')
+else:
+    print(f'Database is {vendor} — sequence reset not needed (auto-increment resets on SQLite)')
+"
+
+echo ""
 echo "=== Importing GRI v5 data ==="
 V5="$SCRIPT_DIR/data/v5"
 
