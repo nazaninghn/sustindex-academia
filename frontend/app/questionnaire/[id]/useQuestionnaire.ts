@@ -237,25 +237,39 @@ export function useQuestionnaire() {
       );
       setQuestions(qs);
 
-      const preAnswers: Record<number, number[]> = {};
-      const preNotes:   Record<number, string>   = {};
-      const preText:    Record<number, string>   = {};
-      const preNA:      Record<number, boolean>  = {};
+      const preAnswers:   Record<number, number[]> = {};
+      const preNotes:     Record<number, string>   = {};
+      const preText:      Record<number, string>   = {};
+      const preNA:        Record<number, boolean>  = {};
+      const preNumerical: Record<number, string>   = {};
+      // Track every question that has ANY saved answer (for resume logic below)
+      const answeredQIds  = new Set<number>();
+
       for (const ans of attempt.answers || []) {
+        answeredQIds.add(ans.question);
         if (Array.isArray(ans.choices) && ans.choices.length > 0) preAnswers[ans.question] = ans.choices;
         else if (ans.choice) preAnswers[ans.question] = [ans.choice];
-        if (ans.notes)          preNotes[ans.question]   = ans.notes;
-        if (ans.text_answer)    preText[ans.question]    = ans.text_answer;
-        if (ans.not_applicable) preNA[ans.question]      = true;
+        if (ans.notes)            preNotes[ans.question]     = ans.notes;
+        if (ans.text_answer)      preText[ans.question]      = ans.text_answer;
+        if (ans.numerical_value != null && ans.numerical_value !== '')
+          preNumerical[ans.question] = String(ans.numerical_value);
+        if (ans.not_applicable)   preNA[ans.question]        = true;
       }
       setAnswers(preAnswers);
       setNotes(preNotes);
       setTextAnswers(preText);
+      setNumericalAnswers(preNumerical);
       setNaAnswers(preNA);
 
-      // Always start from question 1 (index 0) when opening the questionnaire.
-      // Users navigate forward/backward manually from there.
-      setCurrentIdx(0);
+      // Resume: find the first visible question that hasn't been answered yet.
+      // isQuestionVisible respects gate-skip and conditional logic so questions
+      // that were skipped by a gate "No" answer are not presented again.
+      const firstUnanswered = qs.findIndex(
+        (question) =>
+          isQuestionVisible(question, preAnswers, qs) &&
+          !answeredQIds.has(question.id),
+      );
+      setCurrentIdx(firstUnanswered >= 0 ? firstUnanswered : 0);
     } catch (err) {
       logger.error('Failed to load questionnaire:', err);
       setError(langRef.current === 'tr' ? 'Yüklenemedi.' : 'Failed to load.');
