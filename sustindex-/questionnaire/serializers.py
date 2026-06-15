@@ -95,8 +95,12 @@ class LocalisedRepresentationMixin:
 
 
 class ChoiceSerializer(LocalisedRepresentationMixin, serializers.ModelSerializer):
-    # Fix L-3: hide score from non-staff users — exposing it allows
-    # respondents to game the questionnaire by selecting the highest-scoring option.
+    # Expose binary 0/1 score to all users so the frontend gate-skip and
+    # conditional-skip logic (isQuestionVisible / computeNextIdx) works for
+    # regular non-staff users.  Staff see the full raw score.
+    # Binary encoding: score==0 stays 0 (gate/conditional fail); score>0 → 1.
+    # Exact point values remain hidden from regular users — they cannot
+    # distinguish a 2-point from a 4-point choice.
     score = serializers.SerializerMethodField()
 
     class Meta:
@@ -107,7 +111,8 @@ class ChoiceSerializer(LocalisedRepresentationMixin, serializers.ModelSerializer
         request = self.context.get('request')
         if request and request.user and request.user.is_staff:
             return obj.score
-        return None
+        # Return binary 0/1 so gate and conditional questions work correctly
+        return 0 if obj.score == 0 else 1
 
     def to_representation(self, instance):
         rep  = super().to_representation(instance)
