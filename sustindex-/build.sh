@@ -7,8 +7,13 @@
 # 2. Collects static files
 # 3. Runs migrations
 # 4. Creates superuser (if not exists)
-# 5. WIPES all questionnaire data and re-imports from v5 Excel
-# 6. Runs seed_gri_master to fix scores and clean text
+# 5. WIPES all questionnaire data
+# 6. Loads questionnaire fixture (data/fixtures/questionnaire_v5.json)
+#    — exact copy of verified local SQLite data (418 Q, 1281 choices)
+#    — to regenerate: python manage.py dumpdata questionnaire.survey
+#      questionnaire.category questionnaire.question questionnaire.choice
+#      --indent 2 > data/fixtures/questionnaire_v5.json
+# 7. Resets DB sequences so new inserts don't conflict with fixture IDs
 # ============================================================
 
 set -o errexit
@@ -69,64 +74,26 @@ print('All questionnaire data deleted.')
 "
 
 echo ""
-echo "=== Resetting survey ID sequence (so seed_gri_master IDs 18-29 align) ==="
+echo "=== Loading questionnaire fixture (verified local data) ==="
+python manage.py loaddata "$SCRIPT_DIR/data/fixtures/questionnaire_v5.json"
+
+echo ""
+echo "=== Resetting DB sequences after fixture load ==="
 python -c "
 import os, django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sustindex.settings')
 django.setup()
 from django.db import connection
-vendor = connection.vendor
-if vendor == 'postgresql':
+if connection.vendor == 'postgresql':
+    from questionnaire.models import Survey, Category, Question, Choice
     with connection.cursor() as c:
-        c.execute(\"SELECT setval(pg_get_serial_sequence('questionnaire_survey', 'id'), 17, true)\")
-    print('PostgreSQL: survey sequence reset to 17 → next insert will be ID 18')
+        for model in [Survey, Category, Question, Choice]:
+            table = model._meta.db_table
+            c.execute(f\"SELECT setval(pg_get_serial_sequence('{table}', 'id'), COALESCE((SELECT MAX(id) FROM {table}), 1))\")
+    print('PostgreSQL sequences reset to max fixture IDs.')
 else:
-    print(f'Database is {vendor} — sequence reset not needed (auto-increment resets on SQLite)')
+    print('SQLite: no sequence reset needed.')
 "
-
-echo ""
-echo "=== Importing GRI v5 data ==="
-V5="$SCRIPT_DIR/data/v5"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Bolum1_Governance.xlsx"
-echo "  [OK] Governance"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Bolum2_Environmental.xlsx"
-echo "  [OK] Environmental"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Bolum3_Social.xlsx"
-echo "  [OK] Social"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Bolum4_Economic.xlsx"
-echo "  [OK] Economic"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Technology.xlsx"
-echo "  [OK] Sector: Technology"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Manufacturing.xlsx"
-echo "  [OK] Sector: Manufacturing"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Financial.xlsx"
-echo "  [OK] Sector: Financial"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Healthcare.xlsx"
-echo "  [OK] Sector: Healthcare"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Energy.xlsx"
-echo "  [OK] Sector: Energy"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Agriculture.xlsx"
-echo "  [OK] Sector: Agriculture"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Construction.xlsx"
-echo "  [OK] Sector: Construction"
-
-python manage.py import_gri_v5 "$V5/GRI_v5_Sektor_Retail.xlsx"
-echo "  [OK] Sector: Retail"
-
-echo ""
-echo "=== Running seed_gri_master (fix scores + clean text) ==="
-python manage.py seed_gri_master --fix
 
 echo ""
 echo "=== FINAL VALIDATION ==="
