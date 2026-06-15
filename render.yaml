@@ -21,10 +21,12 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
-        value: True
+        value: "False"
       - key: DJANGO_SETTINGS_MODULE
         value: sustindex.settings
       - key: WEB_CONCURRENCY
-        value: 2
+        value: "2"
+      - key: SKIP_AUTO_TRANSLATE
+        value: "1"
       - key: ALLOWED_HOSTS
-        value: sustindex-backend.onrender.com
+        value: ".onrender.com"
