@@ -65,42 +65,142 @@ const V5_PHASES = [
   { key: 'GRI Sector:', labelEn: 'Sector',   labelTr: 'Sektör' },
 ];
 
-function PhaseTracker({ attempts, lang }: { attempts: DashAttempt[]; lang: string }) {
+/* ─── Phase Journey (professional 5-card progress) ───────────── */
+function PhaseJourney({ attempts, lang }: { attempts: DashAttempt[]; lang: string }) {
+  const PHASES = [
+    { key: 'Strateji',    labelEn: 'Governance',   labelTr: 'Yönetişim'  },
+    { key: 'Cevre',       labelEn: 'Environment',  labelTr: 'Çevre'      },
+    { key: 'Sosyal',      labelEn: 'Social',       labelTr: 'Sosyal'     },
+    { key: 'Ekonomik',    labelEn: 'Economic',     labelTr: 'Ekonomik'   },
+    { key: 'GRI Sector:', labelEn: 'Sector',       labelTr: 'Sektör'     },
+  ];
+
+  const phasesData = PHASES.map((phase, i) => {
+    const all        = attempts.filter(a => (a.survey_name || '').includes(phase.key));
+    const completed  = all.find(a => a.is_completed) ?? null;
+    const inProgress = !completed ? (all.find(a => !a.is_completed) ?? null) : null;
+    return { ...phase, num: i + 1, completed, inProgress };
+  });
+
+  const completedCount = phasesData.filter(p => p.completed).length;
+  const overallPct     = Math.round((completedCount / PHASES.length) * 100);
+
   return (
     <div style={{
       background: 'var(--paper)', border: '1px solid var(--line)',
-      padding: '16px 20px', marginBottom: 24,
-      display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto',
+      padding: '24px 28px', marginBottom: 24,
     }}>
-      <span style={{
-        fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
-        letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-4)',
-        marginRight: 20, flexShrink: 0,
-      }}>
-        {lang === 'tr' ? 'AŞAMALAR' : 'PHASES'}
-      </span>
-      {V5_PHASES.map((phase, i) => {
-        const phaseAttempts = attempts.filter(a => (a.survey_name || '').includes(phase.key));
-        const isCompleted   = phaseAttempts.some(a => a.is_completed);
-        const isInProgress  = !isCompleted && phaseAttempts.some(a => !a.is_completed);
-        const icon = isCompleted ? '✓' : isInProgress ? '⏳' : '○';
-        const color = isCompleted ? 'var(--olive-deep)' : isInProgress ? 'var(--amber)' : 'var(--ink-4)';
-        const label = lang === 'tr' ? phase.labelTr : phase.labelEn;
-        return (
-          <div key={phase.key} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px' }}>
-              <span style={{ fontSize: 11, color }}>{icon}</span>
-              <span style={{
-                fontSize: 11, fontWeight: isCompleted ? 600 : 400,
-                color: isCompleted ? 'var(--ink)' : isInProgress ? 'var(--ink)' : 'var(--ink-4)',
-              }}>{label}</span>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.13em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+            {lang === 'tr' ? 'DEĞERLENDİRME YOLCULUĞU' : 'ASSESSMENT JOURNEY'}
+          </span>
+          <h2 style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em' }}>
+            {lang === 'tr' ? 'GRI Sürdürülebilirlik Değerlendirmesi' : 'GRI Sustainability Assessment'}
+          </h2>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300, fontSize: 30, letterSpacing: '-0.04em', lineHeight: 1 }}>
+            {completedCount}
+            <span style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 400 }}>/{PHASES.length}</span>
+          </span>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: 'var(--ink-4)', letterSpacing: '0.1em', display: 'block', marginTop: 2 }}>
+            {lang === 'tr' ? 'AŞAMA TAMAMLANDI' : 'PHASES DONE'}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Overall bar ── */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            {lang === 'tr' ? 'Genel İlerleme' : 'Overall Progress'}
+          </span>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: 'var(--olive-deep)', letterSpacing: '0.08em' }}>
+            {overallPct}%
+          </span>
+        </div>
+        <div style={{ height: 3, background: 'var(--line)', borderRadius: 2 }}>
+          <div style={{ height: '100%', width: `${overallPct}%`, background: 'var(--olive-deep)', borderRadius: 2, transition: 'width 0.7s ease' }} />
+        </div>
+      </div>
+
+      {/* ── Phase cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+        {phasesData.map((phase) => {
+          const isDone       = !!phase.completed;
+          const isActive     = !!phase.inProgress;
+          const score        = isDone ? Math.round(phase.completed!.total_score ?? 0) : null;
+          const grade        = phase.completed?.overall_grade ?? null;
+          const answered     = phase.inProgress?.answered_count ?? 0;
+          const totalQ       = phase.inProgress?.total_questions ?? 0;
+          const pct          = totalQ > 0 ? Math.round((answered / totalQ) * 100) : 0;
+
+          const borderColor  = isDone ? 'var(--olive-deep)' : isActive ? 'var(--amber)' : 'var(--line)';
+          const bgColor      = isDone ? 'var(--olive-wash)' : isActive ? 'rgba(194,153,62,0.07)' : 'var(--cream-deep)';
+          const statusColor  = isDone ? 'var(--olive-deep)' : isActive ? 'var(--amber)' : 'var(--ink-4)';
+
+          return (
+            <div key={phase.key} style={{
+              background: bgColor, border: `1px solid ${borderColor}`,
+              padding: '14px 12px', display: 'flex', flexDirection: 'column',
+              opacity: !isDone && !isActive ? 0.55 : 1,
+              transition: 'opacity 0.2s',
+            }}>
+              {/* Phase label */}
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 7.5, color: statusColor, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
+                {lang === 'tr' ? `AŞAMA ${phase.num}` : `PHASE ${phase.num}`}
+              </span>
+
+              {/* Phase name */}
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3, marginBottom: 10, display: 'block', flex: 1 }}>
+                {lang === 'tr' ? phase.labelTr : phase.labelEn}
+              </span>
+
+              {/* Status body */}
+              {isDone && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 3 }}>
+                    <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300, fontSize: 26, letterSpacing: '-0.04em', color: statusColor, lineHeight: 1 }}>
+                      {score}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>%</span>
+                    {grade && (
+                      <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 700, fontSize: 13, color: gradeColor(grade), marginLeft: 2 }}>
+                        {grade}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: statusColor, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    ✓ {lang === 'tr' ? 'Tamamlandı' : 'Complete'}
+                  </span>
+                </div>
+              )}
+
+              {isActive && (
+                <div>
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--amber)', marginBottom: 6 }}>
+                    {answered}/{totalQ > 0 ? totalQ : '?'} {lang === 'tr' ? 'soru' : 'q'} · {pct}%
+                  </div>
+                  <div style={{ height: 3, background: 'rgba(194,153,62,0.2)', borderRadius: 2, marginBottom: 5 }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--amber)', borderRadius: 2, transition: 'width 0.5s' }} />
+                  </div>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: 'var(--amber)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    ⏳ {lang === 'tr' ? 'Devam ediyor' : 'In progress'}
+                  </span>
+                </div>
+              )}
+
+              {!isDone && !isActive && (
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  ○ {lang === 'tr' ? 'Başlanmadı' : 'Not started'}
+                </span>
+              )}
             </div>
-            {i < V5_PHASES.length - 1 && (
-              <span style={{ color: 'var(--line)', fontSize: 12, padding: '0 2px' }}>›</span>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -548,31 +648,59 @@ export default function DashboardPage() {
              ════════════════════════════════════════ */
           <>
             {/* ── Stat Row ── */}
-            <div className="stat-grid">
-              {[
-                { l: lang === 'tr' ? 'TAMAMLANAN' : 'COMPLETED',    v: completed.length,                d: lang === 'tr' ? 'değerlendirme' : 'assessments'  },
-                { l: lang === 'tr' ? 'DEVAM EDEN' : 'IN PROGRESS',  v: inProgress.length,              d: lang === 'tr' ? 'aktif'          : 'active'        },
-                { l: lang === 'tr' ? 'ORT. SKOR'  : 'AVG. SCORE',   v: avgScore > 0 ? avgScore : '—',  d: lang === 'tr' ? 'genel ortalama' : 'overall avg.'  },
-                { l: lang === 'tr' ? 'SON NOT'    : 'LATEST GRADE', v: latest?.overall_grade ?? '—',   d: latest ? `${Math.round(latest.total_score ?? 0)} pts` : '—' },
-              ].map((s, i) => (
-                <div key={i} className="stat-cell">
-                  <span style={{
-                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
-                    color: 'var(--ink-4)', letterSpacing: '0.14em', textTransform: 'uppercase',
-                    display: 'block', marginBottom: 10,
-                  }}>{s.l}</span>
-                  <div style={{
-                    fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-                    fontSize: 40, letterSpacing: '-0.04em', lineHeight: 1,
-                    fontVariantNumeric: 'tabular-nums', marginBottom: 6,
-                    color: i === 3 && latest?.overall_grade ? gradeColor(latest.overall_grade) : 'var(--ink)',
-                  }}>{s.v}</div>
-                  <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{s.d}</span>
+            {(() => {
+              const completedPhases = V5_PHASES.filter(ph =>
+                attempts.some(a => (a.survey_name || '').includes(ph.key) && a.is_completed)
+              ).length;
+              const totalAnswered = attempts.reduce((sum, a) => sum + (a.answered_count ?? 0), 0);
+              return (
+                <div className="stat-grid">
+                  {[
+                    {
+                      l: lang === 'tr' ? 'TAMAMLANAN AŞAMA' : 'PHASES DONE',
+                      v: `${completedPhases}/5`,
+                      d: lang === 'tr' ? 'GRI aşaması' : 'GRI phases',
+                      highlight: false,
+                    },
+                    {
+                      l: lang === 'tr' ? 'CEVAPLANAN SORU' : 'QUESTIONS ANS.',
+                      v: totalAnswered > 0 ? totalAnswered : '—',
+                      d: lang === 'tr' ? 'toplam soru' : 'total answered',
+                      highlight: false,
+                    },
+                    {
+                      l: lang === 'tr' ? 'ORT. SKOR' : 'AVG. SCORE',
+                      v: avgScore > 0 ? avgScore : '—',
+                      d: lang === 'tr' ? 'genel ortalama' : 'overall avg.',
+                      highlight: false,
+                    },
+                    {
+                      l: lang === 'tr' ? 'SON NOT' : 'LATEST GRADE',
+                      v: latest?.overall_grade ?? '—',
+                      d: latest ? `${Math.round(latest.total_score ?? 0)}%` : '—',
+                      highlight: true,
+                    },
+                  ].map((s, i) => (
+                    <div key={i} className="stat-cell">
+                      <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+                        color: 'var(--ink-4)', letterSpacing: '0.14em', textTransform: 'uppercase',
+                        display: 'block', marginBottom: 10,
+                      }}>{s.l}</span>
+                      <div style={{
+                        fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
+                        fontSize: 40, letterSpacing: '-0.04em', lineHeight: 1,
+                        fontVariantNumeric: 'tabular-nums', marginBottom: 6,
+                        color: s.highlight && latest?.overall_grade ? gradeColor(latest.overall_grade) : 'var(--ink)',
+                      }}>{s.v}</div>
+                      <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{s.d}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
 
-            <PhaseTracker attempts={attempts} lang={lang} />
+            <PhaseJourney attempts={attempts} lang={lang} />
 
             {/* ── 2-col: performance + sidebar ── */}
             <div className="content-grid-main">
