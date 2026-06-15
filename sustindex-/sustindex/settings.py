@@ -339,6 +339,7 @@ if REST_FRAMEWORK_INSTALLED:
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "https://sustindex-academia.vercel.app",
+        "https://sustindex-academia-sustindex.onrender.com",
     ]
     # Fix BUG-26: allow additional origins via env var (comma-separated) without a code change.
     _extra_cors = os.environ.get('CORS_EXTRA_ORIGINS', '')
