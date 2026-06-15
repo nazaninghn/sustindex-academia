@@ -113,4 +113,10 @@ echo ""
 echo "[OK] All GRI v5 data imported: 4 core sections + 8 sector modules"
 
 echo ""
+echo "=========================================================="
+echo " Fixing data to match master document (seed_gri_master)"
+echo "=========================================================="
+python manage.py seed_gri_master --fix
+
+echo ""
 echo "Build completed successfully!"
