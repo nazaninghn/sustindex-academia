@@ -307,8 +307,9 @@ export function QuestionView({
           {q.choices.map((choice) => {
             const isSel    = selection.includes(choice.id);
             const label    = loc(choice, lang) || choice.text;
-            // Fix: determine Yes/No by score (positive = Yes), not by order
-            const isYes    = choice.score > 0;
+            // Determine Yes/No by text content or order (first choice = Yes/positive)
+            const labelLower = (label || '').toLowerCase();
+            const isYes    = labelLower.includes('evet') || labelLower.includes('yes') || choice.order === 1;
             const selColor = isYes ? 'var(--olive-deep)' : '#c0392b';
             return (
               <button
