@@ -13,9 +13,15 @@ from django.dispatch import receiver
 from django.db import transaction
 import threading
 import logging
+import os
+
+# Skip translation entirely during build/import (prevents crash on Render)
+_SKIP_TRANSLATION = os.environ.get('SKIP_AUTO_TRANSLATE', '').lower() in ('1', 'true', 'yes')
 
 # Fix H: lazy import — don't crash app startup if deep_translator is absent
 try:
+    if _SKIP_TRANSLATION:
+        raise ImportError('Skipped by SKIP_AUTO_TRANSLATE env var')
     from deep_translator import GoogleTranslator as _GoogleTranslator
     _TRANSLATOR_AVAILABLE = True
 except ImportError:           # pragma: no cover

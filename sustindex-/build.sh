@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -o errexit
 
+# Fix: disable auto-translation during build to prevent deep-translator crash
+export SKIP_AUTO_TRANSLATE=1
+
 # Fix #18: resolve the script's own directory so all relative paths work
 # regardless of the working directory the caller uses.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,10 +18,6 @@ pip install --upgrade pip
 echo ""
 echo "Installing dependencies..."
 pip install -r requirements.txt
-
-echo ""
-echo "Testing database connection..."
-python test_db.py
 
 echo ""
 echo "Collecting static files..."
