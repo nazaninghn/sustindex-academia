@@ -568,7 +568,11 @@ export default function SurveysPage() {
     else if (idx === 0) { status = 'active';  }
     else {
       const prevMatch = STEP_DEFS[idx - 1].nameMatch;
-      const prevDone  = attempts.some((a) => a.is_completed && aname(a).includes(prevMatch));
+      // Fix: filter by activeCycleName so completing Phase 1 in a previous cycle
+      // does NOT unlock Phase 2 in a new cycle — each cycle must be sequential.
+      const prevDone  = attempts.some(
+        (a) => a.is_completed && aname(a).includes(prevMatch) && (a.cycle_name ?? '') === activeCycleName,
+      );
       status = prevDone ? 'active' : 'locked';
     }
 
