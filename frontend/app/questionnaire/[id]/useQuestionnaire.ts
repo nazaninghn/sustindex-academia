@@ -26,8 +26,10 @@ function isQuestionVisible(
   answers: Record<number, number[]>,
   allQuestions: Question[],
 ): boolean {
-  // Conditional: only show when parent question was answered with a qualifying score
-  if (q.layer === 'CONDITIONAL' && q.conditional_on_question != null) {
+  // Conditional parent check — applies to CONDITIONAL layer questions AND any
+  // question linked via conditional_on_question (e.g. G11 linked to G10-GATE:
+  // when G10-GATE = No, all four G11 P/I/M/R questions are hidden).
+  if (q.conditional_on_question != null) {
     const parentQ = allQuestions.find(pq => pq.id === q.conditional_on_question);
     const minScore = q.conditional_on_min_score ?? 1;
     if (parentQ) {
@@ -67,15 +69,19 @@ function computeNextIdx(
   const q = questions[currentIdx];
   if (!q) return Math.min(currentIdx + 1, questions.length - 1);
 
-  // GATE answered No → jump to first question outside this criterion
+  // GATE answered No → jump to the first VISIBLE question after the criterion.
+  // We rely on isQuestionVisible (not just criterion_code matching) so that
+  // cross-linked criteria (e.g. G11 linked to G10-GATE) are also skipped.
   if ((q.is_gate || q.layer === 'GATE') && q.criterion_code) {
     const sel = answers[q.id] || [];
     const chosen = q.choices.find(c => sel.includes(c.id));
     if (chosen !== undefined && chosen.score === 0) {
-      const skipIdx = questions.findIndex(
-        (qq, i) => i > currentIdx && qq.criterion_code !== q.criterion_code,
-      );
-      return skipIdx >= 0 ? skipIdx : questions.length - 1;
+      let skipIdx = currentIdx + 1;
+      while (skipIdx < questions.length) {
+        if (isQuestionVisible(questions[skipIdx], answers, questions)) break;
+        skipIdx++;
+      }
+      return skipIdx; // equals questions.length when nothing remains → complete
     }
   }
 
