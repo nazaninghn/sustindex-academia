@@ -65,7 +65,10 @@ import os, django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sustindex.settings')
 django.setup()
 from questionnaire.models import Survey, Category, Question, Choice
+from questionnaire.models import QuestionnaireAttempt, Answer
 print(f'Before: {Survey.objects.count()} surveys, {Question.objects.count()} questions, {Choice.objects.count()} choices')
+Answer.objects.all().delete()
+QuestionnaireAttempt.objects.all().delete()
 Choice.objects.all().delete()
 Question.objects.all().delete()
 Category.objects.all().delete()
