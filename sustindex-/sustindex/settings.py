@@ -328,7 +328,9 @@ if REST_FRAMEWORK_INSTALLED:
     # exposure window after a token is compromised or a password is changed.
     from datetime import timedelta
     SIMPLE_JWT = {
-        'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+        # 30 min access token — Render free tier cold starts eat into a 5-min token
+        # before the user even reaches the questionnaire.
+        'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
         'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
         'ROTATE_REFRESH_TOKENS': True,
         'BLACKLIST_AFTER_ROTATION': True,

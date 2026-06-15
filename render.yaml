@@ -30,3 +30,11 @@ services:
         value: "1"
       - key: ALLOWED_HOSTS
         value: ".onrender.com,sustindex-academia-sustindex.onrender.com"
+      # Set FRONTEND_URL and CORS_EXTRA_ORIGINS to your actual Vercel URL.
+      # Find it in: Vercel dashboard → Project → Settings → Domains
+      - key: FRONTEND_URL
+        value: "https://sustindex-academia.vercel.app"
+      - key: CORS_EXTRA_ORIGINS
+        value: "https://sustindex-academia.vercel.app"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://sustindex-academia.vercel.app,https://sustindex-academia-sustindex.onrender.com"

@@ -7,7 +7,9 @@
 # 2. Collects static files
 # 3. Runs migrations
 # 4. Creates superuser (if not exists)
-# 5. WIPES all questionnaire data
+# 5. Syncs questionnaire structure from v5 fixture WITHOUT
+#    wiping user data (attempts + answers are preserved).
+#    Stale surveys (not in v5) are soft-deactivated.
 # 6. Loads questionnaire fixture (data/fixtures/questionnaire_v5.json)
 #    — exact copy of verified local SQLite data (418 Q, 1281 choices)
 #    — to regenerate: python manage.py dumpdata questionnaire.survey
@@ -59,25 +61,39 @@ else:
 "
 
 echo ""
-echo "=== WIPING ALL QUESTIONNAIRE DATA ==="
+echo "=== Soft-deactivating stale surveys (preserving user data) ==="
+export V5_FIXTURE_PATH="$SCRIPT_DIR/data/fixtures/questionnaire_v5.json"
 python -c "
-import os, django
+import os, django, json
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sustindex.settings')
 django.setup()
-from questionnaire.models import Survey, Category, Question, Choice
-from questionnaire.models import QuestionnaireAttempt, Answer
-print(f'Before: {Survey.objects.count()} surveys, {Question.objects.count()} questions, {Choice.objects.count()} choices')
-Answer.objects.all().delete()
-QuestionnaireAttempt.objects.all().delete()
-Choice.objects.all().delete()
-Question.objects.all().delete()
-Category.objects.all().delete()
-Survey.objects.all().delete()
-print('All questionnaire data deleted.')
+from questionnaire.models import Survey, QuestionnaireAttempt, Answer
+
+fixture_path = os.environ['V5_FIXTURE_PATH']
+with open(fixture_path) as f:
+    fixture_data = json.load(f)
+v5_survey_pks = [item['pk'] for item in fixture_data if item['model'] == 'questionnaire.survey']
+print(f'v5 fixture defines {len(v5_survey_pks)} surveys: pks={v5_survey_pks}')
+
+before_surveys  = Survey.objects.count()
+before_attempts = QuestionnaireAttempt.objects.count()
+before_answers  = Answer.objects.count()
+print(f'DB before sync: {before_surveys} surveys, {before_attempts} attempts, {before_answers} answers')
+
+# Soft-deactivate surveys NOT in v5 fixture so they disappear from the API
+# without cascading deletes that would wipe user data.
+stale = Survey.objects.exclude(pk__in=v5_survey_pks).filter(is_active=True)
+stale_count = stale.count()
+if stale_count:
+    stale.update(is_active=False)
+    print(f'Soft-deactivated {stale_count} stale survey(s) — user attempts preserved.')
+else:
+    print('No stale surveys found.')
+print(f'User data preserved: {QuestionnaireAttempt.objects.count()} attempts, {Answer.objects.count()} answers.')
 "
 
 echo ""
-echo "=== Loading questionnaire fixture (verified local data) ==="
+echo "=== Loading questionnaire fixture (upserts v5 structure) ==="
 python manage.py loaddata "$SCRIPT_DIR/data/fixtures/questionnaire_v5.json"
 
 echo ""
@@ -104,11 +120,13 @@ python -c "
 import os, django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sustindex.settings')
 django.setup()
-from questionnaire.models import Survey, Question, Choice
-print(f'Surveys: {Survey.objects.count()}')
-print(f'Questions: {Question.objects.count()}')
-print(f'Choices: {Choice.objects.count()}')
-print(f'Gates: {Question.objects.filter(is_gate=True).count()}')
+from questionnaire.models import Survey, Question, Choice, QuestionnaireAttempt, Answer
+print(f'Active surveys:  {Survey.objects.filter(is_active=True).count()}')
+print(f'Questions:       {Question.objects.count()}')
+print(f'Choices:         {Choice.objects.count()}')
+print(f'Gates:           {Question.objects.filter(is_gate=True).count()}')
+print(f'User attempts:   {QuestionnaireAttempt.objects.count()}')
+print(f'User answers:    {Answer.objects.count()}')
 q1 = Question.objects.filter(criterion_code=\"G1\", layer=\"GATE\").first()
 if q1:
     print(f'Q1 text: {q1.text[:80]}...')
