@@ -387,9 +387,20 @@ export default function HistoryPage() {
                           {/* Left: info */}
                           <div style={{ flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                              <h3 style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>
-                                {attempt.survey_name}
-                              </h3>
+                              <div>
+                                {attempt.cycle_name && (
+                                  <div style={{
+                                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+                                    color: 'var(--olive-deep)', letterSpacing: '0.12em',
+                                    textTransform: 'uppercase', marginBottom: 3,
+                                  }}>
+                                    {attempt.cycle_name}
+                                  </div>
+                                )}
+                                <h3 style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>
+                                  {attempt.survey_name}
+                                </h3>
+                              </div>
                               <span style={{
                                 fontFamily: "'IBM Plex Mono', monospace",
                                 fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',

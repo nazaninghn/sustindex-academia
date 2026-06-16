@@ -822,6 +822,15 @@ export default function DashboardPage() {
                   <span className="eyebrow" style={{ color: 'rgba(249,239,229,0.5)', position: 'relative', marginBottom: 10, display: 'block' }}>
                     {activeAttempt ? (lang === 'tr' ? 'Devam Et' : 'Continue') : (lang === 'tr' ? 'Yeni' : 'New')}
                   </span>
+                  {activeAttempt?.cycle_name && (
+                    <div style={{
+                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+                      color: 'rgba(249,239,229,0.6)', letterSpacing: '0.12em',
+                      textTransform: 'uppercase', position: 'relative', marginBottom: 4,
+                    }}>
+                      {activeAttempt.cycle_name}
+                    </div>
+                  )}
                   <h3 style={{
                     fontSize: 16, fontWeight: 500, marginBottom: 8,
                     color: 'var(--cream)', letterSpacing: '-0.01em', position: 'relative',
@@ -985,9 +994,20 @@ export default function DashboardPage() {
                         onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--cream-deep)')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                       >
-                        <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 13 }}>
-                          {row.survey_name}
-                        </span>
+                        <div>
+                          {row.cycle_name && (
+                            <div style={{
+                              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+                              color: 'var(--olive-deep)', letterSpacing: '0.1em',
+                              textTransform: 'uppercase', marginBottom: 2,
+                            }}>
+                              {row.cycle_name}
+                            </div>
+                          )}
+                          <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 13 }}>
+                            {row.survey_name}
+                          </span>
+                        </div>
                         <span className="activity-date" style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: "'IBM Plex Mono', monospace" }}>
                           {row.completed_at ? new Date(row.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB') : '—'}
                         </span>

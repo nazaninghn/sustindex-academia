@@ -136,6 +136,7 @@ export function useQuestionnaire() {
   /* ── Data state ── */
   const [questions,   setQuestions]   = useState<Question[]>([]);
   const [surveyName,  setSurveyName]  = useState('');
+  const [cycleName,   setCycleName]   = useState('');
   const [currentIdx,  setCurrentIdx]  = useState(0);
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
@@ -214,6 +215,9 @@ export function useQuestionnaire() {
     try {
       const attempt = await attemptAPI.getAttempt(Number(id));
       if (attempt.is_completed) { router.replace(`/results/${id}`); return; }
+
+      // Persist the cycle name so the questionnaire header can label this assessment.
+      if (attempt.cycle_name) setCycleName(attempt.cycle_name);
 
       const { surveyAPI } = await import('@/lib/api');
       if (!attempt.survey) {
@@ -717,6 +721,7 @@ export function useQuestionnaire() {
     /* data */
     questions,
     surveyName,
+    cycleName,
     currentIdx,
     visibleIdx,
     loading,

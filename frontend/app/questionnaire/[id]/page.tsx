@@ -65,9 +65,20 @@ export default function QuestionnairePage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <Logo size={20} />
             <span style={{ width: 1, height: 18, background: 'var(--line)' }} />
-            <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 12, color: 'var(--ink-2)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {qs.surveyName}
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 320 }}>
+              {qs.cycleName && (
+                <span style={{
+                  fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+                  color: 'var(--olive-deep)', letterSpacing: '0.1em',
+                  textTransform: 'uppercase', lineHeight: 1,
+                }}>
+                  {qs.cycleName}
+                </span>
+              )}
+              <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 12, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {qs.surveyName}
+              </span>
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
