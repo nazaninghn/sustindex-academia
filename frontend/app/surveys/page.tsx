@@ -530,11 +530,17 @@ export default function SurveysPage() {
     return () => controller.abort();
   }, [user]);
 
-  // Active cycle = cycle_name of the most recent attempt (sorted by id desc)
-  // Empty string means legacy/unnamed attempts
-  const activeCycleName = attempts.length > 0
-    ? (attempts.slice().sort((a, b) => b.id - a.id)[0].cycle_name ?? '')
-    : '';
+  // Active cycle = cycle_name of the most recent attempt (sorted by id desc).
+  // EXCEPTION: when the user arrives from the Dashboard "New Assessment" modal,
+  // pendingDashCycle holds the new (not-yet-created) cycle name.  Override
+  // activeCycleName with it so stepAttempts filters to an EMPTY set for the new
+  // cycle — this makes Phase 1 show "Start" instead of "Continue" (which was
+  // the bug: the old cycle's in-progress attempt kept winning the filter).
+  const activeCycleName = pendingDashCycle !== null
+    ? pendingDashCycle
+    : attempts.length > 0
+      ? (attempts.slice().sort((a, b) => b.id - a.id)[0].cycle_name ?? '')
+      : '';
 
   /* ── Build wizard steps ─────────────────────────────────── */
   const steps: WizardStep[] = STEP_DEFS.map((def, idx) => {
