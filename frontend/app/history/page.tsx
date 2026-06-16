@@ -35,6 +35,7 @@ export default function HistoryPage() {
   const [loadError,  setLoadError]  = useState(false);
   const [filter,     setFilter]     = useState<'all' | 'completed' | 'in-progress'>('all');
   const [surveyFilter, setSurveyFilter] = useState<string>('all');
+  const [cycleSearch,  setCycleSearch]  = useState('');
   const [dateFrom,   setDateFrom]   = useState('');
   const [dateTo,     setDateTo]     = useState('');
 
@@ -99,11 +100,21 @@ export default function HistoryPage() {
 
   // All unique survey names for the survey filter dropdown
   const surveyNames = Array.from(new Set(attempts.map((a) => a.survey_name))).sort();
+  // All unique, non-empty cycle names — sorted alphabetically for the search dropdown
+  const cycleNames  = Array.from(new Set(
+    attempts.map((a) => a.cycle_name || '').filter(Boolean)
+  )).sort();
 
   const visible = attempts.filter((a) => {
     if (filter === 'completed')   { if (!a.is_completed)  return false; }
     if (filter === 'in-progress') { if (a.is_completed)   return false; }
     if (surveyFilter !== 'all' && a.survey_name !== surveyFilter) return false;
+    // Cycle name search: substring match, case-insensitive
+    if (cycleSearch.trim()) {
+      const hay    = (a.cycle_name || '').toLowerCase();
+      const needle = cycleSearch.trim().toLowerCase();
+      if (!hay.includes(needle)) return false;
+    }
     if (dateFrom) {
       const from = new Date(dateFrom).setHours(0, 0, 0, 0);
       const date = new Date(a.started_at).setHours(0, 0, 0, 0);
@@ -235,8 +246,8 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* Advanced filters row — survey + date range */}
-        {surveyNames.length > 1 && (
+        {/* Advanced filters row — cycle search + survey dropdown + date range */}
+        {(surveyNames.length > 1 || cycleNames.length > 0) && (
           <div style={{
             display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
             marginBottom: 18, padding: '10px 14px',
@@ -246,20 +257,43 @@ export default function HistoryPage() {
               {lang === 'tr' ? 'Filtre' : 'Filter'}
             </span>
 
-            {/* Survey dropdown */}
-            <select
-              value={surveyFilter}
-              onChange={(e) => setSurveyFilter(e.target.value)}
-              style={{
-                padding: '5px 10px', fontSize: 11.5, border: '1px solid var(--line)',
-                background: 'var(--cream)', color: 'var(--ink)',
-                fontFamily: "'IBM Plex Sans', sans-serif", cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              <option value="all">{lang === 'tr' ? 'Tüm anketler' : 'All surveys'}</option>
-              {surveyNames.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            {/* Cycle name search input */}
+            {cycleNames.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <label style={{ fontSize: 10.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", flexShrink: 0 }}>
+                  {lang === 'tr' ? 'Değerlendirme adı' : 'Assessment name'}
+                </label>
+                <input
+                  type="search"
+                  placeholder={lang === 'tr' ? 'Ara…' : 'Search…'}
+                  value={cycleSearch}
+                  onChange={(e) => setCycleSearch(e.target.value)}
+                  style={{
+                    padding: '4px 8px', fontSize: 11.5, border: '1px solid var(--line)',
+                    background: 'var(--cream)', color: 'var(--ink)',
+                    fontFamily: "'IBM Plex Sans', sans-serif", outline: 'none',
+                    width: 160,
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Survey dropdown — only when multiple surveys exist */}
+            {surveyNames.length > 1 && (
+              <select
+                value={surveyFilter}
+                onChange={(e) => setSurveyFilter(e.target.value)}
+                style={{
+                  padding: '5px 10px', fontSize: 11.5, border: '1px solid var(--line)',
+                  background: 'var(--cream)', color: 'var(--ink)',
+                  fontFamily: "'IBM Plex Sans', sans-serif", cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                <option value="all">{lang === 'tr' ? 'Tüm anketler' : 'All surveys'}</option>
+                {surveyNames.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            )}
 
             {/* Date from */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -296,9 +330,9 @@ export default function HistoryPage() {
             </div>
 
             {/* Clear filters */}
-            {(surveyFilter !== 'all' || dateFrom || dateTo) && (
+            {(surveyFilter !== 'all' || cycleSearch.trim() || dateFrom || dateTo) && (
               <button
-                onClick={() => { setSurveyFilter('all'); setDateFrom(''); setDateTo(''); }}
+                onClick={() => { setSurveyFilter('all'); setCycleSearch(''); setDateFrom(''); setDateTo(''); }}
                 style={{
                   padding: '4px 10px', background: 'transparent',
                   border: '1px solid var(--line)', cursor: 'pointer',
