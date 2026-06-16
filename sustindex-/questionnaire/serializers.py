@@ -145,9 +145,19 @@ class QuestionSerializer(LocalisedRepresentationMixin, serializers.ModelSerializ
         # bypassing any prefetch cache.  Removed.
         rep  = super().to_representation(instance)
         lang = self._get_lang(self.context.get('request'))
-        rep  = self._localise(rep, instance, lang, {
-            'text': ('text_tr', 'text_en'),
-        })
+
+        # Fix I18N-Q: question texts MUST NOT go through _split_bilingual.
+        # Unlike choices (stored as "Evet / Yes"), question texts contain " / " as
+        # punctuation inside Turkish (e.g. "Sürdürülebilirlik / ESG charter") —
+        # not as a TR/EN separator.  Using _split_bilingual on them returns the
+        # wrong Turkish substring as "English".
+        # Rule: use text_tr / text_en dedicated fields only; if the target-language
+        # field is empty, keep rep['text'] as-is (Turkish fallback).
+        if lang == 'tr' and instance.text_tr:
+            rep['text'] = instance.text_tr
+        elif lang == 'en' and instance.text_en:
+            rep['text'] = instance.text_en
+        # else: leave rep['text'] unchanged (already set by super() from the DB text field)
 
         # Fix H-07: guard against category being null — accessing .name_tr on None
         # raises AttributeError and crashes the serializer for every question in
