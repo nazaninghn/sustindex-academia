@@ -469,7 +469,7 @@ class QuestionnaireAttemptSerializer(LocalisedRepresentationMixin, AttemptBreakd
             'id', 'user', 'user_name', 'survey', 'survey_name',
             'session', 'session_name', 'started_at', 'completed_at',
             'is_completed', 'total_score', 'overall_grade',
-            'selected_sector',
+            'selected_sector', 'cycle_name', 'bookmarked_questions',
             'pillar_scores', 'maturity', 'answered_count', 'total_questions',
             'answers', 'recommendations', 'category_scores',
         ]
@@ -629,6 +629,8 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
     overall_grade    = serializers.SerializerMethodField()
     answered_count   = serializers.SerializerMethodField()
     total_questions  = serializers.SerializerMethodField()
+    # Count of flagged/bookmarked questions for quick display in history & dashboard
+    bookmarked_count = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionnaireAttempt
@@ -638,8 +640,13 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
             'is_completed', 'total_score', 'overall_grade',
             'selected_sector', 'cycle_name',
             'answered_count', 'total_questions',
+            'bookmarked_count',
             'category_scores',
         ]
+
+    def get_bookmarked_count(self, obj):
+        bq = obj.bookmarked_questions
+        return len(bq) if isinstance(bq, list) else 0
 
     # Fix #10: null-safe FK accessors for list serializer
     def get_survey_name(self, obj):

@@ -186,6 +186,19 @@ export const attemptAPI = {
   },
 
   /**
+   * Save the full list of bookmarked (flagged) question IDs for an attempt.
+   * Replaces the server-side list on every call — pass the complete current set.
+   * Fire-and-forget: callers should silently ignore errors; localStorage is the
+   * fallback if this request fails.
+   */
+  updateBookmarks: async (attemptId: number, questionIds: number[]) => {
+    const { data } = await api.patch(`/api/v1/attempts/${attemptId}/bookmarks/`, {
+      bookmarked_questions: questionIds,
+    });
+    return data;
+  },
+
+  /**
    * Consolidated GRI report — returns the latest completed attempt for each
    * GRI phase (1-4) in a single API call with combined score + grade.
    * Replaces 4 sequential getAttempt() calls in the combined report page.

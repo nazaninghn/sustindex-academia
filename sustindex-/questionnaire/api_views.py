@@ -569,6 +569,37 @@ class QuestionnaireAttemptViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(attempts, many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['patch'], url_path='bookmarks')
+    def update_bookmarks(self, request, pk=None):
+        """
+        PATCH /api/v1/attempts/{pk}/bookmarks/
+        Body: { "bookmarked_questions": [1, 5, 23] }
+
+        Saves the list of question IDs the user has flagged for review during
+        this attempt.  Replaces the whole list on each call (idempotent).
+        Only the attempt owner (or staff) may call this.
+        """
+        attempt = get_object_or_404(
+            QuestionnaireAttempt.objects.filter(user=request.user),
+            pk=pk,
+        )
+        bookmarked = request.data.get('bookmarked_questions', [])
+        if not isinstance(bookmarked, list):
+            return Response(
+                {'detail': 'bookmarked_questions must be a list of integers.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            bookmarked = [int(q) for q in bookmarked]
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'Each entry in bookmarked_questions must be an integer question ID.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        attempt.bookmarked_questions = bookmarked
+        attempt.save(update_fields=['bookmarked_questions'])
+        return Response({'bookmarked_questions': attempt.bookmarked_questions})
+
     @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
     def admin_analytics(self, request):
         """

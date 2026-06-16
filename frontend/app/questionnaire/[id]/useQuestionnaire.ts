@@ -269,6 +269,21 @@ export function useQuestionnaire() {
       setNumericalAnswers(preNumerical);
       setNaAnswers(preNA);
 
+      // Restore bookmarks from server (server is the source of truth).
+      // This overwrites the localStorage copy loaded in the bookmark useEffect,
+      // which is correct — localStorage is just a fast initial-paint fallback.
+      if (Array.isArray(attempt.bookmarked_questions) && attempt.bookmarked_questions.length > 0) {
+        const serverBM: Record<number, boolean> = {};
+        for (const qid of attempt.bookmarked_questions as number[]) {
+          serverBM[Number(qid)] = true;
+        }
+        setBookmarks(serverBM);
+        // Keep localStorage in sync so offline/fast reloads still show flags.
+        try {
+          localStorage.setItem(`sx_bookmarks_${id}`, JSON.stringify(serverBM));
+        } catch { /* ignore quota / incognito */ }
+      }
+
       // Resume from the first unanswered visible question.
       //  • Brand-new attempt (answeredQIds empty) → first visible question = Q1.
       //  • Resumed attempt (e.g. answered Q1–Q30) → lands on Q31 so the user
@@ -479,11 +494,25 @@ export function useQuestionnaire() {
     setNotes((prev) => ({ ...prev, [q.id]: val }));
   };
 
-  /** Bookmark / un-bookmark the current question for later review. */
+  /** Bookmark / un-bookmark the current question for later review.
+   *  Updates local state immediately, then persists the full flag list to the
+   *  server so history / dashboard can show which questions are pending review.
+   *  The server call is fire-and-forget; localStorage is the offline fallback. */
   const toggleBookmark = () => {
     if (!q) return;
     const qid = q.id;
-    setBookmarks((prev) => ({ ...prev, [qid]: !prev[qid] }));
+    setBookmarks((prev) => {
+      const next = { ...prev, [qid]: !prev[qid] };
+      // Build the updated list of flagged IDs and push to server
+      const flaggedIds = Object.entries(next)
+        .filter(([, v]) => v)
+        .map(([k]) => Number(k));
+      attemptAPI.updateBookmarks(Number(id), flaggedIds).catch(() => {
+        // Silent failure — bookmarks already written to localStorage by the
+        // persisting useEffect above, so they survive page refreshes.
+      });
+      return next;
+    });
   };
 
   /** Toggle the Not-Applicable flag for the current question.

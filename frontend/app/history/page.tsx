@@ -22,6 +22,7 @@ interface Attempt {
   overall_grade: string;
   category_scores: CategoryScore[];
   cycle_name: string;
+  bookmarked_count: number;
 }
 
 export default function HistoryPage() {
@@ -446,10 +447,23 @@ export default function HistoryPage() {
                                 {attempt.is_completed ? t('hist_status_done') : t('hist_status_ongoing')}
                               </span>
                             </div>
-                            <div style={{ display: 'flex', gap: 20, fontSize: 11.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, fontSize: 11.5, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", alignItems: 'center' }}>
                               <span>{t('hist_started')} {new Date(attempt.started_at).toLocaleDateString()}</span>
                               {attempt.is_completed && attempt.completed_at && (
                                 <span>{t('hist_finished')} {new Date(attempt.completed_at).toLocaleDateString()}</span>
+                              )}
+                              {/* Bookmark / flagged-questions badge */}
+                              {(attempt.bookmarked_count ?? 0) > 0 && (
+                                <span style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                                  padding: '2px 8px',
+                                  background: 'rgba(194,153,62,0.1)',
+                                  border: '1px solid var(--amber)',
+                                  color: 'var(--amber)',
+                                  fontSize: 10, letterSpacing: '0.06em',
+                                }}>
+                                  🔖 {attempt.bookmarked_count} {lang === 'tr' ? 'işaretli soru' : 'flagged'}
+                                </span>
                               )}
                             </div>
 

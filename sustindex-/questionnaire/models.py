@@ -405,6 +405,12 @@ class QuestionnaireAttempt(models.Model):
         verbose_name=_('Cycle Name'),
         help_text=_('User-defined label for this assessment cycle (e.g. "Q1 2026"). All 5 phases started in one cycle share this name.'),
     )
+    bookmarked_questions = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_('Bookmarked Questions'),
+        help_text=_('List of question IDs that the user has flagged for review during this attempt.'),
+    )
 
     class Meta:
         verbose_name = _('Questionnaire Attempt')
