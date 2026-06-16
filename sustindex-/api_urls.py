@@ -15,7 +15,8 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [LoginRateThrottle]
 from questionnaire.api_views import (
     SurveyViewSet, SurveySessionViewSet, CategoryViewSet,
-    QuestionViewSet, QuestionnaireAttemptViewSet, AnswerViewSet, UserDocumentViewSet
+    QuestionViewSet, QuestionnaireAttemptViewSet, AnswerViewSet, UserDocumentViewSet,
+    ActionTaskViewSet,
 )
 from elearning.api_views import CourseViewSet, LessonViewSet, LessonAttachmentViewSet, LessonProgressViewSet
 
@@ -31,7 +32,8 @@ router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'questions', QuestionViewSet, basename='question')
 router.register(r'attempts', QuestionnaireAttemptViewSet, basename='attempt')
 router.register(r'answers', AnswerViewSet, basename='answer')
-router.register(r'documents', UserDocumentViewSet, basename='document')
+router.register(r'documents',    UserDocumentViewSet, basename='document')
+router.register(r'action-tasks', ActionTaskViewSet,   basename='actiontask')
 
 router.register(r'courses', CourseViewSet, basename='course')
 router.register(r'lessons', LessonViewSet, basename='lesson')

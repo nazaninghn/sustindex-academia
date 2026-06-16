@@ -701,6 +701,24 @@ export function useQuestionnaire() {
     setCurrentIdx(targetIdx);
   };
 
+  /** Jump to the next bookmarked (flagged) visible question after currentIdx,
+   *  wrapping around to the first if there are none after the current position.
+   *  Saves the current answer first (same as handleJumpTo). */
+  const handleJumpToNextFlagged = async () => {
+    // Collect raw question-array indices that are both visible and bookmarked
+    const flaggedIdxs: number[] = [];
+    for (let i = 0; i < questions.length; i++) {
+      const qItem = questions[i];
+      if (bookmarks[qItem.id] && isQuestionVisible(qItem, answers, questions)) {
+        flaggedIdxs.push(i);
+      }
+    }
+    if (flaggedIdxs.length === 0) return;
+    // First flagged AFTER currentIdx; wrap to beginning if none found after
+    const nextIdx = flaggedIdxs.find(i => i > currentIdx) ?? flaggedIdxs[0];
+    await handleJumpTo(nextIdx);
+  };
+
   const handleSaveAndExit = async () => {
     if (exitSaving) return;
     setExitSaving(true);
@@ -806,6 +824,7 @@ export function useQuestionnaire() {
     handleNext,
     handlePrev,
     handleJumpTo,
+    handleJumpToNextFlagged,
     handleSaveAndExit,
     navigateToDashboard,
     /* state setters */

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Survey, SurveySession, Category, Question, Choice,
-    QuestionnaireAttempt, Answer, UserDocument
+    QuestionnaireAttempt, Answer, UserDocument, ActionTask,
 )
 
 
@@ -350,6 +350,7 @@ class UserDocumentSerializer(serializers.ModelSerializer):
     # Contextual fields for the document library view
     answer_id         = serializers.IntegerField(source='answer.id', read_only=True)
     question_text     = serializers.CharField(source='answer.question.text', read_only=True)
+    criterion_code    = serializers.CharField(source='answer.question.criterion_code', read_only=True)
     survey_name       = serializers.SerializerMethodField()
     attempt_id        = serializers.IntegerField(source='answer.attempt.id', read_only=True)
 
@@ -358,7 +359,8 @@ class UserDocumentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'file', 'uploaded_at',
             'file_size', 'file_size_display',
-            'answer_id', 'question_text', 'survey_name', 'attempt_id',
+            'answer_id', 'question_text', 'criterion_code',
+            'survey_name', 'attempt_id',
         ]
 
     def get_survey_name(self, obj):
@@ -709,3 +711,18 @@ class QuestionnaireAttemptCreateSerializer(serializers.ModelSerializer):
         # selected_sector is optional: blank / omitted = universal (no sector filtering).
         fields = ['id', 'survey', 'session', 'selected_sector', 'cycle_name']
         read_only_fields = ['id']
+
+
+class ActionTaskSerializer(serializers.ModelSerializer):
+    """CRUD serializer for user action plan tasks."""
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+
+    class Meta:
+        model  = ActionTask
+        fields = [
+            'id', 'user', 'attempt',
+            'title', 'description', 'category', 'priority',
+            'status', 'due_date', 'notes',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']

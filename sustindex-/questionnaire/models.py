@@ -853,3 +853,55 @@ class UserDocument(models.Model):
             return f"{self.file_size // (1024 * 1024)} MB"
 
 
+class ActionTask(models.Model):
+    """User-managed action plan task — converts a recommendation into a tracked to-do item."""
+
+    STATUS_TODO        = 'todo'
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_DONE        = 'done'
+    STATUS_WONT_DO     = 'wont_do'
+
+    STATUS_CHOICES = [
+        (STATUS_TODO,        _('To Do')),
+        (STATUS_IN_PROGRESS, _('In Progress')),
+        (STATUS_DONE,        _('Done')),
+        (STATUS_WONT_DO,     _("Won't Do")),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='action_tasks',
+        verbose_name=_('User'),
+    )
+    attempt = models.ForeignKey(
+        QuestionnaireAttempt,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='action_tasks',
+        verbose_name=_('Assessment Attempt'),
+    )
+    title = models.CharField(max_length=500, verbose_name=_('Title'))
+    description = models.TextField(blank=True, verbose_name=_('Description'))
+    category = models.CharField(max_length=200, blank=True, verbose_name=_('GRI Category'))
+    priority = models.CharField(max_length=20, blank=True, verbose_name=_('Priority'))
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_TODO,
+        verbose_name=_('Status'),
+    )
+    due_date = models.DateField(null=True, blank=True, verbose_name=_('Due Date'))
+    notes = models.TextField(blank=True, verbose_name=_('Notes'))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created At'))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated At'))
+
+    class Meta:
+        verbose_name = _('Action Task')
+        verbose_name_plural = _('Action Tasks')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'status'], name='at_user_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id}: {self.title[:60]} [{self.status}]"
+

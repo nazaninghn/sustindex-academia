@@ -263,6 +263,59 @@ export function documentDownloadUrl(documentId: number): string {
 }
 
 /* ════════════════════════════════════════════════════════
+   Action Plan API
+   ════════════════════════════════════════════════════════ */
+export interface ActionTask {
+  id: number;
+  attempt: number | null;
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  status: 'todo' | 'in_progress' | 'done' | 'wont_do';
+  due_date: string | null;    // ISO date string
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActionTaskPayload {
+  attempt?: number | null;
+  title: string;
+  description?: string;
+  category?: string;
+  priority?: string;
+  status?: ActionTask['status'];
+  due_date?: string | null;
+  notes?: string;
+}
+
+export const actionTaskAPI = {
+  /** List all action tasks for the current user, optionally filtered by attempt or status. */
+  getMyTasks: async (params?: { attempt?: number; status?: string }) => {
+    const { data } = await api.get('/api/v1/action-tasks/', { params });
+    return data as ActionTask[];
+  },
+
+  /** Create a new action task from a recommendation or manually. */
+  createTask: async (payload: ActionTaskPayload) => {
+    const { data } = await api.post('/api/v1/action-tasks/', payload);
+    return data as ActionTask;
+  },
+
+  /** Partially update a task (e.g. change status, add notes, set due date). */
+  updateTask: async (id: number, payload: Partial<ActionTaskPayload>) => {
+    const { data } = await api.patch(`/api/v1/action-tasks/${id}/`, payload);
+    return data as ActionTask;
+  },
+
+  /** Remove a task. */
+  deleteTask: async (id: number) => {
+    await api.delete(`/api/v1/action-tasks/${id}/`);
+  },
+};
+
+/* ════════════════════════════════════════════════════════
    Survey API
    ════════════════════════════════════════════════════════ */
 export const surveyAPI = {

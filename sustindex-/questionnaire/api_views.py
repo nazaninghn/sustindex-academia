@@ -13,13 +13,14 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 from .models import (
     Survey, SurveySession, Category, Question, Choice,
-    QuestionnaireAttempt, Answer, UserDocument
+    QuestionnaireAttempt, Answer, UserDocument, ActionTask,
 )
 from .serializers import (
     SurveySerializer, SurveyListSerializer, SurveySessionSerializer, CategorySerializer,
     QuestionSerializer, ChoiceSerializer, QuestionnaireAttemptSerializer,
     QuestionnaireAttemptCreateSerializer, QuestionnaireAttemptListSerializer,
-    AnswerSerializer, AnswerCreateSerializer, UserDocumentSerializer
+    AnswerSerializer, AnswerCreateSerializer, UserDocumentSerializer,
+    ActionTaskSerializer,
 )
 
 # Fix O (Round 4): try python-magic for magic-bytes MIME validation;
@@ -972,3 +973,34 @@ class UserDocumentViewSet(viewsets.ModelViewSet):
             )
 
         serializer.save(file_size=file.size, answer=answer_obj)
+
+
+class ActionTaskViewSet(viewsets.ModelViewSet):
+    """
+    CRUD endpoints for the user's personal action plan tasks.
+
+    GET    /api/v1/action-tasks/         — list all tasks for the current user
+    POST   /api/v1/action-tasks/         — create a new task
+    PATCH  /api/v1/action-tasks/{id}/    — update status / notes / due_date
+    DELETE /api/v1/action-tasks/{id}/    — remove a task
+
+    All endpoints are user-scoped: users can only see/modify their own tasks.
+    """
+    serializer_class   = ActionTaskSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = ActionTask.objects.filter(user=self.request.user).select_related('attempt')
+        # Optional filter: ?attempt=<id> to get tasks for a specific attempt
+        attempt_id = self.request.query_params.get('attempt')
+        if attempt_id:
+            try:
+                qs = qs.filter(attempt_id=int(attempt_id))
+            except (TypeError, ValueError):
+                pass
+        # Optional filter: ?status=todo|in_progress|done|wont_do
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return qs
+

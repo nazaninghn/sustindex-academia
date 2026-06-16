@@ -2,7 +2,7 @@
 /**
  * Central Document Library — /documents
  * Shows all supporting documents uploaded by the user across all attempts.
- * Groups by survey, supports search + sort.
+ * Groups by survey or by GRI criterion code; supports search + sort.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -23,9 +23,12 @@ interface Doc {
   file_size_display: string;
   answer_id: number;
   question_text: string | null;
+  criterion_code: string | null;
   survey_name: string | null;
   attempt_id: number;
 }
+
+type GroupMode = 'criterion' | 'survey' | 'none';
 
 function FileIcon({ title }: { title: string }) {
   const ext = title.split('.').pop()?.toLowerCase() ?? '';
@@ -42,12 +45,15 @@ export default function DocumentLibraryPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { lang } = useLang();
 
-  const [docs,    setDocs]    = useState<Doc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
-  const [search,  setSearch]  = useState('');
-  const [survey,  setSurvey]  = useState('all');
-  const [sortBy,  setSortBy]  = useState<'date_desc' | 'date_asc' | 'title' | 'size'>('date_desc');
+  const [docs,      setDocs]      = useState<Doc[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState('');
+  const [search,    setSearch]    = useState('');
+  const [surveyFilter, setSurveyFilter] = useState('all');
+  const [sortBy,    setSortBy]    = useState<'date_desc' | 'date_asc' | 'title' | 'size'>('date_desc');
+  const [groupMode, setGroupMode] = useState<GroupMode>('criterion');
+
+  const tr = (en: string, trStr: string) => lang === 'tr' ? trStr : en;
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -63,38 +69,64 @@ export default function DocumentLibraryPage() {
         const arr: Doc[] = Array.isArray(res) ? res : (res.results ?? []);
         setDocs(arr);
       } catch {
-        if (active) setError(lang === 'tr' ? 'Belgeler yüklenemedi.' : 'Failed to load documents.');
+        if (active) setError(tr('Failed to load documents.', 'Belgeler yüklenemedi.'));
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
-  }, [user, lang]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const surveys = useMemo(
-    () => Array.from(new Set(docs.map((d) => d.survey_name ?? 'Unknown'))).sort(),
-    [docs]
+    () => Array.from(new Set(docs.map((d) => d.survey_name ?? tr('Unknown', 'Bilinmiyor')))).sort(),
+    [docs, lang],
   );
 
+  /* ── Filtered + sorted list ── */
   const visible = useMemo(() => {
     let filtered = docs;
-    if (survey !== 'all') filtered = filtered.filter((d) => (d.survey_name ?? 'Unknown') === survey);
+    if (surveyFilter !== 'all') filtered = filtered.filter((d) => (d.survey_name ?? '') === surveyFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       filtered = filtered.filter(
         (d) =>
           d.title.toLowerCase().includes(q) ||
           (d.question_text ?? '').toLowerCase().includes(q) ||
-          (d.survey_name ?? '').toLowerCase().includes(q)
+          (d.survey_name ?? '').toLowerCase().includes(q) ||
+          (d.criterion_code ?? '').toLowerCase().includes(q),
       );
     }
     switch (sortBy) {
-      case 'date_asc':  return [...filtered].sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at));
-      case 'title':     return [...filtered].sort((a, b) => a.title.localeCompare(b.title));
-      case 'size':      return [...filtered].sort((a, b) => b.file_size - a.file_size);
-      default:          return [...filtered].sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
+      case 'date_asc': return [...filtered].sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at));
+      case 'title':    return [...filtered].sort((a, b) => a.title.localeCompare(b.title));
+      case 'size':     return [...filtered].sort((a, b) => b.file_size - a.file_size);
+      default:         return [...filtered].sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
     }
-  }, [docs, survey, search, sortBy]);
+  }, [docs, surveyFilter, search, sortBy]);
+
+  /* ── Group by criterion or survey ── */
+  const grouped = useMemo(() => {
+    if (groupMode === 'none') return { [tr('All Documents', 'Tüm Belgeler')]: visible };
+
+    const map: Record<string, Doc[]> = {};
+    for (const doc of visible) {
+      const key = groupMode === 'criterion'
+        ? (doc.criterion_code?.trim() || tr('— No Criterion', '— Kriter Yok'))
+        : (doc.survey_name?.trim()    || tr('— No Survey',    '— Anket Yok'));
+      if (!map[key]) map[key] = [];
+      map[key].push(doc);
+    }
+    // Sort group keys: criterion codes alphabetically; survey names alphabetically
+    return Object.fromEntries(
+      Object.entries(map).sort(([a], [b]) => {
+        // Put "— No …" groups last
+        if (a.startsWith('—')) return 1;
+        if (b.startsWith('—')) return -1;
+        return a.localeCompare(b);
+      }),
+    );
+  }, [visible, groupMode, lang]);
 
   const totalSize = docs.reduce((s, d) => s + (d.file_size || 0), 0);
   const formatSize = (bytes: number) => {
@@ -103,11 +135,12 @@ export default function DocumentLibraryPage() {
     return `${bytes} B`;
   };
 
+  /* ── Loading / error states ── */
   if (authLoading || loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {lang === 'tr' ? 'Yükleniyor…' : 'Loading…'}
+          {tr('Loading…', 'Yükleniyor…')}
         </span>
       </div>
     );
@@ -125,31 +158,37 @@ export default function DocumentLibraryPage() {
     );
   }
 
+  const groupKeys = Object.keys(grouped);
+
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
       <AppNav />
 
       <main className="wrap" style={{ padding: '36px 32px 80px' }}>
 
-        {/* Header */}
-        <div style={{ marginBottom: 36 }}>
+        {/* Page header */}
+        <div style={{ marginBottom: 32 }}>
           <Link href="/dashboard" style={{ textDecoration: 'none' }}>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.08em', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              ← {lang === 'tr' ? 'Dashboard' : 'Dashboard'}
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.08em' }}>
+              ← {tr('Dashboard', 'Ana Sayfa')}
             </span>
           </Link>
-          <h1 style={{ fontSize: 34, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginTop: 14, marginBottom: 6 }}>
-            {lang === 'tr' ? 'Belge ' : 'Document '}
-            <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>
-              {lang === 'tr' ? 'Kütüphanesi' : 'Library'}
-            </em>
-          </h1>
-          <p style={{ fontSize: 12, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em' }}>
-            {docs.length} {lang === 'tr' ? 'belge' : 'documents'} · {formatSize(totalSize)} {lang === 'tr' ? 'toplam' : 'total'}
-          </p>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+            <div>
+              <h1 style={{ fontSize: 34, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 6 }}>
+                {tr('Evidence ', 'Kanıt ')}
+                <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>
+                  {tr('Library', 'Kütüphanesi')}
+                </em>
+              </h1>
+              <p style={{ fontSize: 12, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em' }}>
+                {docs.length} {tr('documents', 'belge')} · {formatSize(totalSize)} {tr('total', 'toplam')}
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Controls */}
+        {/* Controls bar */}
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
           marginBottom: 20, padding: '10px 14px',
@@ -158,7 +197,7 @@ export default function DocumentLibraryPage() {
           {/* Search */}
           <input
             type="search"
-            placeholder={lang === 'tr' ? 'Başlık veya soru ara…' : 'Search title or question…'}
+            placeholder={tr('Search title, question, or criterion…', 'Başlık, soru veya kriter ara…')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
@@ -172,18 +211,43 @@ export default function DocumentLibraryPage() {
           {/* Survey filter */}
           {surveys.length > 1 && (
             <select
-              value={survey}
-              onChange={(e) => setSurvey(e.target.value)}
+              value={surveyFilter}
+              onChange={(e) => setSurveyFilter(e.target.value)}
               style={{
                 padding: '6px 10px', fontSize: 11.5, border: '1px solid var(--line)',
                 background: 'var(--cream)', color: 'var(--ink)',
                 fontFamily: "'IBM Plex Sans', sans-serif", cursor: 'pointer', outline: 'none',
               }}
             >
-              <option value="all">{lang === 'tr' ? 'Tüm anketler' : 'All surveys'}</option>
+              <option value="all">{tr('All surveys', 'Tüm anketler')}</option>
               {surveys.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
+
+          {/* Group by */}
+          <div style={{ display: 'flex', gap: 0, border: '1px solid var(--line)', overflow: 'hidden' }}>
+            {([
+              ['criterion', tr('By Criterion', 'Kritere Göre')],
+              ['survey',    tr('By Survey',    'Ankete Göre')],
+              ['none',      tr('All',          'Tümü')],
+            ] as [GroupMode, string][]).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setGroupMode(mode)}
+                style={{
+                  padding: '5px 11px',
+                  background: groupMode === mode ? 'var(--ink)' : 'transparent',
+                  color:      groupMode === mode ? 'var(--cream)' : 'var(--ink-3)',
+                  border: 'none', cursor: 'pointer',
+                  fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+                  letterSpacing: '0.06em', borderRight: '1px solid var(--line)',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           {/* Sort */}
           <select
@@ -195,14 +259,14 @@ export default function DocumentLibraryPage() {
               fontFamily: "'IBM Plex Sans', sans-serif", cursor: 'pointer', outline: 'none',
             }}
           >
-            <option value="date_desc">{lang === 'tr' ? 'En yeni önce' : 'Newest first'}</option>
-            <option value="date_asc">{lang === 'tr'  ? 'En eski önce' : 'Oldest first'}</option>
-            <option value="title">{lang === 'tr'     ? 'Başlığa göre' : 'By title'}</option>
-            <option value="size">{lang === 'tr'      ? 'Boyuta göre'  : 'By size'}</option>
+            <option value="date_desc">{tr('Newest first', 'En yeni önce')}</option>
+            <option value="date_asc">{tr('Oldest first',  'En eski önce')}</option>
+            <option value="title">{tr('By title',         'Başlığa göre')}</option>
+            <option value="size">{tr('By size',           'Boyuta göre')}</option>
           </select>
 
           <span style={{ marginLeft: 'auto', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)' }}>
-            {visible.length} {lang === 'tr' ? 'sonuç' : 'results'}
+            {visible.length} {tr('results', 'sonuç')}
           </span>
         </div>
 
@@ -215,91 +279,140 @@ export default function DocumentLibraryPage() {
             <p style={{ fontSize: 28, fontWeight: 300, letterSpacing: '-0.02em', marginBottom: 8 }}>0</p>
             <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 24 }}>
               {docs.length === 0
-                ? (lang === 'tr' ? 'Henüz belge yüklenmemiş.' : 'No documents uploaded yet.')
-                : (lang === 'tr' ? 'Arama kriterlerine uyan belge bulunamadı.' : 'No documents match your search.')}
+                ? tr('No documents uploaded yet.', 'Henüz belge yüklenmemiş.')
+                : tr('No documents match your search.', 'Arama kriterlerine uyan belge bulunamadı.')}
             </p>
             {docs.length === 0 && (
               <Link href="/surveys" style={{ textDecoration: 'none' }}>
                 <button className="btn btn-primary">
-                  {lang === 'tr' ? 'Değerlendirme Başlat' : 'Start Assessment'} →
+                  {tr('Start Assessment', 'Değerlendirme Başlat')} →
                 </button>
               </Link>
             )}
           </div>
         )}
 
-        {/* Document grid */}
+        {/* Grouped document list */}
         {visible.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {visible.map((doc) => (
-              <div key={doc.id} style={{
-                background: 'var(--paper)', border: '1px solid var(--line)',
-                padding: '16px 20px',
-                display: 'flex', alignItems: 'flex-start', gap: 16,
-                transition: 'border-color 0.15s',
-              }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
-              >
-                {/* File type icon */}
-                <div style={{ flexShrink: 0, paddingTop: 2 }}>
-                  <FileIcon title={doc.title} />
-                </div>
-
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {doc.title}
-                  </div>
-                  {doc.question_text && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+            {groupKeys.map((groupKey) => {
+              const groupDocs = grouped[groupKey];
+              return (
+                <div key={groupKey}>
+                  {/* Group header */}
+                  {groupMode !== 'none' && (
                     <div style={{
-                      fontSize: 11, color: 'var(--ink-4)', marginBottom: 4,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      fontStyle: 'italic',
+                      display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10,
                     }}>
-                      {doc.question_text.length > 120 ? `${doc.question_text.slice(0, 120)}…` : doc.question_text}
+                      <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
+                        color: 'var(--ink-2)',
+                        textTransform: groupMode === 'criterion' ? 'uppercase' : 'none',
+                      }}>
+                        {groupMode === 'criterion' && !groupKey.startsWith('—') && (
+                          <span style={{ color: 'var(--olive-deep)' }}>◈ </span>
+                        )}
+                        {groupKey}
+                      </span>
+                      <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.06em',
+                      }}>
+                        {groupDocs.length} {tr('doc', 'belge')}{groupDocs.length !== 1 && (lang === 'en' ? 's' : '')}
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", flexWrap: 'wrap' }}>
-                    {doc.survey_name && <span>{doc.survey_name}</span>}
-                    <span>{new Date(doc.uploaded_at).toLocaleDateString()}</span>
-                    <span>{doc.file_size_display}</span>
+
+                  {/* Documents in this group */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {groupDocs.map((doc) => (
+                      <div
+                        key={doc.id}
+                        style={{
+                          background: 'var(--paper)', border: '1px solid var(--line)',
+                          padding: '14px 18px',
+                          display: 'flex', alignItems: 'flex-start', gap: 14,
+                          transition: 'border-color 0.15s',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--line)')}
+                      >
+                        {/* File icon */}
+                        <div style={{ flexShrink: 0, paddingTop: 2 }}>
+                          <FileIcon title={doc.title} />
+                        </div>
+
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {doc.title}
+                          </div>
+                          {doc.question_text && (
+                            <div style={{
+                              fontSize: 11, color: 'var(--ink-4)', marginBottom: 3,
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              fontStyle: 'italic',
+                            }}>
+                              {doc.question_text.length > 120 ? `${doc.question_text.slice(0, 120)}…` : doc.question_text}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 10, fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", flexWrap: 'wrap', alignItems: 'center' }}>
+                            {/* Criterion badge — shown in non-criterion grouped views */}
+                            {groupMode !== 'criterion' && doc.criterion_code && (
+                              <span style={{
+                                padding: '1px 6px', border: '1px solid var(--olive-deep)',
+                                color: 'var(--olive-deep)', borderRadius: 2, fontSize: 9,
+                                letterSpacing: '0.06em', fontWeight: 700, textTransform: 'uppercase',
+                              }}>
+                                {doc.criterion_code}
+                              </span>
+                            )}
+                            {doc.survey_name && groupMode !== 'survey' && (
+                              <span>{doc.survey_name}</span>
+                            )}
+                            <span>{new Date(doc.uploaded_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB')}</span>
+                            <span>{doc.file_size_display}</span>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                          <a
+                            href={documentDownloadUrl(doc.id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              padding: '5px 12px',
+                              background: 'var(--olive-deep)', color: '#fff',
+                              fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+                              letterSpacing: '0.06em', textDecoration: 'none',
+                              display: 'inline-flex', alignItems: 'center', gap: 5,
+                            }}
+                          >
+                            ↓ {tr('Download', 'İndir')}
+                          </a>
+                          {doc.attempt_id && (
+                            <Link href={`/results/${doc.attempt_id}`} style={{ textDecoration: 'none' }}>
+                              <button style={{
+                                padding: '5px 12px',
+                                background: 'transparent', color: 'var(--ink-3)',
+                                border: '1px solid var(--line)',
+                                fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+                                letterSpacing: '0.06em', cursor: 'pointer',
+                              }}>
+                                {tr('Report →', 'Rapor →')}
+                              </button>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-
-                {/* Actions */}
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  <a
-                    href={documentDownloadUrl(doc.id)}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      padding: '5px 12px',
-                      background: 'var(--olive-deep)', color: '#fff',
-                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
-                      letterSpacing: '0.06em', textDecoration: 'none',
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                    }}
-                  >
-                    ↓ {lang === 'tr' ? 'İndir' : 'Download'}
-                  </a>
-                  {doc.attempt_id && (
-                    <Link href={`/results/${doc.attempt_id}`} style={{ textDecoration: 'none' }}>
-                      <button style={{
-                        padding: '5px 12px',
-                        background: 'transparent', color: 'var(--ink-3)',
-                        border: '1px solid var(--line)',
-                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
-                        letterSpacing: '0.06em', cursor: 'pointer',
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
-                      }}>
-                        {lang === 'tr' ? 'Rapora Git' : 'View Report'} →
-                      </button>
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>

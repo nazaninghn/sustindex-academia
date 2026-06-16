@@ -190,6 +190,8 @@ export default function QuestionnairePage() {
           onToggleChoice={qs.toggleChoice}
           onTextChange={qs.updateTextAnswer}
           onNumericalChange={qs.updateNumericalAnswer}
+          note={qs.note}
+          onNoteChange={qs.updateNote}
           onToggleNA={qs.toggleNA}
           onToggleBookmark={qs.toggleBookmark}
         />
@@ -198,6 +200,7 @@ export default function QuestionnairePage() {
           note={qs.note}
           files={qs.files}
           lang={qs.lang}
+          isNA={qs.isNA}
           fileInputRef={qs.fileInputRef}
           onNoteChange={qs.updateNote}
           onAddFiles={qs.addFiles}
@@ -221,6 +224,7 @@ export default function QuestionnairePage() {
           onPrev={qs.handlePrev}
           onNext={qs.handleNext}
           onJumpTo={qs.handleJumpTo}
+          onJumpToNextFlagged={qs.handleJumpToNextFlagged}
         />
 
       </main>

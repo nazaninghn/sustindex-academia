@@ -5,6 +5,7 @@
 
 import { sanitizeHtml } from '@/lib/utils';
 import { API_URL } from '@/lib/api';
+import { getGriRef } from '@/lib/gri-references';
 import { LETTERS, loc, PaperclipIcon } from './utils';
 import type { Question, GriPhase } from './types';
 
@@ -28,6 +29,8 @@ interface Props {
   selection: number[];
   textAns: string;
   numericalValue: string;
+  /** Current notes/comments for this question — also used as N/A justification */
+  note?: string;
   isTextType: boolean;
   isMixedType: boolean;
   hasChoices: boolean;
@@ -41,6 +44,8 @@ interface Props {
   onNumericalChange: (val: string) => void;
   onToggleNA: () => void;
   onToggleBookmark: () => void;
+  /** Called when the N/A justification text changes (updates the notes field) */
+  onNoteChange?: (val: string) => void;
 }
 
 export function QuestionView({
@@ -53,6 +58,7 @@ export function QuestionView({
   selection,
   textAns,
   numericalValue,
+  note = '',
   isTextType,
   isMixedType,
   hasChoices,
@@ -66,10 +72,12 @@ export function QuestionView({
   onNumericalChange,
   onToggleNA,
   onToggleBookmark,
+  onNoteChange,
 }: Props) {
   const isNumerical = q.question_type === 'numerical';
   const isBinary    = q.question_type === 'binary';
   const layerInfo   = q.layer ? LAYER_LABEL[q.layer] : null;
+  const griRef      = getGriRef(q.category_name, q.criterion_code);
 
   return (
     <>
@@ -108,6 +116,29 @@ export function QuestionView({
             }}>
               {lang === 'tr' ? layerInfo.tr : layerInfo.en}
             </span>
+          )}
+
+          {/* GRI Standard reference badge */}
+          {griRef && (
+            <a
+              href={griRef.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              title={griRef.description}
+              style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 9, letterSpacing: '0.08em',
+                padding: '2px 6px',
+                background: 'rgba(78,110,93,0.08)',
+                border: '1px solid rgba(78,110,93,0.3)',
+                color: 'var(--olive-deep)',
+                borderRadius: 2, flexShrink: 0,
+                textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              ↗ {griRef.standard}
+            </a>
           )}
 
           {/* Gate warning */}
@@ -296,6 +327,40 @@ export function QuestionView({
           </span>
         )}
       </div>
+
+      {/* N/A Justification — shown inline when isNA is active */}
+      {isNA && onNoteChange && (
+        <div style={{ marginBottom: 24, marginTop: -8 }}>
+          <label htmlFor="qa-na-reason" style={{
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+            color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase',
+            display: 'block', marginBottom: 6,
+          }}>
+            {lang === 'tr' ? 'Geçersizlik Gerekçesi (isteğe bağlı)' : 'Justification for N/A (optional)'}
+          </label>
+          <textarea
+            id="qa-na-reason"
+            value={note}
+            onChange={(e) => onNoteChange(e.target.value)}
+            rows={2}
+            placeholder={lang === 'tr'
+              ? 'Bu sorunun neden geçerli olmadığını açıklayın…'
+              : 'Explain why this question is not applicable to your organisation…'}
+            style={{
+              width: '100%', padding: '10px 14px',
+              background: 'rgba(0,0,0,0.03)',
+              border: '1px solid var(--line)',
+              borderLeft: '3px solid var(--ink-3)',
+              fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 12.5,
+              color: 'var(--ink)', lineHeight: 1.5, resize: 'vertical',
+              outline: 'none', borderRadius: 0,
+              transition: 'border-color 0.15s',
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink-3)')}
+            onBlur={(e)  => (e.currentTarget.style.borderColor = 'var(--line)')}
+          />
+        </div>
+      )}
 
       {/* ── Binary (Yes / No) renderer ── */}
       {isBinary && hasChoices && (

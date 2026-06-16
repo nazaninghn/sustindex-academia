@@ -10,6 +10,9 @@ interface Props {
   note: string;
   files: File[];
   lang: string;
+  /** When true, the notes textarea label changes to "Additional Notes" since the
+   *  N/A justification is already shown inline in QuestionView above. */
+  isNA?: boolean;
   fileInputRef: RefObject<HTMLInputElement>;
   onNoteChange: (val: string) => void;
   onAddFiles: (files: FileList | null) => void;
@@ -20,6 +23,7 @@ export function EvidencePanel({
   note,
   files,
   lang,
+  isNA = false,
   fileInputRef,
   onNoteChange,
   onAddFiles,
@@ -41,10 +45,11 @@ export function EvidencePanel({
         margin: 0,
       }}>
         {/* Fix L-02: 'Kanit' → 'Kanıt' (dotless ı, U+0131) */}
-        {lang === 'tr' ? 'Not & Kanıt (isteğe bağlı)' : 'Notes & Evidence (optional)'}
+        {lang === 'tr' ? 'Kanıt (isteğe bağlı)' : 'Evidence (optional)'}
       </p>
 
-      {/* Notes textarea */}
+      {/* Notes textarea — hidden when isNA because the justification is shown above in QuestionView */}
+      {!isNA && (
       <div>
         {/* Fix A-5: associate label with textarea via htmlFor/id */}
         <label htmlFor="qa-notes" style={{
@@ -74,6 +79,7 @@ export function EvidencePanel({
           onBlur={(e)  => (e.currentTarget.style.borderColor = 'var(--line)')}
         />
       </div>
+      )}
 
       {/* File upload */}
       <div>

@@ -25,6 +25,8 @@ interface Props {
   onPrev: () => void;
   onNext: () => void;
   onJumpTo: (idx: number) => void;
+  /** When provided, shows a 'Next Flagged' button to jump to the next bookmarked question. */
+  onJumpToNextFlagged?: () => void;
 }
 
 export function QuestionNav({
@@ -44,7 +46,9 @@ export function QuestionNav({
   onPrev,
   onNext,
   onJumpTo,
+  onJumpToNextFlagged,
 }: Props) {
+  const bookmarkedCount = Object.values(bookmarks).filter(Boolean).length;
   return (
     <>
       {/* Inline error — Fix A-2: role="alert" so AT announces it immediately */}
@@ -122,6 +126,30 @@ export function QuestionNav({
           {!saving && !isLast && <Icon.arrow />}
         </button>
       </div>
+
+      {/* Next-flagged jump — shown only when ≥1 question is bookmarked */}
+      {onJumpToNextFlagged && bookmarkedCount > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+          <button
+            type="button"
+            onClick={onJumpToNextFlagged}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--amber)',
+              color: 'var(--amber)',
+              padding: '5px 14px',
+              cursor: 'pointer',
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.07em',
+              borderRadius: 3,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            🔖 {lang === 'tr' ? `Sonraki İşaretli (${bookmarkedCount})` : `Next Flagged (${bookmarkedCount})`}
+          </button>
+        </div>
+      )}
     </>
   );
 }

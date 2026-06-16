@@ -158,15 +158,27 @@ export default function HistoryPage() {
               ← {t('course_back_dash')}
             </span>
           </Link>
-          <h1 style={{ fontSize: 36, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginTop: 14, marginBottom: 6 }}>
-            {t('hist_title_1')}{' '}
-            <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>
-              {t('hist_title_2')}
-            </em>
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>
-            {t('hist_desc')}
-          </p>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 14 }}>
+            <div>
+              <h1 style={{ fontSize: 36, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 6 }}>
+                {t('hist_title_1')}{' '}
+                <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>
+                  {t('hist_title_2')}
+                </em>
+              </h1>
+              <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>
+                {t('hist_desc')}
+              </p>
+            </div>
+            {/* Compare button — visible when 2+ completed cycles exist */}
+            {Array.from(new Set(completed.map(a => a.cycle_name).filter(Boolean))).length >= 2 && (
+              <Link href="/compare" style={{ textDecoration: 'none', flexShrink: 0, alignSelf: 'center' }}>
+                <button className="btn btn-outline btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  ⇄ {lang === 'tr' ? 'Dönem Karşılaştır' : 'Compare Cycles'}
+                </button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Stats strip */}

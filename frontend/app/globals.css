@@ -637,8 +637,21 @@ button, input, select, textarea { font: inherit; }
   /* Colours: force exact rendering */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  /* Results page: expand all tabs content */
+  /* Results page: force all tab panels visible (even hidden/conditional-rendered ones).
+     The .print-all-tabs class is added via JS before window.print() in ResultsPage. */
   [role="tabpanel"][hidden] { display: block !important; }
+  .print-all-tabs [role="tabpanel"] { display: block !important; }
+
+  /* Print-only section label headers (hidden on screen, visible in PDF) */
+  .print-only { display: block !important; }
+  .print-section-header {
+    display: block !important;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8pt; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #888;
+    border-top: 1px solid #ccc;
+    padding-top: 10pt; margin-top: 20pt; margin-bottom: 8pt;
+  }
 
   /* Score ring / grade display — keep colours */
   [style*="color: var(--olive"] { color: #5F6E2F !important; }

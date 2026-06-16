@@ -7,7 +7,7 @@ import AppNav from '@/components/AppNav';
 import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/shared';
-import { attemptAPI, documentDownloadUrl } from '@/lib/api';
+import { attemptAPI, documentDownloadUrl, actionTaskAPI } from '@/lib/api';
 // Fix M-04/M-05: import gradeColor and priorityColor from the single source of
 // truth in utils.ts so colours are consistent across dashboard, history, and
 // results pages, and so Turkish priority labels ('Yüksek' etc.) are handled.
@@ -133,6 +133,10 @@ export default function ResultsPage() {
   const [loading,    setLoading]    = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [tab,        setTab]        = useState<'overview' | 'actions' | 'evidence'>('overview');
+  /** When true, all tab panels render simultaneously so window.print() captures everything */
+  const [isPrinting, setIsPrinting] = useState(false);
+  /** Set of recommendation indices that have been added to the action plan */
+  const [trackedRecs, setTrackedRecs] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -256,6 +260,11 @@ export default function ResultsPage() {
             ← {lang === 'tr' ? 'Panele Dön' : 'Back to Dashboard'}
           </Link>
           <div style={{ display: 'flex', gap: 8 }}>
+            <Link href="/action-plan" style={{ textDecoration: 'none' }}>
+              <button className="btn btn-outline btn-sm">
+                📋 {lang === 'tr' ? 'Aksiyon Planı' : 'Action Plan'}
+              </button>
+            </Link>
             <Link href="/surveys" style={{ textDecoration: 'none' }}>
               <button className="btn btn-outline btn-sm">
                 {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'} <Icon.plus />
@@ -283,9 +292,21 @@ export default function ResultsPage() {
                 ✉ {lang === 'tr' ? 'E-posta ile Paylaş' : 'Share via Email'}
               </button>
             )}
-            <button className="btn btn-primary btn-sm" onClick={() => window.print()}>
-              {/* Fix R6-18 / L-11: window.print() opens the browser print dialog.
-                  PDF export via jspdf/html2canvas was removed (R5-L-01). */}
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                // Set isPrinting so React renders all tab panels into the DOM,
+                // then wait two animation frames for the paint to complete before
+                // opening the print dialog.  afterprint restores the single-tab view.
+                setIsPrinting(true);
+                const cleanup = () => {
+                  setIsPrinting(false);
+                  window.removeEventListener('afterprint', cleanup);
+                };
+                window.addEventListener('afterprint', cleanup);
+                requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+              }}
+            >
               <Icon.download /> {lang === 'tr' ? 'Yazdır / PDF Kaydet' : 'Print / Save as PDF'}
             </button>
           </div>
@@ -438,7 +459,7 @@ export default function ResultsPage() {
         {/* ══════════════════════════════════════
             TAB: OVERVIEW — Category breakdown
             ══════════════════════════════════════ */}
-        {tab === 'overview' && (
+        {(tab === 'overview' || isPrinting) && (
           <div role="tabpanel" id="tabpanel-overview" aria-labelledby="tab-overview"
             className="print-section" style={{ marginTop: 24 }}>
 
@@ -555,9 +576,10 @@ export default function ResultsPage() {
         {/* ══════════════════════════════════════
             TAB: ACTION PLAN
             ══════════════════════════════════════ */}
-        {tab === 'actions' && (
+        {(tab === 'actions' || isPrinting) && (
           <div role="tabpanel" id="tabpanel-actions" aria-labelledby="tab-actions"
-            className="print-section" style={{ marginTop: 24 }}>
+            className="print-section print-break-before" style={{ marginTop: 24 }}>
+            {isPrinting && <div className="print-section-header">{lang === 'tr' ? 'Aksiyon Planı' : 'Action Plan'}</div>}
             {recs.length === 0 ? (
               <div style={{
                 background: 'var(--paper)', border: '1px solid var(--line)',
@@ -693,6 +715,35 @@ export default function ResultsPage() {
                             </span>
                           </div>
                         )}
+
+                        {/* Track button — adds this recommendation to the action plan */}
+                        <div className="no-print" style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          {trackedRecs.has(i) ? (
+                            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--olive-deep)', letterSpacing: '0.06em' }}>
+                              ✓ {lang === 'tr' ? 'Aksiyon planına eklendi' : 'Added to action plan'}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={async () => {
+                                try {
+                                  await actionTaskAPI.createTask({
+                                    attempt:     attempt ? attempt.id : undefined,
+                                    title:       title ?? r.category,
+                                    description: desc ?? '',
+                                    category:    r.category ?? '',
+                                    priority:    r.priority ?? '',
+                                    status:      'todo',
+                                  });
+                                  setTrackedRecs(prev => new Set([...prev, i]));
+                                } catch { /* ignore */ }
+                              }}
+                            >
+                              📋 {lang === 'tr' ? 'Takip Et' : 'Track'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -748,9 +799,10 @@ export default function ResultsPage() {
         {/* ══════════════════════════════════════
             TAB: EVIDENCE & NOTES
             ══════════════════════════════════════ */}
-        {tab === 'evidence' && (
+        {(tab === 'evidence' || isPrinting) && (
           <div role="tabpanel" id="tabpanel-evidence" aria-labelledby="tab-evidence"
-            style={{ marginTop: 24 }}>
+            className="print-break-before" style={{ marginTop: 24 }}>
+            {isPrinting && <div className="print-section-header">{lang === 'tr' ? 'Notlar & Kanıtlar' : 'Notes & Evidence'}</div>}
             {evidenceAnswers.length === 0 ? (
               <div style={{
                 background: 'var(--paper)', border: '1px solid var(--line)',
