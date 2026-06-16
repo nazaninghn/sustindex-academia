@@ -160,7 +160,7 @@ export default function QuestionnairePage() {
 
         <QuestionView
           q={qs.q}
-          currentIdx={qs.currentIdx}
+          currentIdx={qs.visibleIdx}
           total={qs.total}
           lang={qs.lang}
           catLabel={qs.catLabel}

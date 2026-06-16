@@ -285,7 +285,6 @@ export function useQuestionnaire() {
   /* ── Derived ── */
   const q           = questions[currentIdx];
   const total       = questions.length;          // full list (for index math)
-  const isFirst     = currentIdx === 0;
   // isLast = true when there are no more visible questions after the current one
   const isLast      = useMemo(() => {
     if (currentIdx >= total - 1) return true;
@@ -317,6 +316,20 @@ export function useQuestionnaire() {
   ).length;
   const visibleTotal  = visibleQuestions.length;
   const progress      = visibleTotal > 0 ? Math.round((answeredCount / visibleTotal) * 100) : 0;
+
+  // Visible position of the current question (0-based) — used for the "X / Y" counter.
+  // currentIdx is the raw index into the full questions array (including hidden ones);
+  // when the first question(s) are hidden (e.g. a GATE with conditional_on_question),
+  // the first visible question lands at currentIdx=1 and the counter must show "01", not "02".
+  const visibleIdx = useMemo(
+    () => (q != null ? visibleQuestions.findIndex(vq => vq.id === q.id) : -1),
+    [q, visibleQuestions],
+  );
+
+  // isFirst: true when the user is at (or before) the first visible question.
+  // Using visibleIdx instead of currentIdx so the Back button is correctly disabled
+  // even when hidden questions precede the first visible one.
+  const isFirst = visibleIdx <= 0;
 
   const isNumericalType = q?.question_type === 'numerical';
   const isBinaryType    = q?.question_type === 'binary';
@@ -698,6 +711,7 @@ export function useQuestionnaire() {
     questions,
     surveyName,
     currentIdx,
+    visibleIdx,
     loading,
     saving,
     savedFlash,
