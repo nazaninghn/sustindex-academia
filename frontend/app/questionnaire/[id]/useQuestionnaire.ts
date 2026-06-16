@@ -242,11 +242,8 @@ export function useQuestionnaire() {
       const preText:      Record<number, string>   = {};
       const preNA:        Record<number, boolean>  = {};
       const preNumerical: Record<number, string>   = {};
-      // Track every question that has ANY saved answer (for resume logic below)
-      const answeredQIds  = new Set<number>();
 
       for (const ans of attempt.answers || []) {
-        answeredQIds.add(ans.question);
         if (Array.isArray(ans.choices) && ans.choices.length > 0) preAnswers[ans.question] = ans.choices;
         else if (ans.choice) preAnswers[ans.question] = [ans.choice];
         if (ans.notes)            preNotes[ans.question]     = ans.notes;
@@ -261,15 +258,16 @@ export function useQuestionnaire() {
       setNumericalAnswers(preNumerical);
       setNaAnswers(preNA);
 
-      // Resume: find the first visible question that hasn't been answered yet.
-      // isQuestionVisible respects gate-skip and conditional logic so questions
-      // that were skipped by a gate "No" answer are not presented again.
-      const firstUnanswered = qs.findIndex(
-        (question) =>
-          isQuestionVisible(question, preAnswers, qs) &&
-          !answeredQIds.has(question.id),
+      // Always start from the first VISIBLE question (Q1), even if it was
+      // previously answered.  Previous answers are already loaded into state
+      // above so the user sees their prior selections pre-filled and can
+      // advance quickly with Next.  Starting from the first *unanswered*
+      // question was confusing: users expected Q1 but landed on Q2 whenever
+      // their gate question had been answered in a prior session.
+      const firstVisible = qs.findIndex(
+        (question) => isQuestionVisible(question, preAnswers, qs),
       );
-      setCurrentIdx(firstUnanswered >= 0 ? firstUnanswered : 0);
+      setCurrentIdx(firstVisible >= 0 ? firstVisible : 0);
     } catch (err) {
       logger.error('Failed to load questionnaire:', err);
       setError(langRef.current === 'tr' ? 'Yüklenemedi.' : 'Failed to load.');
