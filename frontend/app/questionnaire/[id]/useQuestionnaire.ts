@@ -243,6 +243,12 @@ export function useQuestionnaire() {
       const preNA:        Record<number, boolean>  = {};
       const preNumerical: Record<number, string>   = {};
 
+      // Track which question IDs have a saved answer record in the attempt.
+      // Any API answer record (even notes-only or an empty-save record) counts
+      // as "answered" for resume purposes — if a record exists, the user has
+      // already visited and progressed past that question.
+      const answeredQIds = new Set<number>();
+
       for (const ans of attempt.answers || []) {
         if (Array.isArray(ans.choices) && ans.choices.length > 0) preAnswers[ans.question] = ans.choices;
         else if (ans.choice) preAnswers[ans.question] = [ans.choice];
@@ -251,6 +257,7 @@ export function useQuestionnaire() {
         if (ans.numerical_value != null && ans.numerical_value !== '')
           preNumerical[ans.question] = String(ans.numerical_value);
         if (ans.not_applicable)   preNA[ans.question]        = true;
+        answeredQIds.add(ans.question);
       }
       setAnswers(preAnswers);
       setNotes(preNotes);
@@ -258,16 +265,18 @@ export function useQuestionnaire() {
       setNumericalAnswers(preNumerical);
       setNaAnswers(preNA);
 
-      // Always start from the first VISIBLE question (Q1), even if it was
-      // previously answered.  Previous answers are already loaded into state
-      // above so the user sees their prior selections pre-filled and can
-      // advance quickly with Next.  Starting from the first *unanswered*
-      // question was confusing: users expected Q1 but landed on Q2 whenever
-      // their gate question had been answered in a prior session.
-      const firstVisible = qs.findIndex(
-        (question) => isQuestionVisible(question, preAnswers, qs),
+      // Resume from the first unanswered visible question.
+      //  • Brand-new attempt (answeredQIds empty) → first visible question = Q1.
+      //  • Resumed attempt (e.g. answered Q1–Q30) → lands on Q31 so the user
+      //    continues exactly where they left off, not back at Q1.
+      // The "X / Y" counter uses visibleIdx (see below), so it always shows the
+      // correct visible position regardless of hidden / gate-skipped questions.
+      const firstUnanswered = qs.findIndex(
+        (question) =>
+          isQuestionVisible(question, preAnswers, qs) &&
+          !answeredQIds.has(question.id),
       );
-      setCurrentIdx(firstVisible >= 0 ? firstVisible : 0);
+      setCurrentIdx(firstUnanswered >= 0 ? firstUnanswered : 0);
     } catch (err) {
       logger.error('Failed to load questionnaire:', err);
       setError(langRef.current === 'tr' ? 'Yüklenemedi.' : 'Failed to load.');
