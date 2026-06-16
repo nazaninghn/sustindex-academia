@@ -8,25 +8,42 @@ import { useLang } from '@/lib/i18n';
 import Logo from '@/components/Logo';
 import { Icon } from '@/components/shared';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+
 export default function LoginPage() {
   const router   = useRouter();
   const { login, user, isLoading: authLoading } = useAuth();
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
   // M4: redirect already-authenticated users away from the login page.
   useEffect(() => {
     if (!authLoading && user) router.replace('/dashboard');
   }, [authLoading, user, router]);
 
+  // Pre-warm the Render dyno as soon as the page loads.
+  // By the time the user types their credentials and clicks Sign In
+  // the cold-start delay is already paid — the login call responds instantly.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`${API_BASE}/health/`, { signal: ctrl.signal, cache: 'no-store' })
+      .catch(() => { /* server may be sleeping — that's fine, ping still wakes it */ });
+    return () => ctrl.abort();
+  }, []);
+
   const [formData, setFormData] = useState({ username: '', password: '' });
   const [remember, setRemember] = useState(true);
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
+  // Show a friendly "server warming up" notice if login takes > 7 s
+  const [slowConn, setSlowConn] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSlowConn(false);
     setLoading(true);
+    // After 7 s still loading → server is waking from cold start, show notice
+    const slowTimer = setTimeout(() => setSlowConn(true), 7000);
     try {
       await login(formData.username, formData.password, remember);
       router.replace('/dashboard');
@@ -40,6 +57,8 @@ export default function LoginPage() {
         setError(e.response?.data?.detail || t('login_fail'));
       }
     } finally {
+      clearTimeout(slowTimer);
+      setSlowConn(false);
       setLoading(false);
     }
   };
@@ -81,6 +100,22 @@ export default function LoginPage() {
           <p style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 32, lineHeight: 1.6 }}>
             {t('login_desc')}
           </p>
+
+          {/* Slow-connection notice — shown when Render dyno is waking from cold start */}
+          {slowConn && !error && (
+            <div style={{
+              background: '#FFFBEA', border: '1px solid #D4A017',
+              color: '#7A5800', fontSize: 12, padding: '12px 16px',
+              marginBottom: 20, lineHeight: 1.6, display: 'flex', alignItems: 'flex-start', gap: 8,
+            }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⏳</span>
+              <span>
+                {lang === 'tr'
+                  ? 'Sunucu başlatılıyor, lütfen bekleyin… (ilk bağlantı ~30 sn sürebilir)'
+                  : 'سرور در حال راه‌اندازی است، لطفاً صبر کنید… (اولین اتصال تا ۳۰ ثانیه ممکن است طول بکشد)'}
+              </span>
+            </div>
+          )}
 
           {error && (
             <div style={{

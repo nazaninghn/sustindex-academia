@@ -39,6 +39,16 @@ def api_root(request):
         'frontend': frontend_url,
     })
 
+
+def health_check(request):
+    """
+    Lightweight liveness probe — no DB queries, no auth required.
+    Used by the frontend login page to pre-warm the Render dyno so users
+    don't experience the 30-60 s cold-start delay when they click Sign In.
+    Also suitable as a Render health-check URL or UptimeRobot ping target.
+    """
+    return JsonResponse({'status': 'ok'}, status=200)
+
 try:
     from questionnaire.autocomplete import CategoryAutocomplete
     AUTOCOMPLETE_AVAILABLE = CategoryAutocomplete is not None
@@ -66,7 +76,8 @@ admin.site.index_title = "Welcome to Sustindex Admin"
 
 # URLs without language prefix
 urlpatterns = [
-    path('', api_root, name='api-root'),  # Root endpoint
+    path('', api_root, name='api-root'),          # Root endpoint
+    path('health/', health_check, name='health'),  # Liveness probe / wakeup ping
     path('admin/', RedirectView.as_view(url='/en/admin/', permanent=False)),  # Redirect to admin with language
     path('i18n/', include('django.conf.urls.i18n')),
 ]
