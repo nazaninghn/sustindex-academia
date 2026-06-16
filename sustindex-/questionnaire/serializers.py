@@ -629,8 +629,9 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
     overall_grade    = serializers.SerializerMethodField()
     answered_count   = serializers.SerializerMethodField()
     total_questions  = serializers.SerializerMethodField()
-    # Count of flagged/bookmarked questions for quick display in history & dashboard
-    bookmarked_count = serializers.SerializerMethodField()
+    # Count + details of flagged/bookmarked questions for history & dashboard
+    bookmarked_count           = serializers.SerializerMethodField()
+    bookmarked_question_details = serializers.SerializerMethodField()
 
     class Meta:
         model = QuestionnaireAttempt
@@ -640,13 +641,36 @@ class QuestionnaireAttemptListSerializer(AttemptBreakdownMixin, serializers.Mode
             'is_completed', 'total_score', 'overall_grade',
             'selected_sector', 'cycle_name',
             'answered_count', 'total_questions',
-            'bookmarked_count',
+            'bookmarked_count', 'bookmarked_question_details',
             'category_scores',
         ]
 
     def get_bookmarked_count(self, obj):
         bq = obj.bookmarked_questions
         return len(bq) if isinstance(bq, list) else 0
+
+    def get_bookmarked_question_details(self, obj):
+        """Return lightweight info for each flagged question, sorted by survey order."""
+        bq = obj.bookmarked_questions
+        if not isinstance(bq, list) or not bq:
+            return []
+        qs = (
+            Question.objects
+            .filter(id__in=bq)
+            .only('id', 'text', 'text_tr', 'text_en', 'criterion_code', 'order')
+            .order_by('order')
+        )
+        return [
+            {
+                'id':             q.id,
+                'text':           q.text        or '',
+                'text_tr':        q.text_tr     or q.text or '',
+                'text_en':        q.text_en     or q.text or '',
+                'criterion_code': q.criterion_code or '',
+                'order':          q.order,
+            }
+            for q in qs
+        ]
 
     # Fix #10: null-safe FK accessors for list serializer
     def get_survey_name(self, obj):

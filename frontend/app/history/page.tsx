@@ -12,6 +12,15 @@ import { Icon } from '@/components/shared';
 import { CategoryScore } from '@/lib/types';
 import ScoreTrendChart from '@/components/ScoreTrendChart';
 
+interface BookmarkedQuestion {
+  id: number;
+  text: string;
+  text_tr: string;
+  text_en: string;
+  criterion_code: string;
+  order: number;
+}
+
 interface Attempt {
   id: number;
   survey_name: string;
@@ -23,6 +32,7 @@ interface Attempt {
   category_scores: CategoryScore[];
   cycle_name: string;
   bookmarked_count: number;
+  bookmarked_question_details: BookmarkedQuestion[];
 }
 
 export default function HistoryPage() {
@@ -39,6 +49,8 @@ export default function HistoryPage() {
   const [cycleSearch,  setCycleSearch]  = useState('');
   const [dateFrom,   setDateFrom]   = useState('');
   const [dateTo,     setDateTo]     = useState('');
+  // Which attempt's bookmark list is currently expanded (attempt.id → true)
+  const [expandedBookmarks, setExpandedBookmarks] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -452,20 +464,90 @@ export default function HistoryPage() {
                               {attempt.is_completed && attempt.completed_at && (
                                 <span>{t('hist_finished')} {new Date(attempt.completed_at).toLocaleDateString()}</span>
                               )}
-                              {/* Bookmark / flagged-questions badge */}
+                              {/* Bookmark toggle button */}
                               {(attempt.bookmarked_count ?? 0) > 0 && (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  padding: '2px 8px',
-                                  background: 'rgba(194,153,62,0.1)',
-                                  border: '1px solid var(--amber)',
-                                  color: 'var(--amber)',
-                                  fontSize: 10, letterSpacing: '0.06em',
-                                }}>
-                                  🔖 {attempt.bookmarked_count} {lang === 'tr' ? 'işaretli soru' : 'flagged'}
-                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setExpandedBookmarks((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(attempt.id)) next.delete(attempt.id);
+                                      else next.add(attempt.id);
+                                      return next;
+                                    });
+                                  }}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                                    padding: '3px 10px',
+                                    background: expandedBookmarks.has(attempt.id)
+                                      ? 'rgba(194,153,62,0.15)'
+                                      : 'transparent',
+                                    border: '1px solid var(--amber)',
+                                    color: 'var(--amber)',
+                                    fontSize: 10, letterSpacing: '0.06em',
+                                    cursor: 'pointer', fontFamily: 'inherit',
+                                  }}
+                                >
+                                  🔖 {attempt.bookmarked_count} {lang === 'tr' ? 'işaretli' : 'flagged'}
+                                  <span style={{ fontSize: 8, opacity: 0.7 }}>
+                                    {expandedBookmarks.has(attempt.id) ? '▲' : '▼'}
+                                  </span>
+                                </button>
                               )}
                             </div>
+
+                            {/* Expandable flagged questions list */}
+                            {expandedBookmarks.has(attempt.id) &&
+                              (attempt.bookmarked_question_details ?? []).length > 0 && (
+                              <div style={{
+                                marginTop: 12, padding: '12px 14px',
+                                background: 'rgba(194,153,62,0.06)',
+                                border: '1px solid rgba(194,153,62,0.3)',
+                                borderLeft: '3px solid var(--amber)',
+                              }}>
+                                <div style={{
+                                  fontFamily: "'IBM Plex Mono', monospace",
+                                  fontSize: 9, letterSpacing: '0.12em',
+                                  textTransform: 'uppercase', color: 'var(--amber)',
+                                  marginBottom: 10,
+                                }}>
+                                  🔖 {lang === 'tr' ? 'İnceleme için işaretlenen sorular' : 'Questions flagged for review'}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  {(attempt.bookmarked_question_details ?? []).map((bq) => {
+                                    const qText = lang === 'tr'
+                                      ? (bq.text_tr || bq.text)
+                                      : (bq.text_en || bq.text);
+                                    const truncated = qText.length > 100
+                                      ? qText.slice(0, 100) + '…'
+                                      : qText;
+                                    return (
+                                      <div key={bq.id} style={{
+                                        display: 'flex', gap: 10, alignItems: 'flex-start',
+                                      }}>
+                                        {bq.criterion_code && (
+                                          <span style={{
+                                            fontFamily: "'IBM Plex Mono', monospace",
+                                            fontSize: 9, color: 'var(--amber)',
+                                            letterSpacing: '0.08em', whiteSpace: 'nowrap',
+                                            marginTop: 1, minWidth: 36,
+                                          }}>
+                                            {bq.criterion_code}
+                                          </span>
+                                        )}
+                                        <span style={{
+                                          fontSize: 12, color: 'var(--ink-2)',
+                                          lineHeight: 1.45,
+                                        }}>
+                                          {truncated}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
 
                             {/* Category scores */}
                             {attempt.is_completed && (attempt.category_scores?.length ?? 0) > 0 && (
