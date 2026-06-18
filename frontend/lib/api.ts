@@ -294,7 +294,10 @@ export const actionTaskAPI = {
   /** List all action tasks for the current user, optionally filtered by attempt or status. */
   getMyTasks: async (params?: { attempt?: number; status?: string }) => {
     const { data } = await api.get('/api/v1/action-tasks/', { params });
-    return data as ActionTask[];
+    // DRF may return a paginated envelope { count, results: [] } instead of a plain array.
+    if (Array.isArray(data)) return data as ActionTask[];
+    if (data && Array.isArray(data.results)) return data.results as ActionTask[];
+    return [] as ActionTask[];
   },
 
   /** Create a new action task from a recommendation or manually. */
