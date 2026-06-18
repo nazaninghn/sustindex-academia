@@ -51,6 +51,9 @@ export default function HistoryPage() {
   const [dateTo,     setDateTo]     = useState('');
   // Which attempt's bookmark list is currently expanded (attempt.id → true)
   const [expandedBookmarks, setExpandedBookmarks] = useState<Set<number>>(new Set());
+  // New-cycle modal
+  const [showNewCycleModal, setShowNewCycleModal] = useState(false);
+  const [newCycleName,      setNewCycleName]      = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -170,14 +173,25 @@ export default function HistoryPage() {
                 {t('hist_desc')}
               </p>
             </div>
-            {/* Compare button — visible when 2+ completed cycles exist */}
-            {Array.from(new Set(completed.map(a => a.cycle_name).filter(Boolean))).length >= 2 && (
-              <Link href="/compare" style={{ textDecoration: 'none', flexShrink: 0, alignSelf: 'center' }}>
-                <button className="btn btn-outline btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  ⇄ {lang === 'tr' ? 'Dönem Karşılaştır' : 'Compare Cycles'}
-                </button>
-              </Link>
-            )}
+            {/* Header action buttons */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, alignSelf: 'center' }}>
+              {/* Compare button — visible when 2+ completed cycles exist */}
+              {Array.from(new Set(completed.map(a => a.cycle_name).filter(Boolean))).length >= 2 && (
+                <Link href="/compare" style={{ textDecoration: 'none' }}>
+                  <button className="btn btn-outline btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    ⇄ {lang === 'tr' ? 'Dönem Karşılaştır' : 'Compare Cycles'}
+                  </button>
+                </Link>
+              )}
+              {/* New Assessment — always visible */}
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => { setNewCycleName(''); setShowNewCycleModal(true); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+              >
+                + {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -389,11 +403,12 @@ export default function HistoryPage() {
                   ? t('hist_empty_completed')
                   : t('hist_empty_progress')}
             </p>
-            <Link href="/surveys" style={{ textDecoration: 'none' }}>
-              <button className="btn btn-primary">
-                {t('hist_new_assessment')} <Icon.arrow />
-              </button>
-            </Link>
+            <button
+              className="btn btn-primary"
+              onClick={() => { setNewCycleName(''); setShowNewCycleModal(true); }}
+            >
+              {t('hist_new_assessment')} <Icon.arrow />
+            </button>
           </div>
         ) : (() => {
           // Group attempts by cycle_name preserving order of first appearance (most recent first)
@@ -624,6 +639,86 @@ export default function HistoryPage() {
           );
         })()}
       </main>
+
+      {/* ── New Assessment Modal ─────────────────────────────── */}
+      {showNewCycleModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowNewCycleModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              padding: '36px 40px', maxWidth: 440, width: '100%',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
+            }}
+          >
+            <span style={{
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
+              letterSpacing: '0.14em', textTransform: 'uppercase',
+              color: 'var(--ink-4)', display: 'block', marginBottom: 14,
+            }}>
+              {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'}
+            </span>
+            <h2 style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>
+              {lang === 'tr' ? 'Bu değerlendirmeye bir ad verin' : 'Give this assessment a name'}
+            </h2>
+            <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 24, lineHeight: 1.6 }}>
+              {lang === 'tr'
+                ? 'İsteğe bağlı: Dönemi tanımlamak için bir ad girin. Boş bırakırsanız bugünün tarihi kullanılır.'
+                : 'Optional: enter a name to identify this cycle. Leave blank to use today\'s date.'}
+            </p>
+            <input
+              type="text"
+              autoFocus
+              value={newCycleName}
+              onChange={(e) => setNewCycleName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const name = newCycleName.trim() ||
+                    new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                  try { localStorage.setItem('sx_pending_cycle', name); } catch { /* ignore */ }
+                  setShowNewCycleModal(false);
+                  router.push('/surveys');
+                }
+                if (e.key === 'Escape') setShowNewCycleModal(false);
+              }}
+              placeholder={lang === 'tr' ? 'örn. Q1 2026 (isteğe bağlı)' : 'e.g. Q1 2026 (optional)'}
+              style={{
+                width: '100%', padding: '11px 14px',
+                border: '1px solid var(--line)', background: 'var(--cream)',
+                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 13,
+                outline: 'none', marginBottom: 20, boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => setShowNewCycleModal(false)}
+              >
+                {lang === 'tr' ? 'İptal' : 'Cancel'}
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  const name = newCycleName.trim() ||
+                    new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                  try { localStorage.setItem('sx_pending_cycle', name); } catch { /* ignore */ }
+                  setShowNewCycleModal(false);
+                  router.push('/surveys');
+                }}
+              >
+                {lang === 'tr' ? 'Başlat' : 'Start'} →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -709,8 +709,8 @@ export default function SurveysPage() {
                 : 'Complete each phase in order. The next phase unlocks when you finish the previous one.'}
             </p>
           </div>
-          {/* New Assessment Cycle — only shown when ALL 5 phases are completed */}
-          {allDone && (
+          {/* New Cycle — shown whenever there are any attempts, not just when allDone */}
+          {attempts.length > 0 && (
             <div style={{ flexShrink: 0 }}>
               <button
                 className="btn btn-outline btn-sm"
