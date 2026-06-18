@@ -86,7 +86,8 @@ export default function AppNav() {
     [t('nav_surveys'),    '/surveys'],
     [t('nav_courses'),    '/courses'],
     [t('nav_history'),    '/history'],
-    [lang === 'tr' ? 'Belgeler' : 'Documents', '/documents'],
+    [lang === 'tr' ? 'Belgeler' : 'Documents',    '/documents'],
+    [lang === 'tr' ? 'Eylem Planı' : 'Action Plan', '/action-plan'],
   ];
 
   const firstName = user?.first_name || user?.username || '—';
