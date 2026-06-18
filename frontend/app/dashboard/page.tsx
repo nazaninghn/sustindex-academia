@@ -541,8 +541,9 @@ export default function DashboardPage() {
             HERO HEADER
             ════════════════════════════════════════ */}
         <div style={{
-          background: 'var(--ink)', color: 'var(--cream)',
-          padding: '32px 40px 36px', marginBottom: 24,
+          background: 'var(--paper)', border: '1px solid var(--line)',
+          borderLeft: '4px solid var(--olive-deep)',
+          padding: '28px 36px 30px', marginBottom: 24,
           position: 'relative', overflow: 'hidden',
         }}>
           {/* Faint background GRI text */}
@@ -550,34 +551,34 @@ export default function DashboardPage() {
             position: 'absolute', right: -20, top: -10,
             fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 700,
             fontSize: 140, letterSpacing: '-0.06em', lineHeight: 1,
-            color: 'rgba(255,255,255,0.04)', userSelect: 'none', pointerEvents: 'none',
+            color: 'rgba(0,0,0,0.03)', userSelect: 'none', pointerEvents: 'none',
           }}>GRI</div>
 
           {/* Leaf watermark */}
           <div style={{ position: 'absolute', right: 40, top: 0, bottom: 0, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
             <Image src="/assets/logo-leaf.png" alt="" width={140} height={140}
-              style={{ opacity: 0.06, width: 140 }} />
+              style={{ opacity: 0.05, width: 140 }} />
           </div>
 
           <div style={{ position: 'relative', zIndex: 1 }}>
-            {/* Date pill */}
+            {/* Date label */}
             <span style={{
               display: 'inline-block',
               fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
-              color: 'rgba(249,239,229,0.45)', letterSpacing: '0.1em',
-              textTransform: 'uppercase', marginBottom: 14,
+              color: 'var(--ink-4)', letterSpacing: '0.1em',
+              textTransform: 'uppercase', marginBottom: 12,
             }}>{dateStr}</span>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
               <div>
                 <h1 style={{
-                  fontSize: 38, fontWeight: 400, letterSpacing: '-0.03em',
-                  lineHeight: 1.05, marginBottom: 8, color: 'var(--cream)',
+                  fontSize: 36, fontWeight: 400, letterSpacing: '-0.03em',
+                  lineHeight: 1.05, marginBottom: 7, color: 'var(--ink)',
                 }}>
                   {lang === 'tr' ? 'Hoşgeldin, ' : 'Welcome back, '}
-                  <em style={{ fontStyle: 'italic', color: 'var(--olive)', fontWeight: 500 }}>{firstName}</em>.
+                  <em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>{firstName}</em>.
                 </h1>
-                <p style={{ fontSize: 13, color: 'rgba(249,239,229,0.55)', marginBottom: 0 }}>
+                <p style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 0 }}>
                   {!hasData
                     ? (lang === 'tr' ? 'İlk ESG değerlendirmenizi başlatmak için bir anket seçin.' : 'Choose a survey to start your first ESG assessment.')
                     : activeAttempt
@@ -585,7 +586,7 @@ export default function DashboardPage() {
                       : (lang === 'tr' ? `${completed.length} değerlendirme tamamlandı.` : `${completed.length} assessment${completed.length !== 1 ? 's' : ''} completed.`)}
                 </p>
                 {activeAttempt && (
-                  <p style={{ fontSize: 11, color: 'rgba(249,239,229,0.35)', marginTop: 6, fontFamily: "'IBM Plex Mono', monospace" }}>
+                  <p style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 5, fontFamily: "'IBM Plex Mono', monospace" }}>
                     {lang === 'tr' ? 'Son aktivite:' : 'Last activity:'} {timeAgo(activeAttempt.started_at, lang)}
                   </p>
                 )}
@@ -596,12 +597,12 @@ export default function DashboardPage() {
                 <Link href="/history" style={{ textDecoration: 'none' }}>
                   <button style={{
                     padding: '9px 18px', background: 'transparent',
-                    border: '1px solid rgba(249,239,229,0.25)', color: 'rgba(249,239,229,0.75)',
+                    border: '1px solid var(--line)', color: 'var(--ink-3)',
                     cursor: 'pointer', fontFamily: "'IBM Plex Sans', sans-serif",
                     fontSize: 12, fontWeight: 500, transition: 'border-color 0.15s, color 0.15s',
                   }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(249,239,229,0.6)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--cream)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(249,239,229,0.25)'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(249,239,229,0.75)'; }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--ink-3)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--ink)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--ink-3)'; }}
                   >
                     {lang === 'tr' ? 'Geçmiş' : 'History'}
                   </button>
@@ -873,24 +874,28 @@ export default function DashboardPage() {
               {/* ── Sidebar ── */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                {/* Dark action card */}
-                <div style={{ background: 'var(--ink)', color: 'var(--cream)', padding: 26, position: 'relative', overflow: 'hidden' }}>
+                {/* Action card */}
+                <div style={{
+                  background: 'var(--paper)', border: '1px solid var(--line)',
+                  borderLeft: '4px solid var(--olive-deep)',
+                  padding: 26, position: 'relative', overflow: 'hidden',
+                }}>
                   <Image
                     src="/assets/logo-leaf.png" alt="" width={120} height={120}
-                    style={{ position: 'absolute', right: -36, top: -28, width: 120, opacity: 0.07, pointerEvents: 'none' }}
+                    style={{ position: 'absolute', right: -36, top: -28, width: 120, opacity: 0.04, pointerEvents: 'none' }}
                   />
-                  <span className="eyebrow" style={{ color: 'rgba(249,239,229,0.5)', position: 'relative', marginBottom: 10, display: 'block' }}>
+                  <span className="eyebrow" style={{ color: 'var(--ink-4)', position: 'relative', marginBottom: 10, display: 'block' }}>
                     {activeAttempt ? (lang === 'tr' ? 'Devam Et' : 'Continue') : (lang === 'tr' ? 'Yeni' : 'New')}
                   </span>
                   {activeAttempt?.cycle_name && (
-                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'rgba(249,239,229,0.6)', letterSpacing: '0.12em', textTransform: 'uppercase', position: 'relative', marginBottom: 4 }}>
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--olive-deep)', letterSpacing: '0.12em', textTransform: 'uppercase', position: 'relative', marginBottom: 4 }}>
                       {activeAttempt.cycle_name}
                     </div>
                   )}
-                  <h3 style={{ fontSize: 16, fontWeight: 500, marginBottom: 8, color: 'var(--cream)', letterSpacing: '-0.01em', position: 'relative', lineHeight: 1.3 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 500, marginBottom: 8, color: 'var(--ink)', letterSpacing: '-0.01em', position: 'relative', lineHeight: 1.3 }}>
                     {activeAttempt ? activeAttempt.survey_name : (lang === 'tr' ? 'Yeni değerlendirme başlat' : 'Start a new assessment')}
                   </h3>
-                  <p style={{ fontSize: 11.5, color: 'rgba(249,239,229,0.55)', marginBottom: 22, lineHeight: 1.55, position: 'relative' }}>
+                  <p style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 22, lineHeight: 1.55, position: 'relative' }}>
                     {activeAttempt ? (lang === 'tr' ? 'Kaldığınız yerden devam edin.' : 'Pick up where you left off.') : (lang === 'tr' ? 'ESG performansınızı ölçün.' : 'Measure your ESG performance now.')}
                   </p>
                   {activeAttempt && (() => {
@@ -902,17 +907,17 @@ export default function DashboardPage() {
                     return phaseNum ? (
                       <div style={{ marginBottom: 16 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em' }}>
+                          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.08em' }}>
                             {lang === 'tr' ? `AŞAMA ${phaseNum} / 5` : `PHASE ${phaseNum} OF 5`}
                           </span>
                         </div>
                         {total > 0 && (
                           <>
-                            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>
+                            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-3)', marginBottom: 6 }}>
                               {lang === 'tr' ? `Soru ${answered} / ${total}` : `Question ${answered} / ${total}`} · {pct}% {lang === 'tr' ? 'tamamlandı' : 'complete'}
                             </div>
-                            <div style={{ background: 'rgba(255,255,255,0.15)', height: 4, borderRadius: 2 }}>
-                              <div style={{ background: 'var(--olive)', width: `${pct}%`, height: '100%', borderRadius: 2, transition: 'width 0.3s' }} />
+                            <div style={{ background: 'var(--cream-deep)', height: 4, borderRadius: 2 }}>
+                              <div style={{ background: 'var(--olive-deep)', width: `${pct}%`, height: '100%', borderRadius: 2, transition: 'width 0.3s' }} />
                             </div>
                           </>
                         )}
@@ -924,8 +929,8 @@ export default function DashboardPage() {
                     style={{ textDecoration: 'none', position: 'relative', display: 'block' }}
                   >
                     <button style={{
-                      width: '100%', padding: '11px 16px', borderRadius: 999,
-                      background: 'var(--cream)', color: 'var(--ink)',
+                      width: '100%', padding: '11px 16px',
+                      background: 'var(--olive-deep)', color: '#fff',
                       border: 'none', cursor: 'pointer',
                       fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 500, fontSize: 12,
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
