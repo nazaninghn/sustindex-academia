@@ -216,7 +216,7 @@ export default function ResultsPage() {
   const answeredCnt = attempt.answered_count ?? answersArr.length;
   const totalQ      = attempt.total_questions ?? 0;
   const companyName = (user as { company_name?: string; username?: string })?.company_name || user?.username || '';
-  const surveyName  = attempt.survey_name || (lang === 'tr' ? 'ESG Değerlendirmesi' : 'ESG Assessment');
+  const surveyName  = attempt.survey_name || (lang === 'tr' ? 'Değerlendirme' : 'Assessment');
   const completedAt = attempt.completed_at
     ? new Date(attempt.completed_at).toLocaleDateString(
         lang === 'tr' ? 'tr-TR' : 'en-GB',
@@ -326,10 +326,12 @@ export default function ResultsPage() {
                 fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--ink-4)',
                 letterSpacing: '0.12em', textTransform: 'uppercase', display: 'block', marginBottom: 14,
               }}>
-                REF-{String(attempt.id).padStart(4, '0')} · {completedAt} · SustIndex GRI Framework
+                REF-{String(attempt.id).padStart(4, '0')} · {completedAt} · SustIndex
               </span>
               <h1 style={{ fontSize: 26, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 10 }}>
-                {lang === 'tr' ? 'ESG Yetkinlik Değerlendirme Raporu' : 'ESG Competency Assessment Report'}
+                {pillars
+                  ? (lang === 'tr' ? 'ESG Yetkinlik Değerlendirme Raporu' : 'ESG Competency Assessment Report')
+                  : (lang === 'tr' ? `${surveyName} Değerlendirme Raporu` : `${surveyName} Assessment Report`)}
                 {companyName && (
                   <>
                     <br />
@@ -344,10 +346,12 @@ export default function ResultsPage() {
                   <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Anket:' : 'Survey:'}</strong>
                   {' '}{surveyName}
                 </span>
-                <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-                  <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Çerçeve:' : 'Framework:'}</strong>
-                  {' '}GRI Universal · SASB · TCFD
-                </span>
+                {pillars && (
+                  <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                    <strong style={{ color: 'var(--ink)' }}>{lang === 'tr' ? 'Çerçeve:' : 'Framework:'}</strong>
+                    {' '}GRI Universal · SASB · TCFD
+                  </span>
+                )}
               </div>
               {/* Fix R4-M-05: guard totalQ > 0 so division never produces NaN% */}
               {totalQ > 0 && (

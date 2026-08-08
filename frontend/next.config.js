@@ -10,7 +10,11 @@ const nextConfig = {
   images: {
     // Allow local /assets/ images (served from public/)
     unoptimized: false,
-    remotePatterns: [],
+    remotePatterns: [
+      // Landing page photography (Mission collage + How We Help carousel) —
+      // all free-license Unsplash photos, verified individually.
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+    ],
   },
 }
 

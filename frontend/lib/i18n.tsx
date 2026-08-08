@@ -78,6 +78,15 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   cta_short:     { en: 'Ready to begin?',  tr: 'Başlamaya hazır mısınız?' },
   cta_desc_short:{ en: 'Free to start. No card, no setup.', tr: 'Ücretsiz başlayın. Kart yok, kurulum yok.' },
 
+  /* Homepage: Mission collage captions */
+  mission_transform: { en: 'Transformation',    tr: 'Dönüşüm' },
+  mission_circular:  { en: 'Circular Economy',  tr: 'Döngüsel Ekonomi' },
+
+  /* Homepage: How we help carousel */
+  how_help_h:    { en: 'How we help',       tr: 'Nasıl yardımcı oluyoruz' },
+  how_help_prev: { en: 'Previous',          tr: 'Önceki' },
+  how_help_next: { en: 'Next',              tr: 'Sonraki' },
+
   /* Pillars */
   pillar_env:     { en: 'Environmental', tr: 'Çevresel' },
   pillar_soc:     { en: 'Social',        tr: 'Sosyal' },
@@ -324,14 +333,14 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   about_mission_h: { en: 'Help every company measure, understand, and improve their sustainability performance.', tr: 'Her şirketin sürdürülebilirlik performansını ölçmesine, anlamasına ve iyileştirmesine yardımcı olmak.' },
   about_mission_d: { en: 'We provide comprehensive ESG assessments based on international standards — GRI, SASB, UN SDGs, and ISO 26000 — and we package them in a workflow that respects the time of the people doing the work.', tr: 'GRI, SASB, BM SKA ve ISO 26000 gibi uluslararası standartlara dayalı kapsamlı ESG değerlendirmeleri sunuyoruz — ve bunları işi yapanların zamanına saygı duyan bir iş akışında paketliyoruz.' },
   about_offer:     { en: 'What we offer',              tr: 'Sunduklarımız' },
-  about_o_1_t:     { en: 'Comprehensive assessment',   tr: 'Kapsamlı değerlendirme' },
-  about_o_1_d:     { en: 'Detailed evaluation across 30+ sustainability indicators spanning Environmental, Social, and Governance.', tr: 'Çevresel, Sosyal ve Yönetişim alanlarında 30+ sürdürülebilirlik göstergesi üzerinde ayrıntılı değerlendirme.' },
-  about_o_2_t:     { en: 'Executive-ready reports',    tr: 'Yönetici düzeyinde raporlar' },
-  about_o_2_d:     { en: 'Professional PDFs with benchmarking, trend analysis, and prioritized recommendations — ready for the board.', tr: 'Kıyaslama, trend analizi ve önceliklendirilmiş önerilerle profesyonel PDF\'ler — yönetim kuruluna hazır.' },
-  about_o_3_t:     { en: 'Industry standards',         tr: 'Sektör standartları' },
-  about_o_3_d:     { en: 'Based on internationally recognized frameworks including GRI, SASB, ISO 26000, and UN SDGs.', tr: 'GRI, SASB, ISO 26000 ve BM SKA gibi uluslararası kabul görmüş çerçevelere dayanmaktadır.' },
-  about_o_4_t:     { en: 'Actionable insights',        tr: 'Eyleme dönüştürülebilir içgörüler' },
-  about_o_4_d:     { en: 'Receive prioritized recommendations tied to specific gaps in your performance.', tr: 'Performansınızdaki belirli boşluklara bağlı önceliklendirilmiş öneriler alın.' },
+  about_o_1_t:     { en: 'GRI-Based ESG Assessment',    tr: 'GRI Tabanlı ESG Değerlendirmesi' },
+  about_o_1_d:     { en: '63 criteria across Governance, Environmental, Social, and Economic dimensions — each scored with a 4-layer PDCA model for accurate maturity measurement.', tr: 'Yönetişim, Çevre, Sosyal ve Ekonomi boyutlarında 63 kriter — her biri doğru olgunluk ölçümü için 4 katmanlı PDCA modeliyle puanlanır.' },
+  about_o_2_t:     { en: 'Sector-Specific Modules',      tr: 'Sektöre Özel Modüller' },
+  about_o_2_d:     { en: '8 industry modules (Agriculture, Energy, Finance, Manufacturing, Construction, Healthcare, Tech, Retail) with tailored questions matching your sector risks.', tr: '8 sektör modülü (Tarım, Enerji, Finans, İmalat, İnşaat, Sağlık, Teknoloji, Perakende) — sektör risklerinize uygun sorularla.' },
+  about_o_3_t:     { en: 'Smart Question Flow',          tr: 'Akıllı Soru Akışı' },
+  about_o_3_d:     { en: 'Gate questions, conditional logic, and skip patterns ensure you only answer what is relevant — saving time without sacrificing accuracy.', tr: 'Gate soruları, koşullu mantık ve atlama kuralları yalnızca ilgili soruları yanıtlamanızı sağlar — doğruluktan ödün vermeden zamandan tasarruf.' },
+  about_o_4_t:     { en: 'Actionable ESG Report',        tr: 'Eyleme Dönüştürülebilir ESG Raporu' },
+  about_o_4_d:     { en: 'Instant scoring with E/S/G pillar breakdown, letter grade, and prioritized GRI-aligned recommendations to close your gaps.', tr: 'E/S/G sütun dağılımı, harf notu ve boşluklarınızı kapatmak için önceliklendirilmiş GRI uyumlu önerilerle anlık puanlama.' },
   about_contact:   { en: 'Contact',   tr: 'İletişim' },
   about_address:   { en: 'Address',   tr: 'Adres' },
   about_address_v: {

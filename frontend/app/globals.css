@@ -10,20 +10,32 @@
    Design Tokens
    ============================================================ */
 :root {
-  --cream:       #FFFFFF;
-  --cream-deep:  #F6F4EE;
-  --paper:       #FAFAF7;
-  --ink:         #1A1A14;
-  --ink-2:       #3F3D34;
-  --ink-3:       #6B6759;
-  --ink-4:       #B5B2A6;
-  --line:        #ECE9E0;
-  --line-soft:   #F2EFE6;
-  --olive:       #9CAB60;
-  --olive-deep:  #5F6E2F;
-  --olive-pale:  #D8DFC0;
-  --olive-wash:  #F0F3E6;
-  --cream-pill:  #F5EFE3;
+  /* Brand palette (user-supplied): #3C5C3F #38574C #1E3A31 #5E8080 #759794
+     #253B23 #17394B #B8F5B9 #7FCE80 — mapped onto the existing token roles so
+     every var(--...) usage site-wide (dashboard, results, questionnaire, admin
+     analytics, auth) picks up the new palette without touching each page. */
+  --cream:       #F8FBF5;
+  --cream-deep:  #EDF4E9;
+  --paper:       #FBFDFA;
+  --ink:         #1E3A31;
+  --ink-2:       #253B23;
+  --ink-3:       #5E8080;
+  --ink-4:       #98AFAD;
+  --line:        #DCE7DC;
+  --line-soft:   #E8F0E5;
+  --olive:       #7FCE80;
+  --olive-deep:  #3C5C3F;
+  --olive-pale:  #B8F5B9;
+  --olive-wash:  #E7F9E7;
+  --cream-pill:  #E9F3E6;
+  /* Extra brand accents from the supplied palette, used where a second
+     distinct deep tone reads better than repeating --olive-deep (e.g. the
+     Governance collage panel). */
+  --navy-deep:   #17394B;
+  --teal-deep:   #38574C;
+  /* Semantic status colours — intentionally NOT part of the brand palette
+     swap. They carry meaning throughout score displays (danger = critical,
+     amber = warning); remapping them onto green would remove that signal. */
   --danger:      #B0492B;
   --amber:       #B58A2E;
 }
@@ -240,6 +252,50 @@ table.t tbody tr:hover { background: var(--cream-deep); }
 }
 .cta-btns { display: inline-flex; gap: 10px; }
 
+/* Homepage: Mission hero collage */
+.mission-hero-grid {
+  display: grid;
+  grid-template-columns: 190px 1fr 190px;
+  gap: 24px;
+  align-items: center;
+}
+.mission-side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.mission-side-col:first-child { padding-top: 0; }
+.mission-side-col:last-child  { padding-top: 32px; }
+.mission-panel { transition: transform 0.3s ease; }
+.mission-panel:hover { transform: translateY(-3px); }
+
+/* Homepage: How we help carousel */
+.help-track {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+  margin: 0 -32px;
+  padding-left: 32px;
+  padding-right: 32px;
+}
+.help-track::-webkit-scrollbar { display: none; }
+.help-card {
+  flex: 0 0 calc(25% - 15px);
+  min-width: 200px;
+  scroll-snap-align: start;
+}
+.help-nav-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ink);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.help-nav-btn:hover { background: var(--olive-wash); border-color: var(--olive-deep); }
+
 /* ============================================================
    Responsive Layout
    ============================================================ */
@@ -265,6 +321,37 @@ button, input, select, textarea { font: inherit; }
   .stat-cell:nth-child(2) { border-right: none; }
   .content-grid-main   { grid-template-columns: 1fr; }
   .courses-strip-grid  { grid-template-columns: repeat(2, 1fr); }
+
+  /* Homepage: How we help — 2 cards visible, third peeking */
+  .help-card { flex-basis: calc(50% - 10px); }
+
+  /* Homepage: Mission hero collage — stack text first, collage rows below.
+     align-items must be reset: the base rule's `align-items: center` is meant
+     for the desktop grid's row-centering, but under a column flex container
+     `center` means "shrink each child to content width" instead of stretch,
+     which visibly shrank the text block and collage rows to different widths. */
+  .mission-hero-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mission-center { order: 1; }
+  .mission-side-col {
+    order: 2;
+    /* Grid (not flex) so each panel gets a guaranteed 1fr track — the photo
+       panel's content is fill-positioned and has no intrinsic size, which
+       collapsed it to 0 width under flex's flex-basis:0 sizing. */
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    /* start (not the grid default stretch): each row pairs a tall panel with a
+       square one — stretch would force the square panel's height to match its
+       taller sibling, and its aspect-ratio would then blow its own width back
+       out past the 1fr track. Sizing from each item's own width keeps both
+       panels evenly split. */
+    align-items: start;
+    padding-top: 0 !important;
+    margin-top: 28px;
+  }
 
   /* Catch remaining inline-style grids */
   [style*="grid-template-columns: 1.65fr 1fr"],
@@ -410,6 +497,15 @@ button, input, select, textarea { font: inherit; }
     gap: 10px 16px !important;
   }
 
+  .footer-grid {
+    grid-template-columns: 1fr !important;
+    gap: 32px !important;
+  }
+  .footer-bottom {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
   [style*="display: grid"] {
     min-width: 0;
   }
@@ -471,6 +567,14 @@ button, input, select, textarea { font: inherit; }
   /* ── Dashboard: empty card ── */
   .empty-card { grid-template-columns: 1fr !important; }
   .empty-card-divider { width: 100%; height: 1px !important; }
+
+  /* ── Homepage: Mission hero collage — drop decorative panels on phones ── */
+  .mission-card { padding: 36px 22px !important; border-radius: 24px !important; }
+  .mission-side-col { display: none !important; }
+
+  /* ── Homepage: How we help — one card + a peek of the next ── */
+  .help-card { flex-basis: 82%; }
+  .help-track { margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
 
   /* ── Homepage: ESG pillars ── */
   .pillars-grid { grid-template-columns: 1fr !important; }

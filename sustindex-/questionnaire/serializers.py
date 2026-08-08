@@ -533,6 +533,11 @@ class QuestionnaireAttemptSerializer(LocalisedRepresentationMixin, AttemptBreakd
             env_n += e_w * pct;  env_d += e_w
             soc_n += s_w * pct;  soc_d += s_w
             gov_n += g_w * pct;  gov_d += g_w
+        # Non-ESG surveys (e.g. TISAX) leave every category's weight at 0 — in that
+        # case there is no real E/S/G breakdown to report, so return None instead of
+        # fabricating three identical "pillar" scores from the plain average.
+        if env_d == 0 and soc_d == 0 and gov_d == 0:
+            return None
         avg = round(sum(c['percentage'] for c in cats) / len(cats), 1) if cats else 0.0
         return {
             'environmental': round(env_n / env_d, 1) if env_d else avg,

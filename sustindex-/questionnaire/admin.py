@@ -29,6 +29,20 @@ from .services import recalc_attempt_score, attempt_stats, get_category_performa
 
 # ========== Survey Admin ==========
 
+class CategoryInline(admin.TabularInline):
+    """Lets an admin define a new survey's categories right on the Survey page —
+    e.g. name a new "TISAX" survey, then immediately add its dimensions
+    (Infrastructure, Training & Awareness, Competence...) without leaving the page.
+    ESG weight fields are intentionally omitted here (edit via the change-link into
+    the full Category page) since they're optional and only relevant to GRI/ESG surveys.
+    """
+    model = Category
+    extra = 1
+    fields = ['order', 'name', 'name_tr', 'name_en', 'max_score']
+    ordering = ['order']
+    show_change_link = True
+
+
 @admin.register(Survey)
 class SurveyAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     list_display = ['id', 'name', 'is_active', 'questions_count', 'sessions_count', 'attempts_count', 'created_at']
@@ -37,7 +51,8 @@ class SurveyAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     list_editable = ['is_active']
     date_hierarchy = 'created_at'
     list_per_page = 50
-    
+    inlines = [CategoryInline]
+
     fieldsets = (
         # Fix M-02: i18n fields were missing — admins couldn't edit bilingual
         # name/description from the survey edit page.
@@ -322,11 +337,24 @@ class CategoryAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
         (_('Basic Information'), {
             'fields': ('survey', 'name', 'name_tr', 'name_en', 'description', 'description_tr', 'description_en', 'order')
         }),
+        (_('Scoring'), {
+            'fields': ('max_score',)
+        }),
         # Fix H-01: environmental_weight, social_weight, governance_weight were
         # missing from the Scoring fieldset — admins had no way to set pillar
         # weights from the category edit page.
-        (_('Scoring'), {
-            'fields': ('max_score', 'environmental_weight', 'social_weight', 'governance_weight')
+        # Split out and collapsed: these three fields only matter for GRI/ESG-style
+        # surveys that roll categories up into Environmental/Social/Governance pillar
+        # scores. Non-ESG surveys (e.g. TISAX) should leave them at 0 — per-category
+        # and total scoring work regardless, and no fake pillar scores will be shown.
+        (_('ESG Pillar Weights (optional — GRI/ESG surveys only)'), {
+            'fields': ('environmental_weight', 'social_weight', 'governance_weight'),
+            'classes': ('collapse',),
+            'description': _(
+                'Only used to compute Environmental/Social/Governance pillar scores for '
+                'GRI-style surveys. Leave all three at 0 for non-ESG surveys (e.g. TISAX) — '
+                'the category and total scores work independently of these weights.'
+            ),
         }),
     )
     
@@ -358,6 +386,9 @@ class QuestionAdmin(ImportExportModelAdmin, SimpleHistoryAdmin):
     ordering = ['survey', 'category', 'order']
     inlines = [ChoiceInline]
     list_per_page = 50
+
+    class Media:
+        js = ('admin/js/question_category_filter.js',)
 
     fieldsets = (
         (_('Structure'), {
