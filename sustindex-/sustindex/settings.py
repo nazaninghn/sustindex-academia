@@ -280,11 +280,18 @@ ATTEMPT_LIMITS = {
 }
 
 # Login/Logout redirects
-LOGIN_REDIRECT_URL = 'dashboard'
+# Fix: 'dashboard' URL name does not exist — accounts.urls (which defines it)
+# is commented out in urls.py since the frontend moved to Next.js. Redirect to
+# /admin/ instead of raising NoReverseMatch 500 on login, same as the fix below.
+LOGIN_REDIRECT_URL = '/admin/'
 # Fix: 'home' URL name does not exist in urls.py (the view is commented out).
 # Redirect admin logouts to /admin/ login instead of raising NoReverseMatch 500.
 LOGOUT_REDIRECT_URL = '/admin/'
-LOGIN_URL = 'login'
+# Fix: same root cause as LOGIN_REDIRECT_URL above — 'login' only exists in the
+# commented-out accounts.urls. The only @login_required view left (the Category
+# autocomplete widget in urls.py) is only ever reached from inside the Django
+# admin, so anonymous users should land on the real admin login page.
+LOGIN_URL = '/admin/login/'
 
 # REST Framework Configuration (only if installed)
 if REST_FRAMEWORK_INSTALLED:

@@ -16,4 +16,9 @@ django-cors-headers==4.3.1
 djangorestframework-simplejwt==5.3.1
 drf-spectacular==0.27.1
 python-magic==0.4.27
+# Fix: python-magic needs libmagic; Linux/macOS normally have it system-wide
+# (e.g. Render's build image), but Windows does not, and import magic hangs
+# indefinitely trying to locate it instead of raising ImportError — this
+# bundles the missing DLL for local Windows dev only.
+python-magic-bin==0.4.14; sys_platform == 'win32'
 openpyxl==3.1.2

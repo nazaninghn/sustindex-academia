@@ -1,0 +1,86 @@
+{% load i18n %}
+<div class="dash-stat-grid">
+  <div class="dash-card dash-stat">
+    <span class="dash-stat-icon dash-accent-brand">&#9733;</span>
+    <p class="dash-stat-label">{% translate 'Active surveys' %}</p>
+    <p class="dash-stat-value">{{ active_surveys }}</p>
+  </div>
+
+  <div class="dash-card dash-stat">
+    <span class="dash-stat-icon dash-accent-aqua">&#9776;</span>
+    <p class="dash-stat-label">{% translate 'Total attempts' %}</p>
+    <p class="dash-stat-value">{{ total_attempts }}</p>
+    <span class="dash-chip {% if week_trend >= 0 %}dash-chip-up{% else %}dash-chip-down{% endif %}">
+      {% if week_trend >= 0 %}&#9650;{% else %}&#9660;{% endif %} {{ week_trend }}% {% translate 'vs last week' %}
+    </span>
+  </div>
+
+  <div class="dash-card dash-stat">
+    <span class="dash-stat-icon dash-accent-amber">&#10003;</span>
+    <p class="dash-stat-label">{% translate 'Completion rate' %}</p>
+    <p class="dash-stat-value">{{ completion_rate }}%</p>
+    <p class="dash-stat-sub">{{ completed_attempts }} {% translate 'of' %} {{ total_attempts }} {% translate 'completed' %}</p>
+  </div>
+
+  <div class="dash-card dash-stat">
+    <span class="dash-stat-icon dash-accent-rose">&#128100;</span>
+    <p class="dash-stat-label">{% translate 'Registered users' %}</p>
+    <p class="dash-stat-value">{{ total_users }}</p>
+  </div>
+</div>
+
+<div class="dash-row">
+  <div class="dash-card dash-recent">
+    <h3>{% translate 'Recent attempts' %}</h3>
+    {% if recent_attempts %}
+    <table class="dash-table">
+      <thead>
+        <tr>
+          <th>{% translate 'User' %}</th>
+          <th>{% translate 'Survey' %}</th>
+          <th>{% translate 'Score' %}</th>
+          <th>{% translate 'Status' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for attempt in recent_attempts %}
+        <tr>
+          <td>{{ attempt.user.username }}</td>
+          <td>{{ attempt.survey.name|default:"—" }}</td>
+          <td>{{ attempt.total_score }}{% if attempt.overall_grade %} <span class="dash-grade">{{ attempt.overall_grade }}</span>{% endif %}</td>
+          <td>
+            {% if attempt.is_completed %}
+              <span class="dash-pill dash-pill-brand">{% translate 'Completed' %}</span>
+            {% else %}
+              <span class="dash-pill dash-pill-amber">{% translate 'In progress' %}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dash-empty">{% translate 'No attempts yet.' %}</p>
+    {% endif %}
+  </div>
+
+  <div class="dash-card dash-top-surveys">
+    <h3>{% translate 'Top surveys' %}</h3>
+    <p class="dash-stat-sub">{% translate 'By number of attempts' %}</p>
+    {% if top_surveys %}
+    <ul class="dash-progress-list">
+      {% for survey in top_surveys %}
+      <li>
+        <div class="dash-progress-row">
+          <span>{{ survey.name }}</span>
+          <span class="dash-progress-count">{{ survey.attempt_count }}</span>
+        </div>
+        <div class="dash-progress-track"><div class="dash-progress-bar" style="width: {{ survey.share_percent }}%"></div></div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty">{% translate 'No survey attempts yet.' %}</p>
+    {% endif %}
+  </div>
+</div>
