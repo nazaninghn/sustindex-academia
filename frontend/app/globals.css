@@ -325,6 +325,12 @@ button, input, select, textarea { font: inherit; }
   /* Homepage: How we help — 2 cards visible, third peeking */
   .help-card { flex-basis: calc(50% - 10px); }
 
+  /* Footer: 2-column on tablet */
+  .footer-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 36px !important;
+  }
+
   /* Homepage: Mission hero collage — stack text first, collage rows below.
      align-items must be reset: the base rule's `align-items: center` is meant
      for the desktop grid's row-centering, but under a column flex container
