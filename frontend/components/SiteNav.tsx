@@ -31,7 +31,7 @@ export default function SiteNav() {
       <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', height: 58 }}>
 
         {/* Logo */}
-        <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}><Logo /></Link>
+        <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}><Logo size={24} /></Link>
 
         {/* Desktop nav — hidden on mobile */}
         <nav className="sitenav-links" style={{ display: 'flex', gap: 28, justifyContent: 'center' }}>

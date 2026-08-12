@@ -37,7 +37,7 @@ export function PhaseInterstitial({
       {/* Header */}
       <header style={{ borderBottom: '1px solid var(--line)' }}>
         <div className="wrap" style={{ padding: '13px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Logo size={20} />
+          <Logo size={22} />
           <button
             className="btn btn-outline btn-sm"
             onClick={onSaveAndExit}

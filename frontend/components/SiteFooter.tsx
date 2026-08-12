@@ -24,7 +24,7 @@ export default function SiteFooter() {
         }}>
           {/* Brand */}
           <div>
-            <Logo size={20} />
+            <Logo size={22} />
             <p style={{ marginTop: 16, fontSize: 12.5, color: 'var(--ink-3)', maxWidth: 320, lineHeight: 1.6 }}>
               {lang === 'tr'
                 ? 'Academia Danışmanlık tarafından geliştirilen kapsamlı ESG değerlendirme platformu — uluslararası standartlara dayalı.'

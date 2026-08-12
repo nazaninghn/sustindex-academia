@@ -131,7 +131,11 @@ dmypy.json
 # Django specific
 media/
 staticfiles/
-static/
+# Fix: bare "static/" (no leading slash) matched at ANY depth, which silently
+# swallowed questionnaire/static/ — a real *source* directory (custom admin
+# CSS/JS/images), not build output. Anchor to the repo root so only a
+# top-level static/ (if STATICFILES_DIRS ever points to one) is ignored.
+/static/
 *.sqlite3
 
 # IDE specific files

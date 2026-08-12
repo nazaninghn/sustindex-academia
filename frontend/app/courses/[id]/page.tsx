@@ -148,7 +148,7 @@ export default function CourseDetailPage() {
       {/* ── Top bar ── */}
       <header style={{ borderBottom: '1px solid var(--line)', background: 'var(--paper)' }}>
         <div className="wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 32px' }}>
-          <Link href="/" style={{ textDecoration: 'none' }}><Logo size={20} /></Link>
+          <Link href="/" style={{ textDecoration: 'none' }}><Logo size={22} /></Link>
           <Link href="/courses" style={{ textDecoration: 'none', fontSize: 11.5, color: 'var(--ink-3)' }}>
             {t('course_back')}
           </Link>

@@ -1,0 +1,326 @@
+/* ============================================================
+   Sustindex Admin — light, card-based theme matching the main
+   site's palette (cream background, dark-green ink, olive accent).
+   Overrides Django admin's own CSS custom properties (defined in
+   admin/css/base.css) rather than fighting individual selectors —
+   this means every page (login, list views, forms, this dashboard)
+   picks up the theme automatically.
+
+   Covers :root, html[data-theme="light"], html[data-theme="dark"]
+   (Django's built-in light/dark toggle) AND the prefers-color-scheme
+   media query (the toggle's "auto" state) so the theme stays light
+   no matter which of those Django resolves to.
+   ============================================================ */
+
+:root,
+html[data-theme="light"],
+html[data-theme="dark"] {
+  --primary: #3c5c3f;
+  --secondary: #253b23;
+  --accent: #7fce80;
+  --primary-fg: #ffffff;
+
+  --body-fg: #1e3a31;
+  --body-bg: #f8fbf5;
+  --body-quiet-color: #5e8080;
+  --body-loud-color: #1e3a31;
+
+  --header-color: #b8f5b9;
+  --header-branding-color: #b8f5b9;
+  --header-bg: #3c5c3f;
+  --header-link-color: #ffffff;
+
+  --breadcrumbs-fg: #5e8080;
+  --breadcrumbs-link-fg: #1e3a31;
+  --breadcrumbs-bg: #edf4e9;
+
+  --link-fg: #3c5c3f;
+  --link-hover-color: #1e3a31;
+  --link-selected-fg: #3c5c3f;
+
+  --hairline-color: #dce7dc;
+  --border-color: #dce7dc;
+
+  --error-fg: #b0492b;
+
+  --message-success-bg: #e7f9e7;
+  --message-warning-bg: rgba(181, 138, 46, 0.14);
+  --message-error-bg: rgba(176, 73, 43, 0.14);
+
+  --darkened-bg: #edf4e9;
+  --selected-bg: #e9f3e6;
+  --selected-row: rgba(127, 206, 128, 0.16);
+
+  --button-fg: #ffffff;
+  --button-bg: #3c5c3f;
+  --button-hover-bg: #253b23;
+  --default-button-bg: #3c5c3f;
+  --default-button-hover-bg: #253b23;
+  --close-button-bg: #98afad;
+  --close-button-hover-bg: #5e8080;
+  --delete-button-bg: #b0492b;
+  --delete-button-hover-bg: #943a22;
+
+  --object-tools-fg: #ffffff;
+  --object-tools-bg: #5e8080;
+  --object-tools-hover-bg: #38574c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #3c5c3f;
+    --secondary: #253b23;
+    --accent: #7fce80;
+    --primary-fg: #ffffff;
+    --body-fg: #1e3a31;
+    --body-bg: #f8fbf5;
+    --body-quiet-color: #5e8080;
+    --body-loud-color: #1e3a31;
+    --header-color: #b8f5b9;
+    --header-branding-color: #b8f5b9;
+    --header-bg: #3c5c3f;
+    --header-link-color: #ffffff;
+    --breadcrumbs-fg: #5e8080;
+    --breadcrumbs-link-fg: #1e3a31;
+    --breadcrumbs-bg: #edf4e9;
+    --link-fg: #3c5c3f;
+    --link-hover-color: #1e3a31;
+    --link-selected-fg: #3c5c3f;
+    --hairline-color: #dce7dc;
+    --border-color: #dce7dc;
+    --error-fg: #b0492b;
+    --message-success-bg: #e7f9e7;
+    --message-warning-bg: rgba(181, 138, 46, 0.14);
+    --message-error-bg: rgba(176, 73, 43, 0.14);
+    --darkened-bg: #edf4e9;
+    --selected-bg: #e9f3e6;
+    --selected-row: rgba(127, 206, 128, 0.16);
+    --button-fg: #ffffff;
+    --button-bg: #3c5c3f;
+    --button-hover-bg: #253b23;
+    --default-button-bg: #3c5c3f;
+    --default-button-hover-bg: #253b23;
+    --close-button-bg: #98afad;
+    --close-button-hover-bg: #5e8080;
+    --delete-button-bg: #b0492b;
+    --delete-button-hover-bg: #943a22;
+    --object-tools-fg: #ffffff;
+    --object-tools-bg: #5e8080;
+    --object-tools-hover-bg: #38574c;
+  }
+}
+
+/* One fixed theme — the toggle would just flip between identical
+   values above, so hide it rather than leave a dead control. */
+.theme-toggle { display: none !important; }
+
+/* ============================================================
+   Cards — modules, fieldsets, the login box
+   ============================================================ */
+.module,
+fieldset.module,
+#content-related .module,
+.login #content {
+  border: 1px solid var(--hairline-color);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 14px -6px rgba(30, 58, 49, 0.1);
+  overflow: hidden;
+}
+
+/* .module h2 / caption already pick up var(--header-bg) + var(--header-link-color)
+   from base.css, so section headers render as a dark-green bar automatically —
+   no override needed here. */
+
+.dashboard .module table th, .dashboard .module table td {
+  border-bottom: 1px solid var(--hairline-color);
+}
+
+/* ============================================================
+   Header + branding
+   ============================================================ */
+#header {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+#branding h1#site-name a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+.brand-logo {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 2px;
+}
+
+/* ============================================================
+   Sidebar — icon accent per app (CSS-only, no template change)
+   ============================================================ */
+#nav-sidebar .current-app a,
+#nav-sidebar a.section:hover {
+  color: var(--link-hover-color);
+}
+#nav-sidebar table caption a.section {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600;
+}
+#nav-sidebar table caption a.section::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 3px;
+  background: var(--body-quiet-color);
+  flex-shrink: 0;
+}
+#nav-sidebar .app-questionnaire table caption a.section::before { background: #3c5c3f; }
+#nav-sidebar .app-accounts table caption a.section::before      { background: #17394b; }
+#nav-sidebar .app-elearning table caption a.section::before     { background: #b58a2e; }
+#nav-sidebar .app-reports table caption a.section::before       { background: #b0492b; }
+#nav-sidebar .app-auth table caption a.section::before          { background: #5e8080; }
+
+#nav-sidebar .current-model th {
+  border-radius: 8px;
+  background: var(--selected-row);
+}
+
+/* ============================================================
+   Buttons & links
+   ============================================================ */
+.button, input[type=submit], input[type=button], .submit-row input, a.button {
+  border-radius: 10px !important;
+}
+
+/* Add/change/view/delete list links as rounded pill chips */
+.addlink, .changelink, .viewlink, .deletelink {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.addlink    { background: #e7f9e7; color: #3c5c3f; }
+.changelink { background: #e9f3e6; color: #38574c; }
+.viewlink   { background: #edf4e9; color: #5e8080; }
+.deletelink { background: rgba(176, 73, 43, 0.12); color: #b0492b; }
+
+/* ============================================================
+   Changelist / results table
+   ============================================================ */
+#changelist-filter {
+  border: 1px solid var(--hairline-color);
+  border-radius: 14px;
+  background: #ffffff;
+}
+.results table thead th {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+  color: var(--body-quiet-color);
+}
+
+/* ============================================================
+   Dashboard — stat cards, recent-attempts table, top-surveys list
+   ============================================================ */
+.dash-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.dash-card {
+  border: 1px solid var(--hairline-color);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 14px -6px rgba(30, 58, 49, 0.1);
+  padding: 20px;
+}
+.dash-stat-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  font-size: 16px;
+  margin-bottom: 14px;
+}
+.dash-accent-brand { background: #e7f9e7; color: #3c5c3f; }
+.dash-accent-aqua  { background: #e6f1f1; color: #17394b; }
+.dash-accent-amber { background: rgba(181, 138, 46, 0.14); color: #b58a2e; }
+.dash-accent-rose  { background: rgba(176, 73, 43, 0.12); color: #b0492b; }
+
+.dash-stat-label { font-size: 12px; color: var(--body-quiet-color); margin: 0; }
+.dash-stat-value { font-size: 28px; font-weight: 700; color: var(--body-loud-color); margin: 4px 0 0; line-height: 1.1; }
+.dash-stat-sub { font-size: 11px; color: var(--body-quiet-color); margin: 6px 0 0; }
+
+.dash-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 10px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+}
+.dash-chip-up   { background: #e7f9e7; color: #3c5c3f; }
+.dash-chip-down { background: rgba(176, 73, 43, 0.12); color: #b0492b; }
+
+.dash-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.dash-card h3 { margin: 0 0 4px; font-size: 14px; color: var(--body-loud-color); }
+.dash-empty { color: var(--body-quiet-color); font-size: 12px; }
+
+.dash-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12.5px; }
+.dash-table th {
+  text-align: left; padding: 8px 10px;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--body-quiet-color);
+  border-bottom: 1px solid var(--hairline-color);
+}
+.dash-table td { padding: 9px 10px; border-bottom: 1px solid var(--hairline-color); color: var(--body-fg); }
+.dash-table tr:last-child td { border-bottom: none; }
+
+.dash-grade {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #e7f9e7;
+  color: #3c5c3f;
+  font-size: 10.5px; font-weight: 700;
+}
+
+.dash-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.dash-pill-brand { background: #e7f9e7; color: #3c5c3f; }
+.dash-pill-amber { background: rgba(181, 138, 46, 0.14); color: #b58a2e; }
+
+.dash-progress-list { list-style: none; margin: 14px 0 0; padding: 0; }
+.dash-progress-list li { margin-bottom: 14px; }
+.dash-progress-list li:last-child { margin-bottom: 0; }
+.dash-progress-row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--body-fg); margin-bottom: 6px; }
+.dash-progress-count { font-weight: 700; color: var(--body-loud-color); }
+.dash-progress-track { height: 6px; border-radius: 999px; background: var(--hairline-color); overflow: hidden; }
+.dash-progress-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #3c5c3f, #7fce80); }
+
+.dash-section-title { font-size: 15px; color: var(--body-loud-color); margin: 4px 0 12px; }
+
+@media (max-width: 1024px) {
+  .dash-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .dash-row { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   Mobile
+   ============================================================ */
+@media (max-width: 768px) {
+  #header { padding: 10px 15px !important; position: sticky !important; top: 0 !important; z-index: 1000 !important; }
+  #nav-sidebar { max-height: 260px !important; overflow-y: auto !important; }
+  #content { margin-left: 0 !important; padding: 15px 10px !important; width: 100% !important; }
+  .form-row input, .form-row select, .form-row textarea { font-size: 16px !important; } /* prevents iOS zoom */
+  .results { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  .dash-stat-grid { grid-template-columns: 1fr !important; }
+  .dash-row { grid-template-columns: 1fr !important; }
+  a, button, input[type="submit"], .button { min-height: 40px; }
+}

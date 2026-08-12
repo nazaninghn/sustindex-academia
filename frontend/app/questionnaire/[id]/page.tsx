@@ -63,7 +63,7 @@ export default function QuestionnairePage() {
       <header style={{ borderBottom: '1px solid var(--line)', position: 'sticky', top: 0, background: 'var(--cream)', zIndex: 10 }}>
         <div className="wrap" style={{ padding: '13px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <Logo size={20} />
+            <Logo size={22} />
             <span style={{ width: 1, height: 18, background: 'var(--line)' }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 320 }}>
               {qs.cycleName && (

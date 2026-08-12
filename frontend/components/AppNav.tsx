@@ -110,8 +110,11 @@ export default function AppNav() {
 
         {/* Left: logo + separator + nav links (desktop) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
-            <Logo size={22} />
+          {/* Fix: this is the in-app nav (not the public site's), so the logo
+              should stay inside the app instead of exiting to the marketing
+              landing page — logging out is the only way out, via the button. */}
+          <Link href="/dashboard" style={{ textDecoration: 'none', flexShrink: 0 }}>
+            <Logo size={24} />
           </Link>
           <span className="appnav-separator" style={{ width: 1, height: 22, background: 'var(--line)', flexShrink: 0 }} />
           <nav className="appnav-links" style={{ display: 'flex', gap: 2 }}>

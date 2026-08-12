@@ -80,7 +80,7 @@ export default function LoginPage() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '14px 32px',
         }}>
-          <Link href="/" style={{ textDecoration: 'none' }}><Logo size={20} /></Link>
+          <Link href="/" style={{ textDecoration: 'none' }}><Logo size={22} /></Link>
           <Link href="/" style={{ textDecoration: 'none', fontSize: 11.5, color: 'var(--ink-3)' }}>
             ← {t('nav_back_home')}
           </Link>
