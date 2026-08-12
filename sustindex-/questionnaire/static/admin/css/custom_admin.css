@@ -186,12 +186,30 @@ fieldset.module,
   border-radius: 8px;
   background: var(--selected-row);
 }
+#nav-sidebar table caption {
+  letter-spacing: 0.02em;
+}
+#nav-sidebar table tr th a {
+  border-radius: 6px;
+  transition: background 0.15s ease, padding-left 0.15s ease;
+}
+#nav-sidebar table tr:not(.current-model) th a:hover {
+  background: var(--darkened-bg);
+  padding-left: 4px;
+}
 
 /* ============================================================
    Buttons & links
    ============================================================ */
 .button, input[type=submit], input[type=button], .submit-row input, a.button {
   border-radius: 10px !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+}
+.button.default, input[type=submit].default {
+  box-shadow: 0 2px 8px -2px rgba(60, 92, 63, 0.4);
+}
+.button:hover, input[type=submit]:hover, input[type=button]:hover, .submit-row input:hover, a.button:hover {
+  transform: translateY(-1px);
 }
 
 /* Add/change/view/delete list links as rounded pill chips */
@@ -201,6 +219,10 @@ fieldset.module,
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
+  transition: filter 0.15s ease;
+}
+.addlink:hover, .changelink:hover, .viewlink:hover, .deletelink:hover {
+  filter: brightness(0.93);
 }
 .addlink    { background: #e7f9e7; color: #3c5c3f; }
 .changelink { background: #e9f3e6; color: #38574c; }
@@ -215,11 +237,44 @@ fieldset.module,
   border-radius: 14px;
   background: #ffffff;
 }
+#changelist-filter h2 {
+  border-radius: 13px 13px 0 0;
+}
 .results table thead th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 11px;
   color: var(--body-quiet-color);
+}
+.results table tbody tr {
+  transition: background 0.15s ease;
+}
+.results table tbody tr:hover {
+  background: var(--darkened-bg);
+}
+.object-tools a {
+  border-radius: 999px !important;
+  transition: transform 0.15s ease;
+}
+.object-tools a:hover {
+  transform: translateY(-1px);
+}
+.breadcrumbs {
+  font-size: 12px;
+}
+
+/* ============================================================
+   Login page — centred card on a soft branded wash
+   ============================================================ */
+.login {
+  background: linear-gradient(160deg, #e7f9e7 0%, var(--body-bg) 60%);
+}
+.login #content {
+  padding: 32px 40px;
+}
+.login .submit-row {
+  border-top: none;
+  padding-top: 8px;
 }
 
 /* ============================================================
@@ -237,21 +292,26 @@ fieldset.module,
   background: #ffffff;
   box-shadow: 0 2px 14px -6px rgba(30, 58, 49, 0.1);
   padding: 20px;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.dash-stat:hover {
+  box-shadow: 0 8px 24px -8px rgba(30, 58, 49, 0.18);
+  transform: translateY(-1px);
 }
 .dash-stat-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 36px; height: 36px;
   border-radius: 10px;
-  font-size: 16px;
   margin-bottom: 14px;
 }
+.dash-stat-icon svg { width: 18px; height: 18px; }
 .dash-accent-brand { background: #e7f9e7; color: #3c5c3f; }
 .dash-accent-aqua  { background: #e6f1f1; color: #17394b; }
 .dash-accent-amber { background: rgba(181, 138, 46, 0.14); color: #b58a2e; }
 .dash-accent-rose  { background: rgba(176, 73, 43, 0.12); color: #b0492b; }
 
 .dash-stat-label { font-size: 12px; color: var(--body-quiet-color); margin: 0; }
-.dash-stat-value { font-size: 28px; font-weight: 700; color: var(--body-loud-color); margin: 4px 0 0; line-height: 1.1; }
+.dash-stat-value { font-size: 28px; font-weight: 700; color: var(--body-loud-color); margin: 4px 0 0; line-height: 1.1; letter-spacing: -0.01em; }
 .dash-stat-sub { font-size: 11px; color: var(--body-quiet-color); margin: 6px 0 0; }
 
 .dash-chip {
@@ -261,6 +321,7 @@ fieldset.module,
   border-radius: 999px;
   font-size: 11px; font-weight: 600;
 }
+.dash-chip svg { flex-shrink: 0; }
 .dash-chip-up   { background: #e7f9e7; color: #3c5c3f; }
 .dash-chip-down { background: rgba(176, 73, 43, 0.12); color: #b0492b; }
 
@@ -282,15 +343,31 @@ fieldset.module,
 }
 .dash-table td { padding: 9px 10px; border-bottom: 1px solid var(--hairline-color); color: var(--body-fg); }
 .dash-table tr:last-child td { border-bottom: none; }
+.dash-table tbody tr { transition: background 0.15s ease; }
+.dash-table tbody tr:hover { background: var(--darkened-bg); }
+
+.dash-user-cell { display: flex; align-items: center; gap: 8px; }
+.dash-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex-shrink: 0;
+  border-radius: 50%;
+  background: #e7f9e7; color: #3c5c3f;
+  font-size: 10px; font-weight: 700;
+}
 
 .dash-grade {
   display: inline-block;
   padding: 1px 6px;
   border-radius: 6px;
-  background: #e7f9e7;
-  color: #3c5c3f;
   font-size: 10.5px; font-weight: 700;
 }
+/* Colour-coded by grade letter — A/B read as good, C as caution, D as critical.
+   Previously every grade rendered in the same green, so a D looked identical
+   to an A+ at a glance. */
+.dash-grade-a { background: #e7f9e7; color: #3c5c3f; }
+.dash-grade-b { background: #e6f1f1; color: #17394b; }
+.dash-grade-c { background: rgba(181, 138, 46, 0.14); color: #b58a2e; }
+.dash-grade-d { background: rgba(176, 73, 43, 0.14); color: #b0492b; }
 
 .dash-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
 .dash-pill-brand { background: #e7f9e7; color: #3c5c3f; }

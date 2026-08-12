@@ -1,29 +1,38 @@
 {% load i18n %}
 <div class="dash-stat-grid">
   <div class="dash-card dash-stat">
-    <span class="dash-stat-icon dash-accent-brand">&#9733;</span>
+    <span class="dash-stat-icon dash-accent-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="1.5"/><rect x="9" y="2.5" width="6" height="3" rx="1"/><path d="M9 11h6M9 15h6"/></svg>
+    </span>
     <p class="dash-stat-label">{% translate 'Active surveys' %}</p>
     <p class="dash-stat-value">{{ active_surveys }}</p>
   </div>
 
   <div class="dash-card dash-stat">
-    <span class="dash-stat-icon dash-accent-aqua">&#9776;</span>
+    <span class="dash-stat-icon dash-accent-aqua">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13.5h4v6H3zM10 8h4v11.5h-4zM17 4h4v15.5h-4z"/></svg>
+    </span>
     <p class="dash-stat-label">{% translate 'Total attempts' %}</p>
     <p class="dash-stat-value">{{ total_attempts }}</p>
     <span class="dash-chip {% if week_trend >= 0 %}dash-chip-up{% else %}dash-chip-down{% endif %}">
-      {% if week_trend >= 0 %}&#9650;{% else %}&#9660;{% endif %} {{ week_trend }}% {% translate 'vs last week' %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px;{% if week_trend < 0 %}transform:rotate(180deg);{% endif %}"><path d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25"/></svg>
+      {{ week_trend }}% {% translate 'vs last week' %}
     </span>
   </div>
 
   <div class="dash-card dash-stat">
-    <span class="dash-stat-icon dash-accent-amber">&#10003;</span>
+    <span class="dash-stat-icon dash-accent-amber">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 11-5.3-7.86"/><path d="M22 4L12 14.5l-3-3"/></svg>
+    </span>
     <p class="dash-stat-label">{% translate 'Completion rate' %}</p>
     <p class="dash-stat-value">{{ completion_rate }}%</p>
     <p class="dash-stat-sub">{{ completed_attempts }} {% translate 'of' %} {{ total_attempts }} {% translate 'completed' %}</p>
   </div>
 
   <div class="dash-card dash-stat">
-    <span class="dash-stat-icon dash-accent-rose">&#128100;</span>
+    <span class="dash-stat-icon dash-accent-rose">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15 20c.3-2.6 2-4.6 4.5-5.2"/></svg>
+    </span>
     <p class="dash-stat-label">{% translate 'Registered users' %}</p>
     <p class="dash-stat-value">{{ total_users }}</p>
   </div>
@@ -45,9 +54,16 @@
       <tbody>
         {% for attempt in recent_attempts %}
         <tr>
-          <td>{{ attempt.user.username }}</td>
+          <td>
+            <div class="dash-user-cell">
+              <span class="dash-avatar">{{ attempt.user.username|slice:":1"|upper }}</span>
+              {{ attempt.user.username }}
+            </div>
+          </td>
           <td>{{ attempt.survey.name|default:"—" }}</td>
-          <td>{{ attempt.total_score }}{% if attempt.overall_grade %} <span class="dash-grade">{{ attempt.overall_grade }}</span>{% endif %}</td>
+          <td>
+            {{ attempt.total_score }}{% if attempt.overall_grade %} <span class="dash-grade dash-grade-{{ attempt.overall_grade|slice:':1'|lower }}">{{ attempt.overall_grade }}</span>{% endif %}
+          </td>
           <td>
             {% if attempt.is_completed %}
               <span class="dash-pill dash-pill-brand">{% translate 'Completed' %}</span>
