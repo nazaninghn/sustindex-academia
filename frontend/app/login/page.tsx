@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useLang } from '@/lib/i18n';
 import { beginOAuthState, consumeOAuthState, clearOAuthState } from '@/lib/oauth-state';
+import { takeSessionNotice } from '@/lib/session';
 import Logo from '@/components/Logo';
 import { Icon } from '@/components/shared';
 
@@ -47,10 +48,15 @@ export default function LoginPage() {
   }, []);
 
   const [formData, setFormData] = useState({ username: '', password: '' });
-  const [remember, setRemember] = useState(true);
   const [error,    setError]    = useState('');
   const [notice,   setNotice]   = useState('');      // neutral message (e.g. Google popup cancelled)
   const [loading,  setLoading]  = useState(false);
+  // One-time message when the previous session ended (12 h limit reached / no longer valid)
+  useEffect(() => {
+    const why = takeSessionNotice();
+    if (why) setNotice(t('login_session_ended'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [gLoading, setGLoading] = useState(false);
   // Set when Google's email matches an existing, unlinked SustIndex account: the user must
   // confirm with that account's password before anything is linked.
@@ -98,7 +104,7 @@ export default function LoginPage() {
     setError('');
     setLinking(true);
     try {
-      await linkGoogle(linkInfo.token, linkPw, remember);
+      await linkGoogle(linkInfo.token, linkPw);
       router.replace('/dashboard');
     } catch (err) {
       const code = (err as { response?: { data?: { code?: string } } }).response?.data?.code;
@@ -148,7 +154,7 @@ export default function LoginPage() {
             return;
           }
           try {
-            await loginWithGoogle(resp.code, remember);
+            await loginWithGoogle(resp.code);
             router.replace('/dashboard');
           } catch (err) {
             const e = err as { response?: { status?: number; data?: { code?: string; link_token?: string; email?: string } } };
@@ -186,7 +192,7 @@ export default function LoginPage() {
     // After 7 s still loading → server is waking from cold start, show notice
     const slowTimer = setTimeout(() => setSlowConn(true), 7000);
     try {
-      await login(formData.username, formData.password, remember);
+      await login(formData.username, formData.password);
       router.replace('/dashboard');
     } catch (err: unknown) {
       // L1: narrow err from unknown before property access.
@@ -390,21 +396,6 @@ export default function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
-
-            <label htmlFor="login-remember" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer',
-              margin: '4px 0 8px',
-            }}>
-              <input
-                id="login-remember"
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-                style={{ width: 14, height: 14, accentColor: 'var(--olive-deep)' }}
-              />
-              {t('login_remember')}
-            </label>
 
             <button
               className="btn btn-primary"

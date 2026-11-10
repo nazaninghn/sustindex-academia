@@ -334,13 +334,20 @@ if REST_FRAMEWORK_INSTALLED:
     # valid until expiry even after password change.  A short lifetime limits the
     # exposure window after a token is compromised or a password is changed.
     from datetime import timedelta
+    # Temporary sessions: a login is valid for at most this long IN TOTAL (absolute, not extended by activity).
+    # Enforced server-side in accounts/session_tokens.py and mirrored client-side (frontend/lib/token-storage.ts).
+    SESSION_MAX_LIFETIME = timedelta(hours=12)
+
     SIMPLE_JWT = {
         # 30 min access token — Render free tier cold starts eat into a 5-min token
         # before the user even reaches the questionnaire.
         'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-        'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-        'ROTATE_REFRESH_TOKENS': True,
-        'BLACKLIST_AFTER_ROTATION': True,
+        # The refresh token dies with the session (12 h after login). It is not rotated: rotation would give
+        # every refresh a new full lifetime (sliding window) and invalidates tokens shared by several tabs.
+        # Logout still blacklists it server-side.
+        'REFRESH_TOKEN_LIFETIME': SESSION_MAX_LIFETIME,
+        'ROTATE_REFRESH_TOKENS': False,
+        'BLACKLIST_AFTER_ROTATION': False,
     }
 
     # CORS Settings

@@ -7,6 +7,7 @@ from .throttles import LoginRateThrottle
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
+from accounts.session_tokens import issue_session_tokens
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
@@ -278,7 +279,7 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            refresh = RefreshToken.for_user(user)
+            refresh = issue_session_tokens(user)
             return Response({
                 'user': UserSerializer(user).data,
                 'access': str(refresh.access_token),
@@ -316,7 +317,7 @@ class GoogleLoginView(APIView):
             # for the 409 "link_required" case; nothing else is ever exposed.
             return Response({'detail': e.message, 'code': e.code, **e.extra}, status=e.http_status)
 
-        refresh = RefreshToken.for_user(user)
+        refresh = issue_session_tokens(user)
         return Response({
             'user': UserSerializer(user).data,
             'access': str(refresh.access_token),
@@ -348,7 +349,7 @@ class GoogleLinkView(APIView):
         except google_auth.GoogleAuthError as e:
             return Response({'detail': e.message, 'code': e.code}, status=e.http_status)
 
-        refresh = RefreshToken.for_user(user)
+        refresh = issue_session_tokens(user)
         return Response({
             'user': UserSerializer(user).data,
             'access': str(refresh.access_token),

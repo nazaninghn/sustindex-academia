@@ -382,6 +382,7 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
 
   /* Login extras */
   login_remember:      { en: 'Remember me',                  tr: 'Beni hatırla' },
+  login_session_ended: { en: 'Your session has ended. Please sign in again.', tr: 'Oturumunuz sona erdi. Lütfen tekrar giriş yapın.' },
   login_no_account:    { en: 'No account?',                  tr: 'Hesabınız yok mu?' },
   login_fail:          { en: 'Login failed. Please check your credentials.', tr: 'Giriş başarısız. Bilgilerinizi kontrol edin.' },
   login_submitting:    { en: 'Signing in…',                  tr: 'Giriş yapılıyor…' },

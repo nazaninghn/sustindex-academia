@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { getToken, setToken, clearTokens } from '@/lib/token-storage';
+import { getToken, setToken, clearTokens, isSessionExpired } from '@/lib/token-storage';
+import { expireSession } from '@/lib/session';
 import { isCredentialEndpoint } from '@/lib/auth-paths';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
@@ -13,6 +14,12 @@ const api = axios.create({
 // ── Request interceptor: attach token + lang ──────────────
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
+    // A session older than 12 h is over: do not even send the request, send the user to the login page.
+    if (!isCredentialEndpoint(config.url) && isSessionExpired()) {
+      expireSession('expired');
+      return Promise.reject(new axios.CanceledError('Session expired'));
+    }
+
     // Fix UPLOAD-01: when the request body is FormData, delete the instance-level
     // 'Content-Type: application/json' header so the browser/axios can set the
     // correct 'Content-Type: multipart/form-data; boundary=...' automatically.
@@ -79,7 +86,7 @@ api.interceptors.response.use(
       flushQueue(error, null);
       if (typeof window !== 'undefined') {
         clearTokens();
-        window.location.href = '/login';
+        window.location.replace('/login');        // replace(): no protected page left in the history stack
       }
       return Promise.reject(error);
     }
@@ -110,8 +117,10 @@ api.interceptors.response.use(
       return api(orig);
     } catch (err) {
       flushQueue(err, null);
-      clearTokens();
-      if (typeof window !== 'undefined') window.location.href = '/login';
+      // Only a definite answer from the server ends the session (refresh token expired / blacklisted / invalid /
+      // 12 h limit reached). A network failure or a 5xx while refreshing must NOT log the user out.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if ((status === 401 || status === 400 || status === 403) && typeof window !== 'undefined') expireSession('expired');
       return Promise.reject(err);
     } finally {
       isRefreshing = false;

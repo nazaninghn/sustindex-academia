@@ -18,3 +18,14 @@ export function isCredentialEndpoint(url?: string | null): boolean {
   return /^\/api\/v1\/auth\/token\/?$/.test(path)
       || /^\/api\/v1\/auth\/google\/(link\/)?$/.test(path);
 }
+
+/** Pages that require a signed-in user. Used by AuthGate (client) and mirrored in next.config.js (no-store headers). */
+export const PROTECTED_PREFIXES = [
+  '/dashboard', '/surveys', '/questionnaire', '/results', '/history',
+  '/action-plan', '/compare', '/courses', '/documents', '/profile', '/admin',
+];
+
+export function isProtectedPath(path: string | null | undefined): boolean {
+  if (!path) return false;
+  return PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(p + '/'));
+}

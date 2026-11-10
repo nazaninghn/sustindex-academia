@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { LangProvider } from '@/lib/i18n';
+import AuthGate from '@/components/AuthGate';
 
 export const metadata: Metadata = {
   title: 'Sustindex — Sustainability Performance Assessment',
@@ -21,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <LangProvider>
           <AuthProvider>
-            {children}
+            <AuthGate>{children}</AuthGate>
           </AuthProvider>
         </LangProvider>
       </body>

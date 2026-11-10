@@ -7,12 +7,18 @@ from rest_framework_simplejwt.views import (
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from accounts.api_views import UserViewSet, CompanyProfileViewSet, MembershipHistoryViewSet, GoogleLoginView, GoogleLinkView
 from accounts.throttles import LoginRateThrottle
+from accounts.session_tokens import SessionTokenObtainPairSerializer, SessionTokenRefreshSerializer
 
 
 # Subclass so we can attach our strict login-rate throttle without modifying
 # simplejwt's built-in view directly.
 class ThrottledTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [LoginRateThrottle]
+    serializer_class = SessionTokenObtainPairSerializer      # adds the absolute-session-start claim
+
+
+class SessionTokenRefreshView(TokenRefreshView):
+    serializer_class = SessionTokenRefreshSerializer          # enforces the 12 h absolute session cap
 from questionnaire.api_views import (
     SurveyViewSet, SurveySessionViewSet, CategoryViewSet,
     QuestionViewSet, QuestionnaireAttemptViewSet, AnswerViewSet, UserDocumentViewSet,
@@ -45,7 +51,7 @@ urlpatterns = [
     path('auth/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
     path('auth/google/link/', GoogleLinkView.as_view(), name='google_link'),
-    path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/token/refresh/', SessionTokenRefreshView.as_view(), name='token_refresh'),
     # Security fix: lets clients blacklist a refresh token server-side on logout,
     # preventing reuse for up to REFRESH_TOKEN_LIFETIME (7 days) after the user logs out.
     path('auth/token/blacklist/', TokenBlacklistView.as_view(), name='token_blacklist'),

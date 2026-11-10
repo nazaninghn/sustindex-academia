@@ -18,4 +18,13 @@ const nextConfig = {
   },
 }
 
+// Authenticated pages must never be served from the browser's HTTP cache or its back/forward cache,
+// so Back after logout / session expiry cannot reveal a stale private page.
+const PRIVATE = ['/dashboard', '/surveys', '/questionnaire', '/results', '/history', '/action-plan',
+                 '/compare', '/courses', '/documents', '/profile', '/admin'];
+nextConfig.headers = async () => PRIVATE.flatMap((p) => [p, `${p}/:path*`].map((source) => ({
+  source,
+  headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }],
+})));
+
 module.exports = nextConfig

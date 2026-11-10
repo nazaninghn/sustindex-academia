@@ -1,4 +1,5 @@
 'use client';
+import { clearTokens } from '@/lib/token-storage';
 
 // Fix M-9: Global error boundary for the Next.js App Router.
 // Catches rendering errors from any client component in the app — including
@@ -34,13 +35,8 @@ export default function GlobalError({
 
   const clearAndReload = () => {
     // Wipe tokens so a corrupt auth state doesn't re-trigger the crash
-    try {
-      for (const key of ['access_token', 'refresh_token']) {
-        localStorage.removeItem(key);
-        sessionStorage.removeItem(key);
-      }
-    } catch { /* ignore — storage may itself be unavailable */ }
-    window.location.href = '/login';
+    clearTokens();
+    window.location.replace('/login');
   };
 
   return (
