@@ -1,132 +1,248 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
+import './about.css';
 import SiteNav from '@/components/SiteNav';
 import SiteFooter from '@/components/SiteFooter';
 import { useLang } from '@/lib/i18n';
 import { Icon } from '@/components/shared';
 
-function CTABanner() {
-  const { t } = useLang();
+/* ------------------------------------------------------------------
+   About — an editorial company profile. Deliberately a different
+   composition from the landing page: square-edged, hairline running
+   headers, a distinct layout for every section, no photography.
+   Reveal motion is minimal: fades and drawn hairlines, triggered once
+   per section (immediately when reduced motion is on).
+   ------------------------------------------------------------------ */
+const d = (ms: number) => ({ '--d': `${ms}ms` } as React.CSSProperties);
+
+function useSeen<T extends HTMLElement>(threshold = 0.15, immediate = false) {
+  const ref = React.useRef<T>(null);
+  const [seen, setSeen] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (mq.matches || typeof IntersectionObserver === 'undefined') { setSeen(true); return; }
+    if (immediate) { const id = requestAnimationFrame(() => setSeen(true)); return () => cancelAnimationFrame(id); }
+    let io: IntersectionObserver | null = null;
+    if (ref.current) {
+      io = new IntersectionObserver((es) => {
+        if (es.some((e) => e.isIntersecting)) { setSeen(true); io?.disconnect(); }
+      }, { threshold, rootMargin: '0px 0px -8% 0px' });
+      io.observe(ref.current);
+    }
+    return () => io?.disconnect();
+  }, [threshold, immediate]);
+  return [ref, seen] as const;
+}
+
+/* Magazine-style running header: hairline, section number + name on the left, a quiet tag on the right. */
+function Run({ n, label, right }: { n: string; label: string; right?: string }) {
   return (
-    <section style={{ padding: '40px 0 96px', background: 'var(--cream-deep)' }}>
-      <div className="wrap" style={{ textAlign: 'center' }}>
-        <h2 style={{ fontSize: 32, marginBottom: 14, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
-          {t('cta_short')}
-        </h2>
-        <p style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 440, margin: '0 auto 28px' }}>
-          {t('cta_desc_short')}
-        </p>
-        <div style={{ display: 'inline-flex', gap: 10 }}>
-          <Link href="/register" style={{ textDecoration: 'none' }}>
-            <button className="btn btn-primary btn-lg">{t('hero_cta_main')} <Icon.arrow /></button>
-          </Link>
-          <Link href="/login" style={{ textDecoration: 'none' }}>
-            <button className="btn btn-outline btn-lg">{t('nav_signin')}</button>
-          </Link>
+    <header className="ab-run" data-ab="fade" style={d(0)}>
+      <span><i>{n}</i>{label}</span>
+      {right ? <span className="ab-run-r">{right}</span> : null}
+    </header>
+  );
+}
+
+/* Split a paragraph at its first sentence so the intro and the story can share the same source text. */
+function splitFirst(text: string): [string, string] {
+  const i = text.indexOf('. ');
+  return i === -1 ? [text, ''] : [text.slice(0, i + 1), text.slice(i + 2)];
+}
+
+const NOSCRIPT = `.ab [data-ab]{opacity:1!important;transform:none!important;animation:none!important}.ab .ab-run::before,.ab .ab-flow li::before,.ab .ab-rows li::before{transform:none!important}`;
+
+/* ------------------------------------------------------------------ */
+
+function Intro() {
+  const { t } = useLang();
+  const [ref, seen] = useSeen<HTMLElement>(0.1, true);
+  const [first] = splitFirst(t('about_desc'));
+  return (
+    <section ref={ref} className={`ab-sec ab-r ab-intro${seen ? ' ab-in' : ''}`}>
+      <div className="wrap">
+        <Run n="00" label={t('ab_pill')} right={t('ab_seal')} />
+        <div className="ab-intro-grid">
+          <span className="ab-guides" aria-hidden="true" />
+          <h1 className="ab-title">
+            <span data-ab="fade" style={d(150)}>{t('ab_h1a')}</span>{' '}
+            <span className="ab-title-2" data-ab="fade" style={d(330)}>{t('ab_h1b')}</span>
+          </h1>
+          <p className="ab-lead" data-ab="fade" style={d(600)}>{first}</p>
         </div>
       </div>
     </section>
   );
 }
 
-export default function AboutPage() {
-  const { t, lang } = useLang();
+function Story() {
+  const { t } = useLang();
+  const [ref, seen] = useSeen<HTMLElement>(0.2);
+  const [, rest] = splitFirst(t('about_desc'));
+  const quote = `${t('about_title_1')} ${t('about_title_2')} ${t('about_title_3')}`;
+  return (
+    <section ref={ref} id="story" className={`ab-r ab-story${seen ? ' ab-in' : ''}`}>
+      <div className="wrap">
+        <Run n="01" label={t('ab_story')} />
+        <div className="ab-story-grid">
+          <blockquote className="ab-quote" data-ab="fade" style={d(150)}>
+            <span className="ab-qm" aria-hidden="true">“</span>
+            {quote}
+          </blockquote>
+          <div className="ab-story-side">
+            <p data-ab="fade" style={d(350)}>{rest}</p>
+            <dl className="ab-parent" data-ab="fade" style={d(500)}>
+              <dt>{t('about_parent')}</dt>
+              <dd>Academia Danışmanlık</dd>
+              <dd>
+                <a href="https://academiadanismanlik.com" target="_blank" rel="noopener noreferrer" className="ab-link">
+                  {t('ab_visit')} <Icon.external />
+                </a>
+              </dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-  const offers = [
+function Mission() {
+  const { t } = useLang();
+  const [ref, seen] = useSeen<HTMLElement>(0.2);
+  const trio = [t('ab_m1'), t('ab_m2'), t('ab_m3')];
+  return (
+    <section ref={ref} id="mission" className={`ab-sec ab-r ab-mission${seen ? ' ab-in' : ''}`}>
+      <div className="wrap">
+        <Run n="02" label={t('ab_mission_s')} />
+        <h2 className="ab-statement" data-ab="fade" style={d(150)}>{t('about_mission_h')}</h2>
+        <ol className="ab-trio" aria-hidden="true">
+          {trio.map((w, i) => (
+            <li key={i} className={`ab-trio-${i + 1}`} data-ab="fade" style={d(450 + i * 160)}>{w}</li>
+          ))}
+        </ol>
+        <div className="ab-mission-grid">
+          <p className="ab-mission-p" data-ab="fade" style={d(900)}>{t('about_mission_d')}</p>
+          <div className="ab-std" data-ab="fade" style={d(1050)}>
+            <span>{t('ab_std')}</span>
+            <ul>
+              {['GRI', 'SASB', 'UN SDGs', 'ISO 26000'].map((s) => (<li key={s}>{s}</li>))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WhatWeDo() {
+  const { t } = useLang();
+  const [ref, seen] = useSeen<HTMLElement>(0.1);
+  const rows = [
     [t('about_o_1_t'), t('about_o_1_d')],
     [t('about_o_2_t'), t('about_o_2_d')],
     [t('about_o_3_t'), t('about_o_3_d')],
     [t('about_o_4_t'), t('about_o_4_d')],
-  ] as [string, string][];
-
+  ];
   return (
-    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+    <section ref={ref} id="what" className={`ab-sec ab-r ab-what${seen ? ' ab-in' : ''}`}>
+      <div className="wrap">
+        <Run n="03" label={t('ab_do')} />
+        <h2 className="ab-h2" data-ab="fade" style={d(120)}>{t('ab_do_h')}</h2>
+        <ol className="ab-rows">
+          {rows.map(([h, p], i) => (
+            <li key={i} data-ab="fade" style={d(300 + i * 130)}>
+              <span className="ab-rows-n">0{i + 1}</span>
+              <h3>{h}</h3>
+              <p>{p}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function Approach() {
+  const { t } = useLang();
+  const [ref, seen] = useSeen<HTMLElement>(0.12);
+  const nodes: [string, string, string | null][] = [
+    [t('hx5_s1_t'), t('hx5_s1_d'), t('ab_ph1')],
+    [t('hx5_gri_t'), t('hx5_gri_d'), null],
+    [t('hx5_s2_t'), t('hx5_s2_d'), t('ab_ph2')],
+    [t('hx5_ins_t'), t('hx5_ins_d'), null],
+    [t('hx5_s3_t'), t('hx5_s3_d'), t('ab_ph3')],
+  ];
+  return (
+    <section ref={ref} id="approach" className={`ab-sec ab-r ab-approach${seen ? ' ab-in' : ''}`}>
+      <div className="wrap">
+        <Run n="04" label={t('ab_app')} />
+        <h2 className="ab-h2" data-ab="fade" style={d(120)}>{t('ab_app_h')}</h2>
+
+        <div className="ab-phases" aria-hidden="true" data-ab="fade" style={d(350)}>
+          <span className="ab-phase ab-phase-1">{t('ab_ph1')}</span>
+          <span className="ab-phase ab-phase-2">{t('ab_ph2')}</span>
+          <span className="ab-phase ab-phase-3">{t('ab_ph3')}</span>
+        </div>
+
+        <ol className="ab-flow">
+          {nodes.map(([h, p, ph], i) => (
+            <li key={i} data-ab="fade" style={d(450 + i * 170)}>
+              {ph ? <span className="ab-ph">{ph}</span> : null}
+              <span className="ab-fn">0{i + 1}</span>
+              <h3>{h}</h3>
+              <p>{p}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function Values() {
+  const { t } = useLang();
+  const [ref, seen] = useSeen<HTMLElement>(0.15);
+  const vals = [
+    [t('ab_v1_t'), t('ab_v1_d')],
+    [t('ab_v2_t'), t('ab_v2_d')],
+    [t('ab_v3_t'), t('ab_v3_d')],
+    [t('ab_v4_t'), t('ab_v4_d')],
+  ];
+  return (
+    <section ref={ref} id="values" className={`ab-sec ab-r ab-values${seen ? ' ab-in' : ''}`}>
+      <div className="wrap">
+        <Run n="05" label={t('ab_val')} />
+        <h2 className="ab-h2" data-ab="fade" style={d(120)}>{t('ab_val_h')}</h2>
+        <ul className="ab-vals">
+          {vals.map(([h, p], i) => (
+            <li key={i} data-ab="fade" style={d(300 + i * 130)}>
+              <span className="ab-vals-n">0{i + 1}</span>
+              <h3>{h}</h3>
+              <p>{p}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+export default function AboutPage() {
+  return (
+    <div className="ab" style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <noscript><style>{NOSCRIPT}</style></noscript>
       <SiteNav />
-
-      {/* Hero section */}
-      <section style={{ padding: '72px 0 56px', borderBottom: '1px solid var(--ink)' }}>
-        <div className="wrap-narrow">
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>·</span>
-            <span className="eyebrow">{t('about_eye')}</span>
-          </div>
-          <h1 style={{ fontSize: 48, marginBottom: 24, maxWidth: 760, lineHeight: 1.05 }}>
-            {t('about_title_1')}{' '}
-            <em style={{ fontWeight: 500, color: 'var(--olive-deep)' }}>{t('about_title_2')}</em>{' '}
-            {t('about_title_3')}
-          </h1>
-          <p style={{ fontSize: 15, color: 'var(--ink-2)', maxWidth: 600, lineHeight: 1.6 }}>
-            {t('about_desc')}
-          </p>
-        </div>
-      </section>
-
-      {/* Mission */}
-      <section style={{ padding: '72px 0' }}>
-        <div className="wrap" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 64 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>01</span>
-            <span className="eyebrow">{t('about_mission')}</span>
-          </div>
-          <div>
-            <h2 style={{ fontSize: 28, marginBottom: 18, lineHeight: 1.2 }}>{t('about_mission_h')}</h2>
-            <p style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.7 }}>{t('about_mission_d')}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* What we offer */}
-      <section style={{ padding: '0 0 72px' }}>
-        <div className="wrap" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 64 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>02</span>
-            <span className="eyebrow">{t('about_offer')}</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--ink)' }}>
-            {offers.map(([h, d], i) => (
-              <div key={i} style={{ padding: '24px 0', borderBottom: '1px solid var(--line)', display: 'grid', gridTemplateColumns: '36px 1fr', gap: 20 }}>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>0{i + 1}</span>
-                <div>
-                  <h3 style={{ fontSize: 18, marginBottom: 6 }}>{h}</h3>
-                  <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, maxWidth: 600 }}>{d}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Contact */}
-      <section style={{ padding: '0 0 72px' }}>
-        <div className="wrap" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 64 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>03</span>
-            <span className="eyebrow">{t('about_contact')}</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 28, borderTop: '1px solid var(--ink)', paddingTop: 24 }}>
-            <div>
-              <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_address')}</span>
-              <p style={{ fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{t('about_address_v')}</p>
-            </div>
-            <div>
-              <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_phone')}</span>
-              <p style={{ fontSize: 12.5, marginBottom: 14 }}>+90 212 613 58 80</p>
-              <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_fax')}</span>
-              <p style={{ fontSize: 12.5 }}>+90 212 322 04 11</p>
-            </div>
-            <div>
-              <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('about_parent')}</span>
-              <p style={{ fontSize: 12.5, marginBottom: 14 }}>Academia Danışmanlık</p>
-              <a href="https://academiadanismanlik.com" target="_blank" rel="noopener noreferrer" className="ulink" style={{ fontSize: 12 }}>
-                academiadanismanlik.com <Icon.external />
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <CTABanner />
+      <main>
+        <Intro />
+        <Story />
+        <Mission />
+        <WhatWeDo />
+        <Approach />
+        <Values />
+      </main>
       <SiteFooter />
     </div>
   );

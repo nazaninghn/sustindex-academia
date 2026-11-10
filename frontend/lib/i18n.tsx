@@ -400,6 +400,37 @@ const TRANSLATIONS: Record<string, { en: string; tr: string }> = {
   about_fax:    { en: 'Fax',          tr: 'Faks' },
   about_parent: { en: 'Parent company', tr: 'Ana şirket' },
 
+  /* About page redesign (ab_*) — all facts reused from the existing About copy */
+  ab_pill:     { en: 'About SustIndex', tr: 'SustIndex Hakkında' },
+  ab_h1a:      { en: 'Sustainability assessment,', tr: 'Sürdürülebilirlik değerlendirmesi,' },
+  ab_h1b:      { en: 'structured and measurable.', tr: 'yapılandırılmış ve ölçülebilir.' },
+  ab_seal:     { en: 'by Academia Consulting', tr: 'Academia Danışmanlık' },
+  ab_m1:       { en: 'Measure', tr: 'Ölçün' },
+  ab_m2:       { en: 'Understand', tr: 'Anlayın' },
+  ab_m3:       { en: 'Improve', tr: 'İyileştirin' },
+  ab_s_intro:  { en: 'Introduction', tr: 'Giriş' },
+  ab_story:    { en: 'Our story', tr: 'Hikayemiz' },
+  ab_mission_s:{ en: 'Our mission', tr: 'Misyonumuz' },
+  ab_std:      { en: 'Built on international standards', tr: 'Uluslararası standartlara dayalı' },
+  ab_do:       { en: 'What we do', tr: 'Neler yapıyoruz' },
+  ab_do_h:     { en: 'Four capabilities, one structured workflow.', tr: 'Dört yetkinlik, tek bir yapılandırılmış iş akışı.' },
+  ab_app:      { en: 'Our approach', tr: 'Yaklaşımımız' },
+  ab_app_h:    { en: 'From questionnaire to structured report.', tr: 'Anketten yapılandırılmış rapora.' },
+  ab_ph1:      { en: 'Answer', tr: 'Yanıtlayın' },
+  ab_ph2:      { en: 'Understand', tr: 'Anlayın' },
+  ab_ph3:      { en: 'Act', tr: 'Harekete geçin' },
+  ab_val:      { en: 'Our values', tr: 'Değerlerimiz' },
+  ab_val_h:    { en: 'The principles behind SustIndex.', tr: "SustIndex'in ardındaki ilkeler." },
+  ab_v1_t:     { en: 'Grounded in standards', tr: 'Standartlara dayalı' },
+  ab_v1_d:     { en: 'Assessments are based on international standards — GRI, SASB, UN SDGs and ISO 26000.', tr: 'Değerlendirmeler uluslararası standartlara dayanır: GRI, SASB, BM SKA ve ISO 26000.' },
+  ab_v2_t:     { en: 'Respectful of your time', tr: 'Zamanınıza saygılı' },
+  ab_v2_d:     { en: 'A workflow that respects the time of the people doing the work, asking only the questions that are relevant.', tr: 'İşi yapanların zamanına saygı duyan bir iş akışı; yalnızca ilgili sorular sorulur.' },
+  ab_v3_t:     { en: 'Clear and measurable', tr: 'Açık ve ölçülebilir' },
+  ab_v3_d:     { en: 'Instant scoring with an E/S/G breakdown and a letter grade, so performance is easy to understand.', tr: 'E/S/G dağılımı ve harf notuyla anlık puanlama; performansı anlamak kolaylaşır.' },
+  ab_v4_t:     { en: 'Built to act on', tr: 'Eyleme dönük' },
+  ab_v4_d:     { en: 'Prioritized, GRI-aligned recommendations to close your gaps.', tr: 'Boşlukları kapatmak için önceliklendirilmiş, GRI uyumlu öneriler.' },
+  ab_visit:    { en: 'Visit Academia Consulting', tr: "Academia Danışmanlık'ı ziyaret edin" },
+
   /* Profile */
   // Fix R4-L-04: client-side email validation message
   profile_email_invalid: {
