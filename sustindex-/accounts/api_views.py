@@ -2,6 +2,8 @@ import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from .throttles import LoginRateThrottle
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -283,6 +285,76 @@ class UserViewSet(viewsets.ModelViewSet):
                 'refresh': str(refresh),
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GoogleLoginView(APIView):
+    """
+    POST /api/v1/auth/google/   body: {"code": "<authorization code from Google popup>"}
+
+    Exchanges the code server-side, then signs the user in (creating or linking the
+    SustIndex account as needed) and returns the same JWT pair as the password login.
+    """
+    # No cookie/session auth on this endpoint: it is JWT-based and takes no ambient
+    # credentials, so classic cookie CSRF does not apply (login-CSRF is handled by the
+    # OAuth `state` check in the browser).  An expired Bearer token must not break sign-in.
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [LoginRateThrottle]   # same 5/min per-IP bucket as password login
+
+    def post(self, request):
+        from . import google_auth
+        body = request.data if isinstance(request.data, dict) else {}
+        code = body.get('code')
+        if not code or not isinstance(code, str):
+            return Response({'detail': 'Missing authorization code.', 'code': 'missing_code'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            claims = google_auth.exchange_code(code)
+            user, created = google_auth.get_or_create_user(claims)
+        except google_auth.GoogleAuthError as e:
+            # `extra` carries only the user's own Google email + a signed link token
+            # for the 409 "link_required" case; nothing else is ever exposed.
+            return Response({'detail': e.message, 'code': e.code, **e.extra}, status=e.http_status)
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'created': created,
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class GoogleLinkView(APIView):
+    """
+    POST /api/v1/auth/google/link/
+    body: {"link_token": "...", "password": "<existing SustIndex password>", "confirm": true}
+
+    Completes a "link_required" sign-in: the user proves they own the existing
+    SustIndex account with its password and explicitly confirms the link.
+    Wrong passwords return HTTP 400 (not 401) so the SPA's 401 refresh/redirect
+    interceptor is not triggered.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [LoginRateThrottle]   # shared bucket: this is a password-guessing surface too
+
+    def post(self, request):
+        from . import google_auth
+        body = request.data if isinstance(request.data, dict) else {}
+        try:
+            user = google_auth.link_with_password(
+                body.get('link_token'), body.get('password'), body.get('confirm'))
+        except google_auth.GoogleAuthError as e:
+            return Response({'detail': e.message, 'code': e.code}, status=e.http_status)
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'linked': True,
+        }, status=status.HTTP_200_OK)
 
 
 class CompanyProfileViewSet(viewsets.ModelViewSet):

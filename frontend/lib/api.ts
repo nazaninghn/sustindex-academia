@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getToken, setToken, clearTokens } from '@/lib/token-storage';
+import { isCredentialEndpoint } from '@/lib/auth-paths';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -63,7 +64,10 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const orig = error.config;
-    if (error.response?.status !== 401 || orig._retry) {
+    // A 401 from the login / Google credential endpoints means "wrong credentials": hand it
+    // straight to the caller so the login page can show the error. Refreshing a session that
+    // doesn't exist (and redirecting to /login) would reload the page and wipe the message.
+    if (error.response?.status !== 401 || orig._retry || isCredentialEndpoint(orig?.url)) {
       return Promise.reject(error);
     }
 

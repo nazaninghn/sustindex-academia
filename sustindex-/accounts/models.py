@@ -29,6 +29,25 @@ class User(AbstractUser):
         return f"{self.username} - {self.get_membership_type_display()}"
 
 
+class GoogleIdentity(models.Model):
+    """Links a SustIndex user to a Google account via Google's stable `sub` claim.
+
+    Keyed on the immutable `sub` rather than the email address, so a later email
+    change on either side cannot silently re-point the login.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='google_identities', verbose_name=_('User'))
+    sub = models.CharField(max_length=64, unique=True, verbose_name=_('Google subject ID'))
+    email = models.EmailField(blank=True, verbose_name=_('Google email'))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Linked at'))
+
+    class Meta:
+        verbose_name = _('Google identity')
+        verbose_name_plural = _('Google identities')
+
+    def __str__(self):
+        return f"Google:{self.sub} -> user #{self.user_id}"
+
+
 class CompanyProfile(models.Model):
     """Company profile with additional information"""
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name=_('User'))

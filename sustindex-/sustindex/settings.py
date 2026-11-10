@@ -391,6 +391,12 @@ DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@sustindex.co
 # URL of the Next.js frontend — used in password-reset emails.
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
+# ── Google sign-in (OAuth 2.0 authorization-code flow, popup) ──────────────
+# Create an "OAuth client ID" of type "Web application" in Google Cloud Console.
+# The secret is read from the environment only and is never sent to the browser.
+GOOGLE_OAUTH_CLIENT_ID     = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '')
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '')
+
 # ── CSRF trusted origins ───────────────────────────────────────────────────
 # Fix R5-L-07: Django 4.x requires CSRF_TRUSTED_ORIGINS when the app runs
 # behind a reverse proxy (Render, nginx) — without it, POST/PATCH/DELETE

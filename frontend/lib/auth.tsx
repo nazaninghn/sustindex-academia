@@ -33,6 +33,10 @@ interface AuthContextType {
   /** @param remember  true = localStorage (persistent), false = sessionStorage (tab-scoped) */
   login:        (username: string, password: string, remember?: boolean) => Promise<void>;
   register:     (data: RegisterPayload) => Promise<void>;
+  /** Exchange a Google OAuth authorization code (from the popup) for a SustIndex session. */
+  loginWithGoogle: (code: string, remember?: boolean) => Promise<void>;
+  /** Finish linking Google to an EXISTING account after the user proves ownership with its password. */
+  linkGoogle: (linkToken: string, password: string, remember?: boolean) => Promise<void>;
   logout:       () => void;
   refreshUser:  () => Promise<void>;
 }
@@ -91,6 +95,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
   };
 
+  const loginWithGoogle = async (code: string, remember = true) => {
+    clearTokens();  // same stale-token reasoning as login()
+    const { data: res } = await api.post('/api/v1/auth/google/', { code });
+    storeTokens(res.access, res.refresh, remember);
+    const { data: userData } = await me();
+    setUser(userData);
+  };
+
+  const linkGoogle = async (linkToken: string, password: string, remember = true) => {
+    clearTokens();
+    // confirm:true is the explicit user confirmation required by the backend.
+    const { data: res } = await api.post('/api/v1/auth/google/link/', { link_token: linkToken, password, confirm: true });
+    storeTokens(res.access, res.refresh, remember);
+    const { data: userData } = await me();
+    setUser(userData);
+  };
+
   const register = async (data: RegisterPayload) => {
     // Fix: clear any stale/expired tokens before the call.
     // The api interceptor adds Authorization: Bearer <token> to every request;
@@ -125,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogle, linkGoogle, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

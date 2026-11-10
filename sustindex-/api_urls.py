@@ -5,7 +5,7 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView, TokenRefreshView, TokenBlacklistView,
 )
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from accounts.api_views import UserViewSet, CompanyProfileViewSet, MembershipHistoryViewSet
+from accounts.api_views import UserViewSet, CompanyProfileViewSet, MembershipHistoryViewSet, GoogleLoginView, GoogleLinkView
 from accounts.throttles import LoginRateThrottle
 
 
@@ -43,6 +43,8 @@ router.register(r'lesson-progress', LessonProgressViewSet, basename='lessonprogr
 
 urlpatterns = [
     path('auth/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
+    path('auth/google/link/', GoogleLinkView.as_view(), name='google_link'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # Security fix: lets clients blacklist a refresh token server-side on logout,
     # preventing reuse for up to REFRESH_TOKEN_LIFETIME (7 days) after the user logs out.
