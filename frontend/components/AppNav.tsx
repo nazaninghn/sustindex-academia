@@ -105,7 +105,7 @@ export default function AppNav() {
       {/* ── Top bar ── */}
       <div className="wrap" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 32px', height: 57,
+        padding: '0 32px', height: 48,
       }}>
 
         {/* Left: logo + separator + nav links (desktop) */}
@@ -114,7 +114,7 @@ export default function AppNav() {
               should stay inside the app instead of exiting to the marketing
               landing page — logging out is the only way out, via the button. */}
           <Link href="/dashboard" style={{ textDecoration: 'none', flexShrink: 0 }}>
-            <Logo size={24} />
+            <Logo size={22} />
           </Link>
           <span className="appnav-separator" style={{ width: 1, height: 22, background: 'var(--line)', flexShrink: 0 }} />
           <nav className="appnav-links" style={{ display: 'flex', gap: 2 }}>
@@ -139,7 +139,7 @@ export default function AppNav() {
           <div style={{ width: 1, height: 22, background: 'var(--line)', flexShrink: 0 }} />
           <Link href="/profile" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 28, height: 28, borderRadius: '50%',
+              width: 26, height: 26, borderRadius: '50%',
               background: 'var(--olive)', color: 'var(--ink)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 11,
@@ -233,7 +233,7 @@ export default function AppNav() {
       {/* ── Mobile drawer ── */}
       {open && (
         <div ref={drawerRef} id="mobile-nav-drawer" style={{
-          position: 'fixed', top: 57, left: 0, right: 0, bottom: 0,
+          position: 'fixed', top: 48, left: 0, right: 0, bottom: 0,
           background: 'var(--cream)', zIndex: 51, /* Fix L-16: must exceed header z-index:50 */
           display: 'flex', flexDirection: 'column',
           padding: '0 24px 32px',
@@ -309,7 +309,7 @@ export default function AppNav() {
 
       {/* Responsive CSS */}
       <style>{`
-        @media (max-width: 760px) {
+        @media (max-width: 960px) {
           .appnav-links           { display: none !important; }
           .appnav-separator       { display: none !important; }
           .appnav-user            { display: none !important; }
