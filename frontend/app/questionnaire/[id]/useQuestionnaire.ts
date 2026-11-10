@@ -11,7 +11,7 @@ import { attemptAPI } from '@/lib/api';
 import { emitDataChange } from '@/lib/events';
 import logger from '@/lib/logger';
 import { GRI_PHASE_DEFS, loc, cleanQuestionText } from '@/components/questionnaire/utils';
-import type { Question, GriPhase, PhaseBoundary } from '@/components/questionnaire/types';
+import type { Question, GriPhase, PhaseBoundary, ChapterInfo } from '@/components/questionnaire/types';
 
 // ─── Gate / Conditional navigation helpers ─────────────────────────────────
 
@@ -755,6 +755,39 @@ export function useQuestionnaire() {
     }
   };
 
+  /** Read-only chapter overview for the navigation rail: visible questions grouped by
+   *  category (in questionnaire order) with answered counts. Pure derivation — it does
+   *  not alter answers, visibility rules, scoring or navigation. */
+  const chapters = useMemo<ChapterInfo[]>(() => {
+    const out: ChapterInfo[] = [];
+    const byName = new Map<string, ChapterInfo>();
+    questions.forEach((qItem, i) => {
+      if (!isQuestionVisible(qItem, answers, questions)) return;
+      const key = qItem.category_name;
+      let ch = byName.get(key);
+      if (!ch) {
+        const phase = GRI_PHASE_DEFS.find(({ match }) => key?.includes(match));
+        ch = {
+          key,
+          label: (lang === 'tr' ? qItem.category_name_tr : qItem.category_name_en) || key,
+          phaseNum: phase?.num ?? 0,   // 0 = not part of a GRI phase (no phase grouping / locking)
+          firstIdx: i, firstOpenIdx: -1, total: 0, answered: 0, idxs: [],
+        };
+        byName.set(key, ch);
+        out.push(ch);
+      }
+      const done = !!naAnswers[qItem.id] ||
+        (answers[qItem.id] ?? []).length > 0 ||
+        (textAnswers[qItem.id] ?? '').trim().length > 0 ||
+        (numericalAnswers[qItem.id] ?? '').trim().length > 0;
+      ch.total += 1;
+      ch.idxs.push(i);
+      if (done) ch.answered += 1;
+      else if (ch.firstOpenIdx < 0) ch.firstOpenIdx = i;
+    });
+    return out;
+  }, [questions, answers, textAnswers, numericalAnswers, naAnswers, lang]);
+
   /** Navigate to dashboard (used by the "Exit Anyway" button in the error banner) */
   const navigateToDashboard = () => router.push('/dashboard');
 
@@ -812,6 +845,7 @@ export function useQuestionnaire() {
     currentPhase,
     phaseBoundaries,
     unlockedUpToPhase,
+    chapters,
     /* handlers */
     toggleChoice,
     toggleNA,

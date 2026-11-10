@@ -56,3 +56,18 @@ export interface PhaseBoundary {
   end: number;
   qIds: number[];
 }
+
+/** One questionnaire chapter (category) for the navigation rail. */
+export interface ChapterInfo {
+  key: string;
+  label: string;
+  phaseNum: number;
+  /** index (into the full questions array) of the chapter's first visible question */
+  firstIdx: number;
+  /** index of the first unanswered visible question, or -1 when the chapter is complete */
+  firstOpenIdx: number;
+  total: number;
+  answered: number;
+  /** indexes (into the full questions array) of the chapter's visible questions, in order */
+  idxs: number[];
+}

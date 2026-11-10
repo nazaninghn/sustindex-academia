@@ -1,15 +1,18 @@
 'use client';
-/* CO-2: Question navigation bar.
-   Renders: inline error alert, Previous button, dot progress navigator,
-   and Next / Finish button.                                            */
+/* CO-2: Question navigation bar (sticky at the bottom of the question column).
+   Renders: inline error alert, Previous button, numbered question chips for the
+   current chapter, an optional "Next flagged" jump, and Next / Finish button.     */
 
 import { Icon } from '@/components/shared';
 import { GRI_PHASE_DEFS } from './utils';
 import type { Question } from './types';
+import './questionnaire.css';
 
 interface Props {
   questions: Question[];
   currentIdx: number;
+  /** Indexes (into `questions`) of the current chapter's visible questions — shown as chips. */
+  chapterIdxs: number[];
   answers: Record<number, number[]>;
   textAnswers: Record<number, string>;
   bookmarks?: Record<number, boolean>;
@@ -32,6 +35,7 @@ interface Props {
 export function QuestionNav({
   questions,
   currentIdx,
+  chapterIdxs,
   answers,
   textAnswers,
   bookmarks = {},
@@ -50,23 +54,14 @@ export function QuestionNav({
 }: Props) {
   const bookmarkedCount = Object.values(bookmarks).filter(Boolean).length;
   return (
-    <>
+    <div className="qx-nav">
       {/* Inline error — Fix A-2: role="alert" so AT announces it immediately */}
-      {error && (
-        <p role="alert" style={{
-          fontSize: 12, color: 'var(--danger)', marginBottom: 16,
-          fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.02em',
-        }}>
-          {error}
-        </p>
-      )}
+      {error && <p role="alert" className="qx-nav-error">{error}</p>}
 
-      {/* Navigation row */}
-      <div className="q-nav-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
-
+      <div className="qx-nav-row q-nav-row">
         {/* Previous */}
         <button
-          className="btn btn-outline"
+          className="btn btn-outline qx-nav-btn"
           onClick={onPrev}
           disabled={isFirst}
           style={{ opacity: isFirst ? 0.3 : 1 }}
@@ -74,49 +69,48 @@ export function QuestionNav({
           {lang === 'tr' ? '← Önceki' : '← Previous'}
         </button>
 
-        {/* Dot progress */}
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', maxWidth: 400, justifyContent: 'center' }}>
-          {questions.map((qItem, i) => {
+        {/* Question chips for the current chapter */}
+        <div className="qx-chips" role="group" aria-label={lang === 'tr' ? 'Bölümdeki sorular' : 'Questions in this chapter'}>
+          {chapterIdxs.map((i, n) => {
+            const qItem        = questions[i];
+            if (!qItem) return null;
             const dotPhaseNum  = GRI_PHASE_DEFS.find(({ match }) => qItem.category_name?.includes(match))?.num ?? 1;
             const isLocked     = dotPhaseNum > unlockedUpToPhase;
             const isAnswered   = naAnswers[qItem.id] || (answers[qItem.id] ?? []).length > 0 || (textAnswers[qItem.id] ?? '').trim().length > 0;
             const isBookmarked = bookmarks[qItem.id] ?? false;
+            const isCurrent    = i === currentIdx;
             return (
               <span
                 key={qItem.id}
                 role={isLocked ? undefined : 'button'}
                 tabIndex={isLocked ? -1 : 0}
+                aria-disabled={isLocked ? 'true' : undefined}
                 aria-label={`Question ${i + 1}${isAnswered ? ' (answered)' : ''}${isLocked ? ' (locked)' : ''}${isBookmarked ? ' (flagged)' : ''}`}
-                aria-current={i === currentIdx ? 'step' : undefined}
+                aria-current={isCurrent ? 'step' : undefined}
                 onClick={() => { if (!isLocked) onJumpTo(i); }}
                 onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onJumpTo(i); } }}
                 title={`Q${i + 1}${isBookmarked ? ' 🔖' : ''}`}
-                style={{
-                  width:  i === currentIdx ? 18 : 5, height: 5,
-                  background: isLocked
-                    ? 'var(--line)'
-                    : isAnswered
-                      ? 'var(--olive-deep)'
-                      : i === currentIdx ? 'var(--ink)' : 'var(--line)',
-                  borderRadius: 3, transition: 'all 0.2s ease',
-                  cursor: isLocked ? 'default' : 'pointer',
-                  outline: 'none', opacity: isLocked ? 0.35 : 1,
-                  // Amber glow on bookmarked dots
-                  boxShadow: isBookmarked ? '0 0 0 2px var(--amber)' : undefined,
-                }}
-                onFocus={(e) => { if (!isLocked) e.currentTarget.style.boxShadow = isBookmarked ? '0 0 0 2px var(--amber), 0 0 0 3px var(--olive)' : '0 0 0 2px var(--olive)'; }}
-                onBlur={(e)  => { e.currentTarget.style.boxShadow = isBookmarked ? '0 0 0 2px var(--amber)' : 'none'; }}
-              />
+                className={`qx-chip${isCurrent ? ' is-current' : isAnswered ? ' is-answered' : ''}${isBookmarked ? ' is-flagged' : ''}`}
+              >
+                {n + 1}
+              </span>
             );
           })}
         </div>
 
+        {/* Next-flagged jump — shown only when ≥1 question is bookmarked */}
+        {onJumpToNextFlagged && bookmarkedCount > 0 && (
+          <button type="button" onClick={onJumpToNextFlagged} className="qx-flagjump">
+            🔖 {lang === 'tr' ? `Sonraki İşaretli (${bookmarkedCount})` : `Next Flagged (${bookmarkedCount})`}
+          </button>
+        )}
+
         {/* Next / Finish */}
         <button
-          className="btn btn-primary"
+          className="btn btn-primary qx-nav-btn"
           onClick={onNext}
           disabled={!canSubmit || saving}
-          style={{ opacity: canSubmit ? 1 : 0.4, minWidth: 110 }}
+          style={{ opacity: canSubmit ? 1 : 0.4 }}
         >
           {saving
             ? (lang === 'tr' ? 'Kaydediliyor…' : 'Saving…')
@@ -126,30 +120,6 @@ export function QuestionNav({
           {!saving && !isLast && <Icon.arrow />}
         </button>
       </div>
-
-      {/* Next-flagged jump — shown only when ≥1 question is bookmarked */}
-      {onJumpToNextFlagged && bookmarkedCount > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-          <button
-            type="button"
-            onClick={onJumpToNextFlagged}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--amber)',
-              color: 'var(--amber)',
-              padding: '5px 14px',
-              cursor: 'pointer',
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 10,
-              letterSpacing: '0.07em',
-              borderRadius: 3,
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            🔖 {lang === 'tr' ? `Sonraki İşaretli (${bookmarkedCount})` : `Next Flagged (${bookmarkedCount})`}
-          </button>
-        </div>
-      )}
-    </>
+    </div>
   );
 }
