@@ -5,6 +5,7 @@
 
 import Link from 'next/link';
 import Logo from '@/components/Logo';
+import { Ic } from '@/components/dashboard/icons';
 import { useQuestionnaire }   from './useQuestionnaire';
 import { PhaseInterstitial }  from '@/components/questionnaire/PhaseInterstitial';
 import { QuestionView }       from '@/components/questionnaire/QuestionView';
@@ -77,13 +78,13 @@ export default function QuestionnairePage() {
           </div>
           <div className="qx-head-right">
             <span className="qx-prog-txt" aria-label={qs.lang === 'tr' ? 'İlerleme' : 'Progress'}>
-              <b>{qs.visibleIdx + 1}</b> / {qs.total} · {qs.progress}%
+              <span className="qx-prog-long">{qs.lang === 'tr' ? 'Soru ' : 'Question '}</span><b>{qs.visibleIdx + 1}</b> / {qs.total}<span className="qx-prog-pct">{qs.progress}%</span>
             </span>
             {/* Bookmark indicator — shows count when questions are flagged */}
-            {qs.bookmarkedCount > 0 && <span className="qx-flagcount">🔖 {qs.bookmarkedCount}</span>}
+            {qs.bookmarkedCount > 0 && <span className="qx-flagcount" title={qs.lang === 'tr' ? 'İşaretli sorular' : 'Flagged questions'}><Ic name="flag" size={13} /> {qs.bookmarkedCount}</span>}
             {/* Auto-save flash indicator */}
             <span className="qx-saved" style={{ opacity: qs.savedFlash ? 1 : 0 }}>
-              ✓ {qs.lang === 'tr' ? 'Kaydedildi' : 'Saved'}
+              <Ic name="check" size={13} /> {qs.lang === 'tr' ? 'Kaydedildi' : 'Saved'}
             </span>
             <button
               className="btn btn-outline btn-sm"
@@ -147,6 +148,7 @@ export default function QuestionnairePage() {
           unlockedUpToPhase={qs.unlockedUpToPhase}
           lang={qs.lang}
           onJumpTo={qs.handleJumpTo}
+          questions={qs.questions}
         />
 
         <main className="qx-main">

@@ -8,6 +8,7 @@
 import { sanitizeHtml } from '@/lib/utils';
 import { API_URL } from '@/lib/api';
 import { getGriRef } from '@/lib/gri-references';
+import { Ic } from '@/components/dashboard/icons';
 import { LETTERS, loc, PaperclipIcon } from './utils';
 import type { Question, GriPhase } from './types';
 import './questionnaire.css';
@@ -86,15 +87,6 @@ export function QuestionView({
     <article className="qx-card">
       {/* ── Header: criterion / chapter / badges / position ── */}
       <div className="qx-card-top">
-        {q.criterion_code && <span className="qx-code">{q.criterion_code}</span>}
-        <span className="qx-chapter">{chapterName}</span>
-
-        {layerInfo && (
-          <span className="qx-badge" style={{ color: layerInfo.color }}>
-            {lang === 'tr' ? layerInfo.tr : layerInfo.en}
-          </span>
-        )}
-
         {griRef && (
           <a
             href={griRef.url}
@@ -103,23 +95,28 @@ export function QuestionView({
             title={griRef.description}
             className="qx-gri"
           >
-            ↗ {griRef.standard}
+            {griRef.standard} <span aria-hidden="true">↗</span>
           </a>
         )}
+        {q.criterion_code && <span className="qx-code">{q.criterion_code}</span>}
+        {/* when no localised chapter title exists the name equals the code — show it once */}
+        <span className="qx-chapter">{chapterName !== q.criterion_code ? chapterName : ''}</span>
 
-        <div className="qx-counter">
-          <b>{String(currentIdx + 1).padStart(2, '0')}</b>
-          <span>/ {String(total).padStart(2, '0')}</span>
-        </div>
+        {layerInfo && (
+          <span className="qx-badge" style={{ color: layerInfo.color }}>
+            <i aria-hidden="true" />{lang === 'tr' ? layerInfo.tr : layerInfo.en}
+          </span>
+        )}
       </div>
 
       {(q.is_gate || (q.layer === 'CONDITIONAL' && (q.bonus_points ?? 0) > 0)) && (
         <div className="qx-note-line">
           {q.is_gate && (
             <span style={{ color: '#c0392b' }}>
+              <Ic name="info" size={13} />
               {lang === 'tr'
-                ? '⚡ Kapı sorusu — Hayır cevabı bu kriteri atlar'
-                : '⚡ Gate question — No answer skips this criterion'}
+                ? 'Kapı sorusu — Hayır cevabı bu kriteri atlar'
+                : 'Gate question — No answer skips this criterion'}
             </span>
           )}
           {q.layer === 'CONDITIONAL' && (q.bonus_points ?? 0) > 0 && (
@@ -131,14 +128,17 @@ export function QuestionView({
       )}
 
       <div className="qx-body">
-        {/* ── Question text ── */}
+        {/* ── Question number + text ── */}
+        <div className="qx-counter">
+          {lang === 'tr' ? 'Soru' : 'Question'} <b>{currentIdx + 1}</b> <span>/ {total}</span>
+        </div>
         <div
           className="prose qx-qtext"
           dangerouslySetInnerHTML={{ __html: sanitizeHtml(qText) }}
         />
         {q.allow_multiple && (
           <p className="qx-hint">
-            {lang === 'tr' ? '↳ Birden fazla seçeneği işaretleyebilirsiniz' : '↳ Multiple answers allowed — select all that apply'}
+            {lang === 'tr' ? 'Birden fazla seçeneği işaretleyebilirsiniz' : 'Multiple answers allowed — select all that apply'}
           </p>
         )}
         {/* Fix R7-04: use authenticated DRF attachment endpoint — raw q.attachment
@@ -154,8 +154,117 @@ export function QuestionView({
           </a>
         )}
 
+        <div className="qx-answer">
+          {/* ── Binary (Yes / No) ── */}
+          {isBinary && hasChoices && (
+            <div className={`qx-binary qx-dim${off}`}>
+              {q.choices.map((choice) => {
+                const isSel      = selection.includes(choice.id);
+                const label      = loc(choice, lang) || choice.text;
+                const labelLower = (label || '').toLowerCase();
+                // First choice = Yes/positive when the label doesn't say
+                const isYes      = labelLower.includes('evet') || labelLower.includes('yes') || choice.order === 1;
+                const selColor   = isYes ? 'var(--olive-deep)' : 'var(--danger)';
+                return (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    role="button"
+                    aria-pressed={isSel}
+                    onClick={() => onToggleChoice(choice.id)}
+                    className={`qx-bin${isSel ? ' is-sel' : ''}`}
+                    style={isSel ? { background: selColor, borderColor: selColor } : undefined}
+                  >
+                    <span className="qx-bin-icon"><Ic name={isYes ? 'check' : 'plus'} size={16} className={isYes ? undefined : 'qx-x'} /></span>
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Numerical input ── */}
+          {isNumerical && (
+            <div className={`qx-dim${off}`}>
+              <label htmlFor="qa-numerical" className="qx-label">
+                {lang === 'tr' ? 'Sayısal değer girin' : 'Enter numerical value'}
+              </label>
+              <input
+                id="qa-numerical"
+                type="number"
+                value={numericalValue}
+                onChange={(e) => onNumericalChange(e.target.value)}
+                placeholder="0"
+                className="qx-input"
+              />
+              {q.numerical_thresholds && q.numerical_thresholds.length > 0 && (
+                <div className="qx-thresholds">
+                  {q.numerical_thresholds.map((t, i) => (
+                    <span key={i} className="qx-threshold">
+                      {t.range
+                        ? t.range
+                        : t.min != null
+                          ? `≥${t.min}${t.max != null ? ` – ≤${t.max}` : ''}`
+                          : t.max != null ? `≤${t.max}` : ''}
+                      {' → '}{t.score} {lang === 'tr' ? 'pt' : 'pts'}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Standard choices (single / multi) ── */}
+          {!isBinary && !isNumerical && hasChoices && (
+            <div className={`qx-choices qx-dim${off}`}>
+              {q.choices.map((choice, i) => {
+                const isSel = selection.includes(choice.id);
+                /* Use loc() first; fall back to choice.text (already in correct lang after refreshTexts) */
+                const choiceText = loc(choice, lang) || choice.text;
+                return (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    // Fix A-1: convey selection state to screen readers.
+                    // Multi-select → checkbox semantics; single-select → toggle button.
+                    role={q.allow_multiple ? 'checkbox' : 'button'}
+                    aria-checked={q.allow_multiple ? isSel : undefined}
+                    aria-pressed={!q.allow_multiple ? isSel : undefined}
+                    onClick={() => onToggleChoice(choice.id)}
+                    className={`qx-choice${isSel ? ' is-sel' : ''}`}
+                  >
+                    <span className="qx-choice-mark" style={{ borderRadius: q.allow_multiple ? 3 : '50%' }}>
+                      {isSel ? <Ic name="check" size={12} /> : (LETTERS[i] ?? String(i + 1))}
+                    </span>
+                    <span className="qx-choice-text">{choiceText}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Text answer (text / mixed type) ── */}
+          {(isTextType || isMixedType) && (
+            <div className={`qx-dim${off}`} style={{ marginTop: hasChoices ? 14 : 0 }}>
+              {/* Fix A-5: associate label with textarea via htmlFor/id */}
+              <label htmlFor="qa-text-answer" className="qx-label">
+                {lang === 'tr' ? 'Yanıtınız' : 'Your Answer'}
+              </label>
+              <textarea
+                id="qa-text-answer"
+                value={textAns}
+                onChange={(e) => onTextChange(e.target.value)}
+                rows={4}
+                className="qx-textarea"
+                placeholder={lang === 'tr' ? 'Yanıtınızı buraya yazın…' : 'Type your answer here…'}
+              />
+            </div>
+          )}
+        </div>
+
         {/* ── Tools: flag + not applicable ── */}
         <div className="qx-tools">
+          <span className="qx-tools-label">{lang === 'tr' ? 'Bu soru için' : 'For this question'}</span>
           <button
             type="button"
             onClick={onToggleBookmark}
@@ -165,7 +274,7 @@ export function QuestionView({
               : (isBookmarked ? 'Remove bookmark' : 'Bookmark this question')}
             className={`qx-tool${isBookmarked ? ' is-flag' : ''}`}
           >
-            {isBookmarked ? '🔖' : '🏷'} {isBookmarked
+            <Ic name="flag" size={13} /> {isBookmarked
               ? (lang === 'tr' ? 'İşaretlendi' : 'Flagged')
               : (lang === 'tr' ? 'İşaretle' : 'Flag')}
           </button>
@@ -176,7 +285,7 @@ export function QuestionView({
             aria-pressed={isNA}
             className={`qx-tool${isNA ? ' is-na' : ''}`}
           >
-            <span className="qx-tool-box">{isNA ? '✕' : ''}</span>
+            <span className="qx-tool-box">{isNA && <Ic name="check" size={10} />}</span>
             {lang === 'tr' ? 'Bu soru geçerli değil (N/A)' : 'Not applicable to my organisation'}
           </button>
           {isNA && (
@@ -188,7 +297,7 @@ export function QuestionView({
 
         {/* N/A Justification — shown inline when isNA is active */}
         {isNA && onNoteChange && (
-          <div style={{ marginBottom: 14 }}>
+          <div className="qx-na-reason">
             <label htmlFor="qa-na-reason" className="qx-label">
               {lang === 'tr' ? 'Geçersizlik Gerekçesi (isteğe bağlı)' : 'Justification for N/A (optional)'}
             </label>
@@ -198,116 +307,9 @@ export function QuestionView({
               onChange={(e) => onNoteChange(e.target.value)}
               rows={2}
               className="qx-textarea"
-              style={{ borderLeftColor: 'var(--ink-3)' }}
               placeholder={lang === 'tr'
                 ? 'Bu sorunun neden geçerli olmadığını açıklayın…'
                 : 'Explain why this question is not applicable to your organisation…'}
-            />
-          </div>
-        )}
-
-        {/* ── Binary (Yes / No) ── */}
-        {isBinary && hasChoices && (
-          <div className={`qx-binary qx-dim${off}`}>
-            {q.choices.map((choice) => {
-              const isSel      = selection.includes(choice.id);
-              const label      = loc(choice, lang) || choice.text;
-              const labelLower = (label || '').toLowerCase();
-              // First choice = Yes/positive when the label doesn't say
-              const isYes      = labelLower.includes('evet') || labelLower.includes('yes') || choice.order === 1;
-              const selColor   = isYes ? 'var(--olive-deep)' : '#c0392b';
-              return (
-                <button
-                  key={choice.id}
-                  type="button"
-                  role="button"
-                  aria-pressed={isSel}
-                  onClick={() => onToggleChoice(choice.id)}
-                  className={`qx-bin${isSel ? ' is-sel' : ''}`}
-                  style={isSel ? { background: selColor, borderColor: selColor } : undefined}
-                >
-                  <span className="qx-bin-icon">{isYes ? '✓' : '✕'}</span>
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Numerical input ── */}
-        {isNumerical && (
-          <div className={`qx-dim${off}`}>
-            <label htmlFor="qa-numerical" className="qx-label">
-              {lang === 'tr' ? 'Sayısal değer girin' : 'Enter numerical value'}
-            </label>
-            <input
-              id="qa-numerical"
-              type="number"
-              value={numericalValue}
-              onChange={(e) => onNumericalChange(e.target.value)}
-              placeholder="0"
-              className="qx-input"
-            />
-            {q.numerical_thresholds && q.numerical_thresholds.length > 0 && (
-              <div className="qx-thresholds">
-                {q.numerical_thresholds.map((t, i) => (
-                  <span key={i} className="qx-threshold">
-                    {t.range
-                      ? t.range
-                      : t.min != null
-                        ? `≥${t.min}${t.max != null ? ` – ≤${t.max}` : ''}`
-                        : t.max != null ? `≤${t.max}` : ''}
-                    {' → '}{t.score} {lang === 'tr' ? 'pt' : 'pts'}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Standard choices (single / multi) ── */}
-        {!isBinary && !isNumerical && hasChoices && (
-          <div className={`qx-choices qx-dim${off}`}>
-            {q.choices.map((choice, i) => {
-              const isSel = selection.includes(choice.id);
-              /* Use loc() first; fall back to choice.text (already in correct lang after refreshTexts) */
-              const choiceText = loc(choice, lang) || choice.text;
-              return (
-                <button
-                  key={choice.id}
-                  type="button"
-                  // Fix A-1: convey selection state to screen readers.
-                  // Multi-select → checkbox semantics; single-select → toggle button.
-                  role={q.allow_multiple ? 'checkbox' : 'button'}
-                  aria-checked={q.allow_multiple ? isSel : undefined}
-                  aria-pressed={!q.allow_multiple ? isSel : undefined}
-                  onClick={() => onToggleChoice(choice.id)}
-                  className={`qx-choice${isSel ? ' is-sel' : ''}`}
-                >
-                  <span className="qx-choice-mark" style={{ borderRadius: q.allow_multiple ? 3 : '50%' }}>
-                    {isSel && q.allow_multiple ? '✓' : (LETTERS[i] ?? String(i + 1))}
-                  </span>
-                  <span className="qx-choice-text">{choiceText}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Text answer (text / mixed type) ── */}
-        {(isTextType || isMixedType) && (
-          <div className={`qx-dim${off}`} style={{ marginTop: hasChoices ? 14 : 0 }}>
-            {/* Fix A-5: associate label with textarea via htmlFor/id */}
-            <label htmlFor="qa-text-answer" className="qx-label">
-              {lang === 'tr' ? 'Yanıtınız' : 'Your Answer'}
-            </label>
-            <textarea
-              id="qa-text-answer"
-              value={textAns}
-              onChange={(e) => onTextChange(e.target.value)}
-              rows={4}
-              className="qx-textarea"
-              placeholder={lang === 'tr' ? 'Yanıtınızı buraya yazın…' : 'Type your answer here…'}
             />
           </div>
         )}

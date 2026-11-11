@@ -4,6 +4,7 @@
 
 import type { RefObject } from 'react';
 import { formatBytes } from '@/lib/utils';
+import { Ic } from '@/components/dashboard/icons';
 import { PaperclipIcon } from './utils';
 import './questionnaire.css';
 
@@ -33,16 +34,16 @@ export function EvidencePanel({
   return (
     <section className="qx-evidence">
       {/* Fix L-02: 'Kanit' → 'Kanıt' (dotless ı, U+0131) */}
-      <span className="qx-label" style={{ margin: 0 }}>
+      <h3 className="qx-evidence-title">
         {lang === 'tr' ? 'Kanıt (isteğe bağlı)' : 'Evidence (optional)'}
-      </span>
+      </h3>
 
       <div className={`qx-evidence-row${isNA ? ' is-single' : ''}`}>
         {/* Notes textarea — hidden when isNA because the justification is shown above in QuestionView */}
         {!isNA && (
           <div>
             {/* Fix A-5: associate label with textarea via htmlFor/id */}
-            <label htmlFor="qa-notes" className="qx-label" style={{ fontSize: 9 }}>
+            <label htmlFor="qa-notes" className="qx-label">
               {lang === 'tr' ? 'Notlar / Yorumlar' : 'Notes / Comments'}
             </label>
             <textarea
@@ -60,7 +61,7 @@ export function EvidencePanel({
 
         {/* File upload */}
         <div>
-          <span className="qx-label" style={{ fontSize: 9 }}>
+          <span className="qx-label">
             {lang === 'tr' ? 'Kanıt Belgesi Yükle' : 'Upload Evidence'}
           </span>
 
@@ -82,15 +83,15 @@ export function EvidencePanel({
           />
 
           {files.length > 0 && (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="qx-files">
               {files.map((file, idx) => (
                 <div key={`${file.name}-${file.size}`} className="qx-file">
-                  <PaperclipIcon />
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <Ic name="doc" size={15} />
+                  <span className="qx-file-name" title={file.name}>
                     {file.name}
                   </span>
                   {/* Fix L-03: use shared formatBytes() from utils.ts */}
-                  <span style={{ fontSize: 10, color: 'var(--ink-4)', flexShrink: 0 }}>
+                  <span className="qx-file-size">
                     {formatBytes(file.size)}
                   </span>
                   <button
@@ -98,12 +99,8 @@ export function EvidencePanel({
                     onClick={() => onRemoveFile(idx)}
                     /* Fix R5-L-03: aria-label so screen readers announce the action */
                     aria-label={lang === 'tr' ? 'Dosyayı kaldır' : 'Remove file'}
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--ink-4)', fontSize: 13, lineHeight: 1, padding: '0 2px',
-                      flexShrink: 0,
-                    }}
-                  >×</button>
+                    className="qx-file-x"
+                  ><Ic name="plus" size={14} className="qx-x" /></button>
                 </div>
               ))}
             </div>

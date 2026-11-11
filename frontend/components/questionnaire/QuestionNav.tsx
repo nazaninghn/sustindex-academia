@@ -4,6 +4,7 @@
    current chapter, an optional "Next flagged" jump, and Next / Finish button.     */
 
 import { Icon } from '@/components/shared';
+import { Ic } from '@/components/dashboard/icons';
 import { GRI_PHASE_DEFS } from './utils';
 import type { Question } from './types';
 import './questionnaire.css';
@@ -66,7 +67,8 @@ export function QuestionNav({
           disabled={isFirst}
           style={{ opacity: isFirst ? 0.3 : 1 }}
         >
-          {lang === 'tr' ? '← Önceki' : '← Previous'}
+          <Ic name="arrow" size={14} className="qx-flip" />
+          {lang === 'tr' ? 'Önceki' : 'Previous'}
         </button>
 
         {/* Question chips for the current chapter */}
@@ -89,7 +91,7 @@ export function QuestionNav({
                 aria-current={isCurrent ? 'step' : undefined}
                 onClick={() => { if (!isLocked) onJumpTo(i); }}
                 onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onJumpTo(i); } }}
-                title={`Q${i + 1}${isBookmarked ? ' 🔖' : ''}`}
+                title={`Q${i + 1}${isAnswered ? (lang === 'tr' ? ' · cevaplandı' : ' · answered') : ''}${isBookmarked ? (lang === 'tr' ? ' · işaretli' : ' · flagged') : ''}`}
                 className={`qx-chip${isCurrent ? ' is-current' : isAnswered ? ' is-answered' : ''}${isBookmarked ? ' is-flagged' : ''}`}
               >
                 {n + 1}
@@ -101,7 +103,7 @@ export function QuestionNav({
         {/* Next-flagged jump — shown only when ≥1 question is bookmarked */}
         {onJumpToNextFlagged && bookmarkedCount > 0 && (
           <button type="button" onClick={onJumpToNextFlagged} className="qx-flagjump">
-            🔖 {lang === 'tr' ? `Sonraki İşaretli (${bookmarkedCount})` : `Next Flagged (${bookmarkedCount})`}
+            <Ic name="flag" size={12} /> {lang === 'tr' ? `Sonraki İşaretli (${bookmarkedCount})` : `Next Flagged (${bookmarkedCount})`}
           </button>
         )}
 
