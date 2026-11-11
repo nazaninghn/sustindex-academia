@@ -3,9 +3,8 @@
    every control (tabs, chips, expanders, filters, buttons) performs a real action. */
 
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Icon } from '@/components/shared';
-import { gradeColor } from '@/lib/utils';
 import { actionTaskAPI } from '@/lib/api';
 import type { ActionTask } from '@/lib/api';
 import {
@@ -13,9 +12,11 @@ import {
 } from '@/lib/dashboard-data';
 import type { Band, DashModel, PhaseState, RankedCategory, ResultPoint } from '@/lib/dashboard-data';
 import {
-  HBars, Legend, PHASE_COLORS, Radar, Ring, ResultBars, StackBar, TipRows, TrendChart, fmtFull, fmtShort, phaseLabel,
+  HBars, Hint, Legend, PHASE_COLORS, PhaseColumns, Radar, RingStat, StackBar, TipRows, TrendChart, fmtFull, fmtShort, phaseLabel, useTooltip,
 } from './charts';
 import type { BarRow } from './charts';
+import { Ic, PHASE_ICON } from './icons';
+import type { IconName } from './icons';
 import { Reveal, useInView } from './motion';
 
 /* ─── Shared types / helpers ─────────────────────────────────── */
@@ -36,6 +37,9 @@ export const T = (lang: string, en: string, tr: string) => (lang === 'tr' ? tr :
 export const BAND_COLOR: Record<Band, string> = { strong: 'var(--olive-deep)', developing: 'var(--amber)', gap: 'var(--danger)' };
 export const scoreColor = (pct: number) => BAND_COLOR[bandOf(pct)];
 export const fmtDate = (iso: string | null, lang: string) => (iso ? fmtFull(iso, lang) : '—');
+export const cycleLabel = (c: string | null | undefined, lang: string) => (c ? c : T(lang, 'Unnamed cycle', 'Adsız dönem'));
+const bandLabel = (b: Band, lang: string) => ({ strong: T(lang, 'Strong', 'Güçlü'), developing: T(lang, 'Developing', 'Gelişen'), gap: T(lang, 'Gap', 'Açık') }[b]);
+const prioLabel = (p: string, lang: string) => ({ High: T(lang, 'High', 'Yüksek'), Medium: T(lang, 'Medium', 'Orta'), Low: T(lang, 'Low', 'Düşük') }[p] ?? p);
 
 export function timeAgo(isoDate: string | null, lang: string): string {
   if (!isoDate) return '';
@@ -50,113 +54,119 @@ export function timeAgo(isoDate: string | null, lang: string): string {
 type Go = (href: string) => void;
 interface P { m: DashModel; lang: string }
 
-/* ═══════════════════════ KPI strip ═══════════════════════ */
-export function KpiStrip({ m, lang }: P) {
-  const latest = m.latestResult;
-  const qPct = m.applicable > 0 ? Math.min(100, Math.round((m.answered / m.applicable) * 100)) : 0;
+/** Grade badge: the grade letter exactly as the backend returned it; colour family follows the shared gradeColor() rule. */
+export function GradeBadge({ grade, size = 'md' }: { grade: string | null | undefined; size?: 'sm' | 'md' | 'lg' }) {
+  const tone = !grade ? 'none' : grade.startsWith('A') ? 'a' : grade.startsWith('B') ? 'b' : grade.startsWith('C') ? 'c' : 'd';
+  return <span className={`da-gb is-${tone} is-${size}`}>{grade ?? '—'}</span>;
+}
+
+function Head({ title, hint, sub, children }: { title: string; hint?: string; sub?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="da-kpis">
-      <div className="da-card da-kpi is-hero">
-        <div className="da-ring"><Ring pct={m.overall?.score ?? 0} size={46} stroke={5} /><span>{m.overall ? Math.round(m.overall.score) : '—'}</span></div>
-        <div style={{ minWidth: 0 }}>
-          <span className="da-klabel">{T(lang, 'Overall score', 'Genel skor')}</span>
-          <div className="da-kval">{m.overall ? Math.round(m.overall.score) : '—'}<small>/ 100</small></div>
-          <span className="da-ksub" title={T(lang, 'Average of the latest completed score of each phase', 'Her aşamanın son tamamlanan skorunun ortalaması')}>
-            {m.overall ? T(lang, `mean of ${m.overall.phases} completed phase${m.overall.phases !== 1 ? 's' : ''}`, `${m.overall.phases} aşamanın ortalaması`) : T(lang, 'no completed phase yet', 'henüz tamamlanan aşama yok')}
-          </span>
-        </div>
+    <div className="da-head">
+      <div className="da-head-t">
+        <div className="da-h2row"><h2 className="da-h2">{title}</h2>{hint && <Hint text={hint} />}</div>
+        {sub && <p className="da-sub">{sub}</p>}
       </div>
-      <div className="da-card da-kpi">
-        <div className="da-ring"><Ring pct={latest?.score ?? 0} size={46} stroke={5} color={latest?.grade ? gradeColor(latest.grade) : 'var(--line)'} /><span>{latest ? `${Math.round(latest.score)}%` : '—'}</span></div>
-        <div style={{ minWidth: 0 }}>
-          <span className="da-klabel">{T(lang, 'Latest grade', 'Son not')}</span>
-          <div className="da-kval" style={latest?.grade ? { color: gradeColor(latest.grade), fontWeight: 700 } : undefined}>{latest?.grade ?? '—'}</div>
-          <span className="da-ksub">{latest ? `${phaseLabel(latest.phase, lang)} · ${fmtDate(latest.iso, lang)}` : T(lang, 'not graded yet', 'henüz notlandırılmadı')}</span>
-        </div>
-      </div>
-      <div className="da-card da-kpi">
-        <div className="da-ring"><Ring pct={m.completionPct} size={46} stroke={5} /><span>{m.completionPct}%</span></div>
-        <div style={{ minWidth: 0 }}>
-          <span className="da-klabel">{T(lang, 'Completion', 'Tamamlanma')}</span>
-          <div className="da-kval">{m.phasesCompleted}<small>/ {PHASES.length} {T(lang, 'phases', 'aşama')}</small></div>
-          <span className="da-ksub">{m.activeCycle ? `${T(lang, 'cycle', 'dönem')}: ${m.activeCycle}` : T(lang, 'GRI assessment', 'GRI değerlendirmesi')}</span>
-        </div>
-      </div>
-      <div className="da-card da-kpi">
-        <div className="da-ring"><Ring pct={qPct} size={46} stroke={5} /><span>{qPct}%</span></div>
-        <div style={{ minWidth: 0 }}>
-          <span className="da-klabel">{T(lang, 'Questions answered', 'Cevaplanan soru')}</span>
-          <div className="da-kval">{m.answered}<small>/ {m.applicable}</small></div>
-          <span className="da-ksub" title={T(lang, 'Sector questions are counted once a sector assessment is started', 'Sektör soruları, sektör değerlendirmesi başlatılınca sayılır')}>
-            {m.applicableComplete ? T(lang, 'applicable questions', 'geçerli soru') : T(lang, 'sector not counted yet', 'sektör henüz sayılmadı')}
-          </span>
-        </div>
-      </div>
-      <div className="da-card da-kpi" style={{ gap: 14 }}>
-        <div style={{ minWidth: 0 }}>
-          <span className="da-klabel">{T(lang, 'Completed', 'Tamamlanan')}</span>
-          <div className="da-kval" style={{ color: 'var(--olive-deep)' }}>{m.completedCount}</div>
-          <span className="da-ksub">{T(lang, 'assessments', 'değerlendirme')}</span>
-        </div>
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--line)' }} />
-        <div style={{ minWidth: 0 }}>
-          <span className="da-klabel">{T(lang, 'In progress', 'Devam eden')}</span>
-          <div className="da-kval" style={{ color: m.inProgressCount ? 'var(--amber)' : 'var(--ink)' }}>{m.inProgressCount}</div>
-          <span className="da-ksub">{T(lang, 'assessments', 'değerlendirme')}</span>
-        </div>
-      </div>
+      {children}
     </div>
   );
 }
 
-/* ═══════════════════════ Continue assessment ═══════════════════════ */
-export function ContinueStrip({ m, lang }: P) {
-  const [ref, shown] = useInView<HTMLDivElement>(0.2);
+/** The single most useful next step, derived from the phase states (same rules as the old "continue" strip). */
+export interface NextAction { kind: 'continue' | 'start' | 'report' | 'none'; href: string; label: string; sub: string; phase?: PhaseState }
+export function nextAction(m: DashModel, lang: string): NextAction {
   const live = m.phases.find((p) => p.status === 'in_progress' && p.attempt);
-  const next = !live ? m.phases.find((p) => p.status === 'available') : undefined;
-  if (!live && !next && m.phasesCompleted < PHASES.length) return null;
-
   if (live && live.attempt) {
-    const a = live.attempt;
-    return (
-      <section ref={ref} className="da-card da-continue">
-        <div className="da-continue-main">
-          <span className="da-eyebrow">{T(lang, 'Continue assessment', 'Değerlendirmeye devam et')}{a.cycle_name ? ` · ${a.cycle_name}` : ''}</span>
-          <h2 className="da-h2">{phaseLabel(live.num, lang)} <span>· {a.survey_name}</span></h2>
-        </div>
-        <div className="da-continue-prog">
-          <div className="da-continue-meta">
-            <span><b>{live.answered}</b> {T(lang, 'of', '/')} {live.total ?? '?'} {T(lang, 'answered', 'cevaplandı')} · {live.remaining ?? '?'} {T(lang, 'remaining', 'kaldı')}</span>
-            <span>{live.pct}%</span>
-          </div>
-          <div className="da-track da-track-lg"><div className="da-anim-w" style={{ width: shown ? `${live.pct}%` : '0%', background: 'var(--amber)' }} /></div>
-          <span className="da-continue-sub">{T(lang, 'Started', 'Başlangıç')} {timeAgo(a.started_at, lang)}</span>
-        </div>
-        <Link href={`/questionnaire/${a.id}`} className="da-btn da-btn-primary da-btn-lg">{T(lang, 'Continue', 'Devam et')} <Icon.arrow /></Link>
-      </section>
-    );
+    return { kind: 'continue', href: `/questionnaire/${live.attempt.id}`, label: T(lang, 'Continue assessment', 'Değerlendirmeye devam et'), sub: `${phaseLabel(live.num, lang)} · ${live.pct}%`, phase: live };
   }
+  const next = m.phases.find((p) => p.status === 'available');
   if (next) {
-    return (
-      <section className="da-card da-continue">
-        <div className="da-continue-main">
-          <span className="da-eyebrow">{T(lang, 'Next step', 'Sonraki adım')}</span>
-          <h2 className="da-h2">{T(lang, `Ready for phase ${next.num}: ${phaseLabel(next.num, lang)}`, `${next.num}. aşama hazır: ${phaseLabel(next.num, lang)}`)}</h2>
-        </div>
-        <div className="da-continue-prog"><span className="da-continue-sub">{next.total !== null ? `${next.total} ${T(lang, 'questions', 'soru')}` : T(lang, 'Questions depend on the sector you choose', 'Sorular seçeceğiniz sektöre göre değişir')}</span></div>
-        <Link href="/surveys" className="da-btn da-btn-primary da-btn-lg">{T(lang, 'Start', 'Başla')} <Icon.arrow /></Link>
-      </section>
-    );
+    return { kind: 'start', href: '/surveys', label: T(lang, `Start ${phaseLabel(next.num, lang)}`, `${phaseLabel(next.num, lang)} aşamasını başlat`), sub: T(lang, `Phase ${next.num} of ${PHASES.length}`, `${PHASES.length} aşamadan ${next.num}.`), phase: next };
   }
+  if (m.phasesCompleted === PHASES.length) {
+    return { kind: 'report', href: '/results/combined', label: T(lang, 'Combined report', 'Birleşik rapor'), sub: T(lang, 'All five phases completed', 'Beş aşamanın tümü tamamlandı') };
+  }
+  return { kind: 'none', href: '/surveys', label: T(lang, 'Open surveys', 'Anketleri aç'), sub: '' };
+}
+
+/* ═══════════════════════ Executive KPI row ═══════════════════════ */
+export function KpiRow({ m, lang }: P) {
+  const [ref, shown] = useInView<HTMLDivElement>(0.2);
+  const latest = m.latestResult;
+  const qPct = m.applicable > 0 ? Math.min(100, Math.round((m.answered / m.applicable) * 100)) : 0;
+  const overall = m.overall ? Math.round(m.overall.score) : null;
   return (
-    <section className="da-card da-continue">
-      <div className="da-continue-main">
-        <span className="da-eyebrow">{T(lang, 'All phases completed', 'Tüm aşamalar tamamlandı')}</span>
-        <h2 className="da-h2">{T(lang, 'Your five-phase GRI assessment is complete', 'Beş aşamalı GRI değerlendirmeniz tamamlandı')}</h2>
-      </div>
-      <div className="da-continue-prog" />
-      <Link href="/results/combined" className="da-btn da-btn-primary da-btn-lg">{T(lang, 'Combined report', 'Birleşik rapor')} <Icon.arrow /></Link>
-    </section>
+    <div className="da-kpis" ref={ref}>
+      {/* Overall score — the lead figure */}
+      <article className="da-card da-kpi da-kpi-hero">
+        <div className="da-kpi-top">
+          <span className="da-kpi-label">{T(lang, 'Overall sustainability score', 'Genel sürdürülebilirlik skoru')}</span>
+          <Hint text={T(lang, 'Plain average of the latest completed score of each assessed phase. Phases that are not assessed yet are left out, not counted as 0.', 'Değerlendirilen her aşamanın son tamamlanan skorunun düz ortalaması. Henüz değerlendirilmeyen aşamalar 0 sayılmaz, hesaba katılmaz.')} />
+        </div>
+        <div className="da-kpi-hero-body">
+          <div className="da-kpi-hero-main">
+            <div className="da-kpi-val">{overall ?? '—'}<small>/100</small></div>
+            {m.overall && <span className="da-kpi-chip">{bandLabel(bandOf(m.overall.score), lang)}</span>}
+            <p className="da-kpi-note">
+              {m.overall
+                ? T(lang, `Based on ${m.overall.phases} of ${PHASES.length} phases assessed`, `${PHASES.length} aşamadan ${m.overall.phases} tanesine göre`)
+                : T(lang, 'No completed phase yet', 'Henüz tamamlanan aşama yok')}
+            </p>
+          </div>
+          <RingStat pct={m.overall?.score ?? 0} size={84} stroke={8} color="var(--olive)" track="rgba(255,255,255,.16)" className="is-hero">
+            {overall !== null ? `${overall}%` : '—'}
+          </RingStat>
+        </div>
+      </article>
+
+      {/* Assessments — two counts, so a split figure rather than a single value */}
+      <article className="da-card da-kpi">
+        <div className="da-kpi-top"><span className="da-kpi-ic"><Ic name="layers" /></span><span className="da-kpi-label">{T(lang, 'Assessments', 'Değerlendirmeler')}</span></div>
+        <div className="da-kpi-split">
+          <div><b>{m.completedCount}</b><span>{T(lang, 'Completed', 'Tamamlanan')}</span></div>
+          <i aria-hidden="true" />
+          <div><b className={m.inProgressCount ? 'is-warn' : ''}>{m.inProgressCount}</b><span>{T(lang, 'In progress', 'Devam eden')}</span></div>
+        </div>
+        <p className="da-kpi-note">{T(lang, 'Across all assessment cycles', 'Tüm değerlendirme dönemlerinde')}</p>
+      </article>
+
+      {/* Questions answered — a ratio with a linear progress bar */}
+      <article className="da-card da-kpi">
+        <div className="da-kpi-top"><span className="da-kpi-ic"><Ic name="list" /></span><span className="da-kpi-label">{T(lang, 'Questions answered', 'Cevaplanan soru')}</span>
+          <Hint text={T(lang, 'Answered questions in the selected cycle, out of the questions of every phase whose length is known. Sector questions are counted once a sector assessment is started.', 'Seçili dönemde cevaplanan sorular; uzunluğu bilinen tüm aşamaların sorularına oranla. Sektör soruları, sektör değerlendirmesi başlatılınca sayılır.')} />
+        </div>
+        <div className="da-kpi-val">{m.answered}<small>/ {m.applicable}</small></div>
+        <div className="da-bar" role="img" aria-label={`${qPct}%`}><div className="da-anim-w" style={{ width: shown ? `${qPct}%` : '0%' }} /></div>
+        <p className="da-kpi-note">{qPct}% · {m.applicableComplete ? T(lang, 'of applicable questions', 'geçerli soruların') : T(lang, 'sector not counted yet', 'sektör henüz sayılmadı')}</p>
+      </article>
+
+      {/* Completion — five discrete phases, so a segmented bar */}
+      <article className="da-card da-kpi">
+        <div className="da-kpi-top"><span className="da-kpi-ic"><Ic name="target" /></span><span className="da-kpi-label">{T(lang, 'Assessment completion', 'Değerlendirme tamamlanma')}</span></div>
+        <div className="da-kpi-val">{m.phasesCompleted}<small>/ {PHASES.length} {T(lang, 'phases', 'aşama')}</small></div>
+        <div className="da-segs" role="img" aria-label={`${m.completionPct}%`}>
+          {m.phases.map((p, i) => (
+            <span key={p.num} className={`is-${p.status}`} title={phaseLabel(p.num, lang)}>
+              <i className="da-anim-w" style={{ width: shown ? (p.status === 'completed' ? '100%' : p.status === 'in_progress' ? `${p.pct}%` : '0%') : '0%', transitionDelay: `${i * 90}ms` }} />
+            </span>
+          ))}
+        </div>
+        <p className="da-kpi-note">{m.completionPct}% · {cycleLabel(m.activeCycle, lang)}</p>
+      </article>
+
+      {/* Latest grade — a letter, shown as a badge */}
+      <article className="da-card da-kpi">
+        <div className="da-kpi-top"><span className="da-kpi-ic"><Ic name="award" /></span><span className="da-kpi-label">{T(lang, 'Latest assessment grade', 'Son değerlendirme notu')}</span></div>
+        <div className="da-kpi-grade">
+          <GradeBadge grade={latest?.grade} size="lg" />
+          <div>
+            <b>{latest ? phaseLabel(latest.phase, lang) : T(lang, 'Not graded yet', 'Henüz notlandırılmadı')}</b>
+            {latest && <span>{latest.score.toFixed(1)}%</span>}
+          </div>
+        </div>
+        <p className="da-kpi-note">{latest ? fmtDate(latest.iso, lang) : T(lang, 'Complete a phase to get a grade', 'Not almak için bir aşamayı tamamlayın')}</p>
+      </article>
+    </div>
   );
 }
 
@@ -169,7 +179,7 @@ export function comparisonRows(m: DashModel) {
 }
 
 export function PerformanceCard({ m, names, go, lang }: P & { names: NameMap; go: Go }) {
-  const trend = hasTrend(m);
+  const trend = hasTrend(m);                       // a real trend exists only when a survey has >= 2 scored results
   const cmp = comparisonRows(m);
   const withResults = PHASES.filter((p) => m.latest[p.num]);
   const [view, setView] = useState<View>('scores');
@@ -183,19 +193,22 @@ export function PerformanceCard({ m, names, go, lang }: P & { names: NameMap; go
     ...(cmp.length ? [{ id: 'compare' as View, label: T(lang, 'Previous vs latest', 'Önceki ve son') }] : []),
   ];
   const active: View = views.some((v) => v.id === view) ? view : 'scores';
-  const latestPerPhase = withResults.map((p) => m.latest[p.num] as ResultPoint).sort((a, b) => a.t - b.t);
   const open = (id: number) => go(`/results/${id}`);
+  const cols = PHASES.map((p) => ({ num: p.num, result: m.latest[p.num], locked: m.phases[p.num - 1].status === 'locked' }));
+  const unassessed = cols.filter((c) => !c.result).length;
+  const activeCat = m.latest[catPhase] ? catPhase : (withResults[0]?.num ?? 1);
 
   const catRows = useMemo<BarRow[]>(() => {
-    const r = m.latest[catPhase];
+    const r = m.latest[activeCat];
     if (!r) return [];
     const list = categoriesOf(r, names).sort((a, b) => (sort === 'low' ? a.pct - b.pct : b.pct - a.pct));
     return list.map((c, i) => ({
       key: `${r.id}-${i}-${c.name}`, label: c.name, pct: c.pct, color: scoreColor(c.pct),
-      tip: <TipRows title={c.name} rows={[[T(lang, 'Score', 'Skor'), `${c.pct.toFixed(1)}%`], [T(lang, 'Points', 'Puan'), `${c.score ?? '—'} / ${c.max ?? '—'}`], [T(lang, 'Band', 'Bant'), bandOf(c.pct)]]} />,
+      tip: <TipRows title={c.name} rows={[[T(lang, 'Score', 'Skor'), `${c.pct.toFixed(1)}%`], [T(lang, 'Points', 'Puan'), `${c.score ?? '—'} / ${c.max ?? '—'}`], [T(lang, 'Band', 'Bant'), bandLabel(bandOf(c.pct), lang)]]} />,
       href: `/results/${r.id}`,
     }));
-  }, [m, names, catPhase, sort, lang]);
+  }, [m, names, activeCat, sort, lang]);
+  const hiddenCats = (m.latest[activeCat]?.attempt.category_scores?.length ?? 0) - catRows.length;
 
   const compareRows: BarRow[] = cmp.flatMap(({ p, cur, prev }) => {
     const d = Math.round(cur.score) - Math.round(prev.score);
@@ -207,20 +220,22 @@ export function PerformanceCard({ m, names, go, lang }: P & { names: NameMap; go
 
   return (
     <section className="da-card da-fill">
-      <div className="da-head">
-        <div>
-          <span className="da-eyebrow">{T(lang, 'Performance analytics', 'Performans analizi')}</span>
-          <h2 className="da-h2">{views.find((v) => v.id === active)?.label}</h2>
-        </div>
+      <Head title={T(lang, 'Performance analytics', 'Performans analizi')}
+        hint={T(lang, 'Scores are the latest completed result of each phase, exactly as scored by the assessment engine.', 'Skorlar, her aşamanın değerlendirme motorunca puanlanan son tamamlanan sonucudur.')}>
         <div className="da-seg" role="tablist" aria-label={T(lang, 'Chart view', 'Grafik görünümü')}>
           {views.map((v) => (
-            <button key={v.id} role="tab" aria-selected={active === v.id} className={active === v.id ? 'is-on' : ''} onClick={() => setView(v.id)}>{v.label}</button>
+            <button key={v.id} type="button" role="tab" aria-selected={active === v.id} className={active === v.id ? 'is-on' : ''} onClick={() => setView(v.id)}>{v.label}</button>
           ))}
         </div>
-      </div>
+      </Head>
       <div className="da-body">
-        <div key={active} className="da-swap">
-          {active === 'scores' && <ResultBars results={latestPerPhase} lang={lang} onOpen={open} />}
+        <div key={active} className="da-swap da-grow">
+          {active === 'scores' && (
+            <>
+              <PhaseColumns cols={cols} lang={lang} onOpen={open} />
+              {unassessed > 0 && <Legend items={[{ color: 'var(--olive-deep)', label: T(lang, 'Latest completed score', 'Son tamamlanan skor') }, { color: '', hollow: true, label: T(lang, 'Not assessed yet (no score)', 'Henüz değerlendirilmedi (skor yok)') }]} />}
+            </>
+          )}
           {active === 'trend' && <TrendChart results={m.results} lang={lang} onOpen={open} />}
           {active === 'compare' && <HBars rows={compareRows} onOpen={go} />}
           {active === 'categories' && (
@@ -228,7 +243,7 @@ export function PerformanceCard({ m, names, go, lang }: P & { names: NameMap; go
               <div className="da-toolbar">
                 <div className="da-chips" role="group" aria-label={T(lang, 'Phase', 'Aşama')}>
                   {withResults.map((p) => (
-                    <button key={p.num} className={`da-chipbtn${catPhase === p.num ? ' is-on' : ''}`} aria-pressed={catPhase === p.num} onClick={() => setCatPhase(p.num)}>
+                    <button key={p.num} type="button" className={`da-chipbtn${activeCat === p.num ? ' is-on' : ''}`} aria-pressed={activeCat === p.num} onClick={() => setCatPhase(p.num)}>
                       <i style={{ background: PHASE_COLORS[p.num] }} />{phaseLabel(p.num, lang)}
                     </button>
                   ))}
@@ -242,9 +257,11 @@ export function PerformanceCard({ m, names, go, lang }: P & { names: NameMap; go
             </>
           )}
         </div>
-        <p className="da-note">
-          {active === 'scores' && T(lang, 'Each bar is a phase’s latest completed result. Hover for details, click to open the report.', 'Her çubuk bir aşamanın son tamamlanan sonucudur. Ayrıntı için üzerine gelin, rapor için tıklayın.')}
-          {active === 'categories' && T(lang, 'Category scores of the phase’s latest result. Categories without applicable questions are left out, not shown as 0%.', 'Aşamanın son sonucundaki kategori skorları. Geçerli sorusu olmayan kategoriler 0% olarak değil, hiç gösterilmez.')}
+        <p className="da-caption">
+          {active === 'scores' && T(lang, 'Hover a column for details; select it to open the full report.', 'Ayrıntı için bir sütunun üzerine gelin; tam rapor için seçin.')}
+          {active === 'categories' && (hiddenCats > 0
+            ? T(lang, `${hiddenCats} categor${hiddenCats === 1 ? 'y has' : 'ies have'} no applicable questions and ${hiddenCats === 1 ? 'is' : 'are'} left out rather than shown as 0%.`, `${hiddenCats} kategorinin geçerli sorusu yok; 0% olarak değil, hiç gösterilmez.`)
+            : T(lang, 'Category scores of the phase’s latest result. Bars are coloured by performance band.', 'Aşamanın son sonucundaki kategori skorları. Çubuklar performans bandına göre renklendirilir.'))}
           {active === 'trend' && T(lang, 'Lines connect completed results of the same survey only.', 'Çizgiler yalnızca aynı anketin tamamlanan sonuçlarını birleştirir.')}
           {active === 'compare' && T(lang, 'Previous and latest completed result of the same survey.', 'Aynı anketin önceki ve son tamamlanan sonucu.')}
         </p>
@@ -253,14 +270,13 @@ export function PerformanceCard({ m, names, go, lang }: P & { names: NameMap; go
   );
 }
 
-/* ═══════════════════════ ESG performance (expandable) ═══════════════════════ */
+/* ═══════════════════════ ESG performance (radar + expandable breakdown) ═══════════════════════ */
 export function EsgCard({ m, names, go, lang }: P & { names: NameMap; go: Go }) {
   const [ref, shown] = useInView<HTMLDivElement>(0.15);
   const [openNum, setOpenNum] = useState<number | null>(null);
-  const tick = m.overall?.score;
-  const order = [2, 3, 1, 4, 5];
-  const axes = order.map((n) => ({ n, r: m.latest[n] })).filter((x) => x.r)
-    .map((x) => ({ label: phaseLabel(x.n, lang), value: (x.r as ResultPoint).score, color: PHASE_COLORS[x.n] }));
+  const avg = m.overall && m.overall.phases > 1 ? m.overall.score : undefined;
+  const order = [2, 3, 1, 4, 5];                  // E, S, G first, then the other two GRI dimensions
+  const axes = order.map((n) => ({ key: n, label: phaseLabel(n, lang), value: m.latest[n] ? (m.latest[n] as ResultPoint).score : null, color: PHASE_COLORS[n] }));
 
   const item = (num: number) => {
     const r = m.latest[num];
@@ -269,8 +285,9 @@ export function EsgCard({ m, names, go, lang }: P & { names: NameMap; go: Go }) 
       return (
         <div key={num} className="da-esg-item is-na">
           <div className="da-esg-row">
-            <span className="da-esg-name"><i className="da-dot" style={{ background: PHASE_COLORS[num] }} />{phaseLabel(num, lang)}</span>
-            <span className="da-esg-na">{st.status === 'locked' ? '🔒 ' : ''}{T(lang, 'Not assessed yet', 'Henüz değerlendirilmedi')}</span>
+            <span className="da-esg-ic"><Ic name={PHASE_ICON[num]} size={15} /></span>
+            <span className="da-esg-name">{phaseLabel(num, lang)}</span>
+            <span className="da-esg-na">{st.status === 'locked' && <Ic name="lock" size={12} />}{T(lang, 'Not assessed', 'Değerlendirilmedi')}</span>
           </div>
         </div>
       );
@@ -278,31 +295,34 @@ export function EsgCard({ m, names, go, lang }: P & { names: NameMap; go: Go }) 
     const cats = categoriesOf(r, names);
     const top = strongest(cats, 2), low = weakest(cats, 2);
     const isOpen = openNum === num;
-    const delta = tick !== undefined && m.overall && m.overall.phases > 1 ? Math.round(r.score) - Math.round(tick) : null;
+    const delta = avg !== undefined ? Math.round(r.score) - Math.round(avg) : null;
     return (
       <div key={num} className={`da-esg-item${isOpen ? ' is-open' : ''}`}>
-        <button className="da-esg-row" aria-expanded={isOpen} onClick={() => setOpenNum(isOpen ? null : num)}>
-          <span className="da-esg-name"><i className="da-dot" style={{ background: PHASE_COLORS[num] }} />{phaseLabel(num, lang)}</span>
-          <span className="da-track" title={`${r.score.toFixed(1)}%`}>
-            <div className="da-anim-w" style={{ width: shown ? `${r.score}%` : '0%', background: PHASE_COLORS[num] }} />
-            {tick !== undefined && m.overall && m.overall.phases > 1 && <i className="da-htick" style={{ left: `${tick}%` }} />}
+        <button type="button" className="da-esg-row" aria-expanded={isOpen} onClick={() => setOpenNum(isOpen ? null : num)}>
+          <span className="da-esg-ic" style={{ color: PHASE_COLORS[num] }}><Ic name={PHASE_ICON[num]} size={15} /></span>
+          <span className="da-esg-main">
+            <span className="da-esg-name">{phaseLabel(num, lang)}</span>
+            <span className="da-track" title={`${r.score.toFixed(1)}%`}>
+              <span className="da-anim-w" style={{ width: shown ? `${r.score}%` : '0%', background: PHASE_COLORS[num] }} />
+              {avg !== undefined && <i className="da-htick" style={{ left: `${avg}%` }} />}
+            </span>
           </span>
-          <span className="da-pct" style={{ color: scoreColor(r.score) }}>{Math.round(r.score)}%</span>
-          <span className="da-grade" style={{ color: r.grade ? gradeColor(r.grade) : 'var(--ink-4)' }}>{r.grade ?? ''}</span>
-          <span className="da-chev" aria-hidden="true">{isOpen ? '▴' : '▾'}</span>
+          <span className="da-esg-pct">{Math.round(r.score)}%</span>
+          <GradeBadge grade={r.grade} size="sm" />
+          <Ic name="chevron" size={14} className="da-chev" />
         </button>
         <div className="da-expand" data-open={isOpen}>
           <div>
             <div className="da-esg-detail">
               <p className="da-esg-meta">
                 {cats.length} {T(lang, 'scored categories', 'puanlanan kategori')} · {fmtDate(r.iso, lang)}
-                {delta !== null && <> · <b style={{ color: delta >= 0 ? 'var(--olive-deep)' : 'var(--danger)' }}>{delta > 0 ? '+' : ''}{delta} {T(lang, 'vs overall average', 'genel ortalamaya göre')}</b></>}
+                {delta !== null && <> · <b className={delta >= 0 ? 'is-up' : 'is-down'}>{delta > 0 ? '+' : ''}{delta} {T(lang, 'vs overall average', 'genel ortalamaya göre')}</b></>}
               </p>
               <div className="da-esg-two">
-                <div><h4><i className="da-dot" style={{ background: BAND_COLOR.strong }} />{T(lang, 'Strongest', 'En güçlü')}</h4>{top.map((c, i) => <div key={i} className="da-mini"><span>{c.name}</span><b style={{ color: scoreColor(c.pct) }}>{Math.round(c.pct)}%</b></div>)}</div>
-                <div><h4><i className="da-dot" style={{ background: BAND_COLOR.gap }} />{T(lang, 'Needs attention', 'Dikkat gerektiren')}</h4>{low.map((c, i) => <div key={i} className="da-mini"><span>{c.name}</span><b style={{ color: scoreColor(c.pct) }}>{Math.round(c.pct)}%</b></div>)}</div>
+                <div><h4>{T(lang, 'Strongest', 'En güçlü')}</h4>{top.map((c, i) => <div key={i} className="da-mini"><span>{c.name}</span><b>{Math.round(c.pct)}%</b></div>)}</div>
+                <div><h4>{T(lang, 'Needs attention', 'Dikkat gerektiren')}</h4>{low.map((c, i) => <div key={i} className="da-mini"><span>{c.name}</span><b>{Math.round(c.pct)}%</b></div>)}</div>
               </div>
-              <button className="da-link da-linkbtn" onClick={() => go(`/results/${r.id}`)}>{T(lang, 'Open full results', 'Tüm sonuçları aç')} <Icon.arrow /></button>
+              <button type="button" className="da-link da-linkbtn" onClick={() => go(`/results/${r.id}`)}>{T(lang, 'Open full results', 'Tüm sonuçları aç')} <Ic name="arrow" size={13} /></button>
             </div>
           </div>
         </div>
@@ -310,26 +330,23 @@ export function EsgCard({ m, names, go, lang }: P & { names: NameMap; go: Go }) 
     );
   };
 
+  const assessed = axes.filter((a) => a.value !== null).length;
   return (
-    <section ref={ref} className="da-card da-fill">
-      <div className="da-head">
-        <div>
-          <span className="da-eyebrow">{T(lang, 'ESG performance', 'ESG performansı')}</span>
-          <h2 className="da-h2">{T(lang, 'Environmental · Social · Governance', 'Çevre · Sosyal · Yönetişim')}</h2>
-        </div>
-      </div>
+    <section ref={ref} className="da-card da-fill da-esg-card">
+      <Head title={T(lang, 'ESG performance', 'ESG performansı')}
+        hint={T(lang, 'Each axis is one GRI dimension on a 0–100 scale. Dimensions without a completed assessment are shown as not assessed, never as 0. The thin marker on a bar is your overall average.', 'Her eksen 0–100 ölçeğinde bir GRI boyutudur. Tamamlanmış değerlendirmesi olmayan boyutlar 0 olarak değil, değerlendirilmedi olarak gösterilir. Çubuktaki ince işaret genel ortalamanızdır.')}>
+        <span className="da-head-meta">{assessed} / {axes.length} {T(lang, 'assessed', 'değerlendirildi')}</span>
+      </Head>
       <div className="da-body">
-        {axes.length >= 3 && <div style={{ marginBottom: 8 }}><Radar axes={axes} lang={lang} /></div>}
-        <div className="da-esg">
-          {[2, 3, 1].map(item)}
-          <div className="da-esg-sep"><span>{T(lang, 'Other GRI dimensions', 'Diğer GRI boyutları')}</span></div>
-          {[4, 5].map(item)}
+        <div className="da-esg-grid">
+          <Radar axes={axes} lang={lang} />
+          <div className="da-esg">
+            <h3 className="da-h3">{T(lang, 'ESG breakdown', 'ESG dağılımı')}</h3>
+            {[2, 3, 1].map(item)}
+            <div className="da-esg-sep"><span>{T(lang, 'Other GRI dimensions', 'Diğer GRI boyutları')}</span></div>
+            {[4, 5].map(item)}
+          </div>
         </div>
-        <p className="da-note">
-          {m.overall && m.overall.phases > 1
-            ? T(lang, 'The thin marker on each bar is your overall average. Click a row for its strongest and weakest categories.', 'Her çubuktaki ince işaret genel ortalamanızdır. En güçlü ve en zayıf kategoriler için bir satıra tıklayın.')
-            : T(lang, 'Each score is the latest completed result of that GRI phase. Click a row for details.', 'Her skor ilgili GRI aşamasının son tamamlanan sonucudur. Ayrıntı için bir satıra tıklayın.')}
-        </p>
       </div>
     </section>
   );
@@ -338,142 +355,158 @@ export function EsgCard({ m, names, go, lang }: P & { names: NameMap; go: Go }) 
 /* ═══════════════════════ GRI assessment progress ═══════════════════════ */
 export function PhaseProgress({ m, lang }: P) {
   const [openNum, setOpenNum] = useState<number | null>(null);
-  const [ref, shown] = useInView<HTMLDivElement>(0.2);
   const statusLabel = (s: PhaseState['status']) => ({
     completed: T(lang, 'Completed', 'Tamamlandı'), in_progress: T(lang, 'In progress', 'Devam ediyor'),
     available: T(lang, 'Available', 'Başlanabilir'), locked: T(lang, 'Locked', 'Kilitli'),
   }[s]);
+  const openState = openNum ? m.phases[openNum - 1] : null;
+  const openAtt = openState?.attempt ?? null;
   return (
-    <section className="da-card" ref={ref}>
-      <div className="da-head">
-        <div>
-          <span className="da-eyebrow">{T(lang, 'GRI assessment progress', 'GRI değerlendirme ilerlemesi')}</span>
-          <h2 className="da-h2">{T(lang, 'Five-phase assessment journey', 'Beş aşamalı değerlendirme yolculuğu')}</h2>
+    <section className="da-card da-fill">
+      <Head title={T(lang, 'GRI assessment progress', 'GRI değerlendirme ilerlemesi')}
+        hint={T(lang, 'Phases unlock one after another within an assessment cycle: each phase opens once the previous one is completed.', 'Aşamalar bir değerlendirme döneminde sırayla açılır: her aşama, önceki tamamlanınca erişilebilir olur.')}
+        sub={cycleLabel(m.activeCycle, lang)}>
+        <span className="da-head-meta"><b>{m.phasesCompleted} / {PHASES.length}</b> {T(lang, 'phases', 'aşama')} · {m.completionPct}%</span>
+      </Head>
+      <div className="da-body">
+        <ol className="da-gp">
+          {PHASES.map((p) => {
+            const st = m.phases[p.num - 1];
+            const att = st.attempt;
+            const href = st.status === 'completed' && att ? `/results/${att.id}`
+                       : st.status === 'in_progress' && att ? `/questionnaire/${att.id}`
+                       : st.status === 'available' ? '/surveys' : null;
+            const cta = st.status === 'completed' ? T(lang, 'View results', 'Sonuçları gör')
+                      : st.status === 'in_progress' ? T(lang, 'Continue', 'Devam et')
+                      : st.status === 'available' ? T(lang, 'Start', 'Başla')
+                      : T(lang, `Complete ${phaseLabel(p.num - 1, lang)} first`, `Önce ${phaseLabel(p.num - 1, lang)} tamamlanmalı`);
+            const pct = st.status === 'completed' ? 100 : st.pct;
+            const isOpen = openNum === p.num;
+            return (
+              <li key={p.num} className={`da-gp-item is-${st.status}`}>
+                <div className="da-gp-rail" aria-hidden="true">
+                  <span className="da-gp-node">{st.status === 'completed' ? <Ic name="check" size={13} /> : st.status === 'locked' ? <Ic name="lock" size={12} /> : p.num}</span>
+                </div>
+                <div className="da-gp-card">
+                  <div className="da-gp-title">
+                    <b>{phaseLabel(p.num, lang)}</b>
+                    <span className={`da-chip c-${st.status}`}>{statusLabel(st.status)}</span>
+                  </div>
+                  <RingStat pct={pct} size={52} stroke={5} color={st.status === 'in_progress' ? 'var(--amber)' : 'var(--olive-deep)'} className="da-gp-ring">
+                    {st.status === 'locked' ? <Ic name="lock" size={14} /> : `${pct}%`}
+                  </RingStat>
+                  <div className="da-gp-nums">
+                    {st.total === null
+                      ? <span>{T(lang, 'Depends on sector', 'Sektöre göre değişir')}</span>
+                      : <>
+                          <span><b>{st.answered} / {st.total}</b> {T(lang, 'answered', 'cevaplandı')}</span>
+                          <span>{st.remaining} {T(lang, 'remaining', 'kaldı')}</span>
+                        </>}
+                    {st.superseded && <span className="da-gp-flag" title={T(lang, 'This phase was completed in this cycle; its result was replaced when the same assessment was completed again later.', 'Bu aşama bu dönemde tamamlanmıştı; aynı değerlendirme daha sonra yeniden tamamlanınca sonucu yenisiyle değiştirildi.')}>{T(lang, 'Completed earlier · result replaced', 'Daha önce tamamlandı · sonuç yenilendi')}</span>}
+                  </div>
+                  <div className="da-gp-foot">
+                    {href
+                      ? <Link href={href} className={`da-btn da-btn-sm${st.status === 'in_progress' || st.status === 'available' ? ' da-btn-primary' : ''}`}>{cta} <Ic name="arrow" size={12} /></Link>
+                      : <span className="da-gp-locked" title={T(lang, 'Phases unlock one after another within an assessment cycle', 'Aşamalar bir değerlendirme döneminde sırayla açılır')}><Ic name="lock" size={12} />{cta}</span>}
+                    {att && (
+                      <button type="button" className="da-gp-more" aria-expanded={isOpen} aria-controls="da-gp-detail" onClick={() => setOpenNum(isOpen ? null : p.num)}>
+                        {T(lang, 'Details', 'Ayrıntı')} <Ic name="chevron" size={12} className={isOpen ? 'is-flip' : ''} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="da-expand" data-open={!!openAtt} id="da-gp-detail">
+          <div>
+            {openAtt && openState && (
+              <dl className="da-dl">
+                <div><dt>{T(lang, 'Phase', 'Aşama')}</dt><dd>{openState.num}. {phaseLabel(openState.num, lang)}</dd></div>
+                <div><dt>{T(lang, 'Survey', 'Anket')}</dt><dd>{openAtt.survey_name}</dd></div>
+                <div><dt>{T(lang, 'Cycle', 'Dönem')}</dt><dd>{cycleLabel(openAtt.cycle_name, lang)}</dd></div>
+                <div><dt>{T(lang, 'Started', 'Başlangıç')}</dt><dd>{fmtDate(openAtt.started_at, lang)}</dd></div>
+                {openAtt.completed_at && <div><dt>{T(lang, 'Completed', 'Tamamlanma')}</dt><dd>{fmtDate(openAtt.completed_at, lang)}</dd></div>}
+                {openState.status === 'completed' && <div><dt>{T(lang, 'Score', 'Skor')}</dt><dd>{(openAtt.total_score ?? 0).toFixed(1)}%{openAtt.overall_grade ? ` · ${openAtt.overall_grade}` : ''}</dd></div>}
+                <div><dt>{T(lang, 'Flagged', 'İşaretli')}</dt><dd>{openAtt.bookmarked_count ?? 0}</dd></div>
+                {openState.status === 'completed' && <div><dt>{T(lang, 'Categories', 'Kategori')}</dt><dd>{openAtt.category_scores?.length ?? 0}</dd></div>}
+              </dl>
+            )}
+          </div>
         </div>
-        <span className="da-sub" style={{ whiteSpace: 'nowrap' }}>{m.phasesCompleted} / {PHASES.length} · {m.completionPct}%</span>
-      </div>
-      <div className="da-steps" aria-hidden="true">
-        {PHASES.map((p, i) => {
-          const st = m.phases[p.num - 1];
-          return <span key={p.num} className={`is-${st.status}`}><i className="da-anim-w" style={{ width: shown ? (st.status === 'completed' ? '100%' : st.status === 'in_progress' ? `${st.pct}%` : '0%') : '0%', transitionDelay: `${i * 110}ms` }} /></span>;
-        })}
-      </div>
-      <div className="da-phases">
-        {PHASES.map((p) => {
-          const st = m.phases[p.num - 1];
-          const res = m.latest[p.num];
-          const att = st.attempt;
-          const href = st.status === 'completed' && att ? `/results/${att.id}`
-                     : st.status === 'in_progress' && att ? `/questionnaire/${att.id}`
-                     : st.status === 'available' ? '/surveys' : null;
-          const cta = st.status === 'completed' ? T(lang, 'View results', 'Sonuçları gör')
-                    : st.status === 'in_progress' ? T(lang, 'Continue', 'Devam et')
-                    : st.status === 'available' ? T(lang, 'Start', 'Başla')
-                    : T(lang, `Complete ${phaseLabel(p.num - 1, lang)} first`, `Önce ${phaseLabel(p.num - 1, lang)} aşamasını tamamlayın`);
-          const pct = st.status === 'completed' ? 100 : st.pct;
-          const isOpen = openNum === p.num;
-          const body = (
-            <>
-              <div className="da-phase-top">
-                <span className="da-phase-name"><b>{String(p.num).padStart(2, '0')}</b>{phaseLabel(p.num, lang)}</span>
-                <span className={`da-chip c-${st.status}`}>{statusLabel(st.status)}</span>
-              </div>
-              <div className="da-phase-hero">
-                <div className="da-phase-ring">
-                  <Ring pct={pct} size={58} stroke={6} color={st.status === 'in_progress' ? 'var(--amber)' : st.status === 'completed' ? 'var(--olive-deep)' : 'var(--ink-4)'} />
-                  <span>{st.status === 'locked' ? '🔒' : `${pct}%`}</span>
-                </div>
-                <div className="da-phase-nums">
-                  {st.status === 'completed' && att ? (
-                    <><b style={{ color: 'var(--olive-deep)' }}>{Math.round(att.total_score ?? 0)}<small>%</small></b>{att.overall_grade && <em style={{ color: gradeColor(att.overall_grade) }}>{att.overall_grade}</em>}</>
-                  ) : res && st.status !== 'completed' ? (
-                    <span className="da-phase-meta">{T(lang, 'last result', 'son sonuç')}: {Math.round(res.score)}%</span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="da-phase-meta">
-                {st.total === null
-                  ? T(lang, 'Questions depend on the chosen sector', 'Sorular seçilen sektöre göre değişir')
-                  : <><b>{st.answered}</b> {T(lang, 'answered', 'cevaplandı')} · <b>{st.remaining}</b> {T(lang, 'remaining', 'kaldı')} {T(lang, 'of', '/')} {st.total}</>}
-              </div>
-            </>
-          );
-          return (
-            <div key={p.num} className={`da-phase is-${st.status}${isOpen ? ' is-open' : ''}`}>
-              {href ? <Link href={href} className="da-phase-link">{body}</Link> : <div className="da-phase-link is-static" aria-disabled="true" title={T(lang, 'Phases unlock one after another within an assessment cycle', 'Aşamalar bir değerlendirme döneminde sırayla açılır')}>{body}</div>}
-              <div className="da-phase-foot">
-                {href
-                  ? <Link href={href} className="da-phase-cta">{cta} <Icon.arrow /></Link>
-                  : <span className="da-phase-cta is-off">{st.status === 'locked' && '🔒 '}{cta}</span>}
-                {att && <button className="da-phase-more" aria-expanded={isOpen} onClick={() => setOpenNum(isOpen ? null : p.num)}>{isOpen ? T(lang, 'Less', 'Az') : T(lang, 'Details', 'Ayrıntı')} {isOpen ? '▴' : '▾'}</button>}
-              </div>
-              <div className="da-expand" data-open={isOpen}>
-                <div>
-                  {att && (
-                    <dl className="da-dl">
-                      <dt>{T(lang, 'Survey', 'Anket')}</dt><dd>{att.survey_name}</dd>
-                      <dt>{T(lang, 'Cycle', 'Dönem')}</dt><dd>{att.cycle_name || '—'}</dd>
-                      <dt>{T(lang, 'Started', 'Başlangıç')}</dt><dd>{fmtDate(att.started_at, lang)}</dd>
-                      {att.completed_at && <><dt>{T(lang, 'Completed', 'Tamamlanma')}</dt><dd>{fmtDate(att.completed_at, lang)}</dd></>}
-                      <dt>{T(lang, 'Flagged', 'İşaretli')}</dt><dd>{att.bookmarked_count ?? 0}</dd>
-                      {st.status === 'completed' && <><dt>{T(lang, 'Categories', 'Kategori')}</dt><dd>{att.category_scores?.length ?? 0}</dd></>}
-                    </dl>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </section>
   );
 }
 
-/* ═══════════════════════ Performance insights ═══════════════════════ */
+/* ═══════════════════════ Key insights ═══════════════════════ */
+function InsightList({ list, m, go, lang, tone }: { list: RankedCategory[]; m: DashModel; go: Go; lang: string; tone: 'up' | 'down' }) {
+  const [ref, shown] = useInView<HTMLDivElement>(0.15);
+  const tt = useTooltip();
+  return (
+    <div ref={ref} className="da-ins-list">
+      {list.map((x, i) => {
+        const href = m.latest[x.phase] ? `/results/${m.latest[x.phase]!.id}` : undefined;
+        const tip = <TipRows title={x.name} rows={[[T(lang, 'Phase', 'Aşama'), phaseLabel(x.phase, lang)], [T(lang, 'Score', 'Skor'), `${x.pct.toFixed(1)}%`], [T(lang, 'Points', 'Puan'), `${x.score ?? '—'} / ${x.max ?? '—'}`]]} />;
+        return (
+          <div key={`${x.phase}-${i}-${x.name}`} className={`da-ins-row${href ? ' is-link' : ''}`} tabIndex={0} role={href ? 'link' : undefined}
+            onClick={() => href && go(href)} onKeyDown={(e) => { if (e.key === 'Enter' && href) go(href); }} {...tt.bind(tip)}>
+            <span className="da-ins-name"><span>{x.name}</span><small>{phaseLabel(x.phase, lang)}</small></span>
+            <b className="da-ins-pct">{Math.round(x.pct)}%</b>
+            <span className="da-ins-bar"><span className="da-anim-w" style={{ width: shown ? `${x.pct}%` : '0%', background: tone === 'up' ? 'var(--olive-deep)' : scoreColor(x.pct), transitionDelay: `${i * 60}ms` }} /></span>
+          </div>
+        );
+      })}
+      {tt.node}
+    </div>
+  );
+}
+
 export function InsightsCard({ m, cats, go, lang }: P & { cats: RankedCategory[]; go: Go }) {
   const c = bandCounts(cats);
   const unfinished = m.phases.filter((p) => p.status === 'in_progress').reduce((s, p) => s + (p.remaining ?? 0), 0);
   const notStarted = m.phases.filter((p) => p.status === 'available' || p.status === 'locked').length;
-  const rows = (list: RankedCategory[]): BarRow[] => list.map((x, i) => ({
-    key: `${x.phase}-${i}-${x.name}`, label: x.name, sub: phaseLabel(x.phase, lang), pct: x.pct, color: scoreColor(x.pct),
-    tip: <TipRows title={x.name} rows={[[T(lang, 'Phase', 'Aşama'), phaseLabel(x.phase, lang)], [T(lang, 'Score', 'Skor'), `${x.pct.toFixed(1)}%`], [T(lang, 'Points', 'Puan'), `${x.score ?? '—'} / ${x.max ?? '—'}`]]} />,
-    href: m.latest[x.phase] ? `/results/${m.latest[x.phase]!.id}` : undefined,
-  }));
-  const bands: { band: Band; label: string; hint: string }[] = [
-    { band: 'strong', label: T(lang, 'Strong', 'Güçlü'), hint: '≥ 60%' },
-    { band: 'developing', label: T(lang, 'Developing', 'Gelişen'), hint: '35–59%' },
-    { band: 'gap', label: T(lang, 'Gap', 'Açık'), hint: '< 35%' },
-  ];
+  const bands: { band: Band; hint: string }[] = [{ band: 'strong', hint: '≥ 60%' }, { band: 'developing', hint: '35–59%' }, { band: 'gap', hint: '< 35%' }];
+  // with few categories the two lists must not show the same category twice
+  const n = Math.min(3, Math.floor(cats.length / 2) || cats.length);
+  const top = strongest(cats, n);
+  const low = weakest(cats, n).filter((x) => !top.includes(x) && !top.some((t) => t.phase === x.phase && t.name === x.name));
   return (
-    <section className="da-card">
-      <div className="da-head">
-        <div>
-          <span className="da-eyebrow">{T(lang, 'Performance insights', 'Performans içgörüleri')}</span>
-          <h2 className="da-h2">{T(lang, 'Strengths and gaps across your results', 'Sonuçlarınızdaki güçlü yönler ve açıklar')}</h2>
-        </div>
-        <span className="da-sub">{cats.length} {T(lang, 'scored categories', 'puanlanan kategori')}</span>
-      </div>
-      <div className="da-attn">
-        <span className={`da-attn-chip${c.gap ? ' is-bad' : ''}`}><b>{c.gap}</b> {T(lang, 'categories below 35%', '%35 altında kategori')}</span>
-        <span className={`da-attn-chip${m.flagged ? ' is-warn' : ''}`}><b>{m.flagged}</b> {T(lang, 'flagged questions', 'işaretli soru')}</span>
-        <span className={`da-attn-chip${unfinished ? ' is-warn' : ''}`}><b>{unfinished}</b> {T(lang, 'questions left in open phases', 'açık aşamalarda kalan soru')}</span>
-        <span className="da-attn-chip"><b>{notStarted}</b> {T(lang, 'phases not started', 'başlanmamış aşama')}</span>
-      </div>
-      {cats.length === 0 ? <p className="da-empty">{T(lang, 'No category scores yet.', 'Henüz kategori skoru yok.')}</p> : (
-        <>
-          <div className="da-band">
-            <StackBar label={T(lang, 'Share of categories by performance band', 'Kategorilerin performans bandına göre dağılımı')}
-              parts={bands.map((b) => ({ key: b.band, value: c[b.band], color: BAND_COLOR[b.band], tip: `${b.label}: ${c[b.band]}` }))} />
-            <div className="da-band-legend">
-              {bands.map((b) => <span key={b.band}><i className="da-dot" style={{ background: BAND_COLOR[b.band] }} />{b.label} <small>{b.hint}</small> <b style={{ color: BAND_COLOR[b.band] }}>{c[b.band]}</b></span>)}
+    <section className="da-card da-fill">
+      <Head title={T(lang, 'Key insights', 'Öne çıkan içgörüler')}
+        hint={T(lang, 'Categories of the latest completed result of each phase. Bands: strong ≥ 60%, developing 35–59%, gap < 35%.', 'Her aşamanın son tamamlanan sonucundaki kategoriler. Bantlar: güçlü ≥ %60, gelişen %35–59, açık < %35.')}>
+        <span className="da-head-meta">{cats.length} {T(lang, 'scored categories', 'puanlanan kategori')}</span>
+      </Head>
+      <div className="da-body">
+        {cats.length === 0 ? <p className="da-empty">{T(lang, 'No category scores yet.', 'Henüz kategori skoru yok.')}</p> : (
+          <>
+            <div className="da-ins2">
+              <div className="da-ins-panel is-up">
+                <h3 className="da-h3"><Ic name="up" size={15} />{T(lang, 'Strongest areas', 'En güçlü alanlar')}</h3>
+                <InsightList list={top} m={m} go={go} lang={lang} tone="up" />
+              </div>
+              <div className="da-ins-panel is-down">
+                <h3 className="da-h3"><Ic name="down" size={15} />{T(lang, 'Areas for improvement', 'Gelişim alanları')}</h3>
+                {low.length ? <InsightList list={low} m={m} go={go} lang={lang} tone="down" /> : <p className="da-empty">{T(lang, 'Not enough categories to compare yet.', 'Karşılaştırma için henüz yeterli kategori yok.')}</p>}
+              </div>
             </div>
-          </div>
-          <div className="da-ins2">
-            <div><h3><i className="da-dot" style={{ background: BAND_COLOR.strong }} />{T(lang, 'Strongest areas', 'En güçlü alanlar')}</h3><HBars rows={rows(strongest(cats, 4))} onOpen={go} dense /></div>
-            <div><h3><i className="da-dot" style={{ background: BAND_COLOR.gap }} />{T(lang, 'Weakest areas & gaps', 'En zayıf alanlar ve açıklar')}</h3><HBars rows={rows(weakest(cats, 4))} onOpen={go} dense /></div>
-          </div>
-        </>
-      )}
+            <div className="da-band">
+              <StackBar label={T(lang, 'Share of categories by performance band', 'Kategorilerin performans bandına göre dağılımı')}
+                parts={bands.map((b) => ({ key: b.band, value: c[b.band], color: BAND_COLOR[b.band], tip: `${bandLabel(b.band, lang)}: ${c[b.band]}` }))} />
+              <div className="da-band-legend">
+                {bands.map((b) => <span key={b.band}><i className="da-dot" style={{ background: BAND_COLOR[b.band] }} />{bandLabel(b.band, lang)} <small>{b.hint}</small> <b>{c[b.band]}</b></span>)}
+              </div>
+            </div>
+          </>
+        )}
+        <div className="da-facts">
+          <div className={c.gap ? 'is-bad' : ''}><b>{c.gap}</b><span>{T(lang, 'categories below 35%', '%35 altında kategori')}</span></div>
+          <div className={m.flagged ? 'is-warn' : ''}><b>{m.flagged}</b><span>{T(lang, 'flagged questions', 'işaretli soru')}</span></div>
+          <div className={unfinished ? 'is-warn' : ''}><b>{unfinished}</b><span>{T(lang, 'questions left in open phases', 'açık aşamalarda kalan soru')}</span></div>
+          <div><b>{notStarted}</b><span>{T(lang, 'phases not started', 'başlanmamış aşama')}</span></div>
+        </div>
+      </div>
     </section>
   );
 }
@@ -488,64 +521,65 @@ export function LatestCard({ m, details, names, go, lang }: P & { details: Recor
   const detail = details[r.id];
   const cats = categoriesOf(r, names);
   const c = bandCounts(cats);
-  const delta = m.overall && m.overall.phases > 1 ? Math.round(r.score) - Math.round(m.overall.score) : null;
+  const vsAvg = m.overall && m.overall.phases > 1 ? Math.round(r.score) - Math.round(m.overall.score) : null;
+  const prev = m.previous[phase];                                   // an earlier scored result of the SAME survey, when one exists
+  const vsPrev = prev ? Math.round(r.score) - Math.round(prev.score) : null;
+  const delta = (d: number, text: string) => (
+    <span className={`da-delta ${d > 0 ? 'is-up' : d < 0 ? 'is-down' : ''}`}><Ic name={d < 0 ? 'down' : 'up'} size={13} />{d > 0 ? '+' : ''}{d} {text}</span>
+  );
   return (
     <section className="da-card da-fill">
-      <div className="da-head">
-        <div>
-          <span className="da-eyebrow">{T(lang, 'Latest results', 'Son sonuçlar')}</span>
-          <h2 className="da-h2">{r.name}</h2>
-        </div>
-      </div>
+      <Head title={T(lang, 'Latest results', 'Son sonuçlar')} sub={r.name}>
+        {m.latestResult?.id === r.id && <span className="da-head-meta">{T(lang, 'Most recent', 'En yeni')}</span>}
+      </Head>
       <div className="da-body">
         {withResults.length > 1 && (
-          <div className="da-chips" role="group" aria-label={T(lang, 'Phase', 'Aşama')} style={{ marginBottom: 12 }}>
+          <div className="da-chips" role="group" aria-label={T(lang, 'Phase', 'Aşama')}>
             {withResults.map((p) => (
-              <button key={p.num} className={`da-chipbtn${phase === p.num ? ' is-on' : ''}`} aria-pressed={phase === p.num} onClick={() => setSel(p.num)}>
+              <button key={p.num} type="button" className={`da-chipbtn${phase === p.num ? ' is-on' : ''}`} aria-pressed={phase === p.num} onClick={() => setSel(p.num)}>
                 <i style={{ background: PHASE_COLORS[p.num] }} />{phaseLabel(p.num, lang)}
               </button>
             ))}
           </div>
         )}
-        <div key={phase} className="da-swap">
+        <div key={phase} className="da-swap da-grow">
           <div className="da-latest">
-            <div className="da-ring" style={{ width: 72, height: 72 }}>
-              <Ring pct={r.score} size={72} stroke={7} color={r.grade ? gradeColor(r.grade) : 'var(--olive-deep)'} />
-              <span style={{ fontSize: 16, fontWeight: 400 }}>{Math.round(r.score)}</span>
+            <GradeBadge grade={r.grade} size="lg" />
+            <div className="da-latest-main">
+              <span className="da-latest-score">{r.score.toFixed(1)}<small>%</small></span>
+              <span className="da-latest-phase">{phaseLabel(phase, lang)} · {T(lang, 'phase', 'aşama')} {phase}</span>
             </div>
-            <div className="da-latest-grade" style={{ color: r.grade ? gradeColor(r.grade) : 'var(--ink)' }}>{r.grade ?? '—'}</div>
-            <div className="da-latest-meta">
-              <b>{detail?.maturity?.label ?? T(lang, 'Overall grade', 'Genel not')}</b><br />
-              {fmtDate(r.iso, lang)}{r.cycle ? ` · ${r.cycle}` : ''}
-              {delta !== null && <><br /><span style={{ color: delta >= 0 ? 'var(--olive-deep)' : 'var(--danger)', fontWeight: 600 }}>{delta > 0 ? '+' : ''}{delta} {T(lang, 'pts vs overall average', 'puan, genel ortalamaya göre')}</span></>}
-            </div>
+            <RingStat pct={r.score} size={64} stroke={6} color={PHASE_COLORS[phase]}>{Math.round(r.score)}</RingStat>
           </div>
+          <dl className="da-latest-facts">
+            <div><dt>{T(lang, 'Maturity', 'Olgunluk')}</dt><dd>{detail?.maturity?.label ?? '—'}</dd></div>
+            <div><dt>{T(lang, 'Completed', 'Tamamlanma')}</dt><dd>{fmtDate(r.iso, lang)}</dd></div>
+            <div><dt>{T(lang, 'Cycle', 'Dönem')}</dt><dd>{cycleLabel(r.cycle, lang)}</dd></div>
+          </dl>
+          {(vsPrev !== null || vsAvg !== null) && (
+            <div className="da-deltas">
+              {vsPrev !== null && prev && delta(vsPrev, T(lang, `pts vs previous result (${fmtShort(prev.iso, lang)})`, `puan, önceki sonuca göre (${fmtShort(prev.iso, lang)})`))}
+              {vsAvg !== null && delta(vsAvg, T(lang, 'pts vs overall average', 'puan, genel ortalamaya göre'))}
+            </div>
+          )}
           {detail?.maturity?.narrative && <p className="da-narr">{detail.maturity.narrative}</p>}
           {cats.length > 0 && (
-            <div className="da-band" style={{ padding: 0, marginTop: 12 }}>
-              <StackBar label={T(lang, 'Category bands', 'Kategori bantları')} parts={[
-                { key: 's', value: c.strong, color: BAND_COLOR.strong, tip: `${T(lang, 'Strong', 'Güçlü')}: ${c.strong}` },
-                { key: 'd', value: c.developing, color: BAND_COLOR.developing, tip: `${T(lang, 'Developing', 'Gelişen')}: ${c.developing}` },
-                { key: 'g', value: c.gap, color: BAND_COLOR.gap, tip: `${T(lang, 'Gap', 'Açık')}: ${c.gap}` },
-              ]} />
+            <div className="da-band is-flush">
+              <StackBar label={T(lang, 'Category bands', 'Kategori bantları')} parts={(['strong', 'developing', 'gap'] as Band[]).map((b) => ({ key: b, value: c[b], color: BAND_COLOR[b], tip: `${bandLabel(b, lang)}: ${c[b]}` }))} />
               <div className="da-band-legend">
-                <span><i className="da-dot" style={{ background: BAND_COLOR.strong }} />{T(lang, 'Strong', 'Güçlü')} <b>{c.strong}</b></span>
-                <span><i className="da-dot" style={{ background: BAND_COLOR.developing }} />{T(lang, 'Developing', 'Gelişen')} <b>{c.developing}</b></span>
-                <span><i className="da-dot" style={{ background: BAND_COLOR.gap }} />{T(lang, 'Gap', 'Açık')} <b>{c.gap}</b></span>
+                {(['strong', 'developing', 'gap'] as Band[]).map((b) => <span key={b}><i className="da-dot" style={{ background: BAND_COLOR[b] }} />{bandLabel(b, lang)} <b>{c[b]}</b></span>)}
               </div>
             </div>
           )}
         </div>
-        <div className="da-actions-col" style={{ marginTop: 'auto', paddingTop: 14 }}>
-          <button className="da-btn da-btn-primary da-btn-block" onClick={() => go(`/results/${r.id}`)}>{T(lang, 'Full report', 'Tam rapor')} <Icon.arrow /></button>
-        </div>
+        <button type="button" className="da-btn da-btn-primary da-btn-block" onClick={() => go(`/results/${r.id}`)}>{T(lang, 'Open full report', 'Tam raporu aç')} <Ic name="arrow" size={14} /></button>
       </div>
     </section>
   );
 }
 
 /* ═══════════════════════ Recommendations & action plan ═══════════════════════ */
-export function RecommendationsCard({ m, recs, state, tasks, tasksState, onAdded, lang }: P & {
+export function RecommendationsCard({ recs, state, tasks, tasksState, onAdded, lang }: P & {
   recs: RecWithPhase[]; state: LoadState; tasks: ActionTask[]; tasksState: LoadState; onAdded: () => void;
 }) {
   const [all, setAll] = useState(false);
@@ -567,21 +601,18 @@ export function RecommendationsCard({ m, recs, state, tasks, tasksState, onAdded
 
   const open = tasks.filter((t) => t.status === 'todo' || t.status === 'in_progress');
   const done = tasks.filter((t) => t.status === 'done').length;
-  const next = open.slice().sort((a, b) => (a.due_date ?? '9999') .localeCompare(b.due_date ?? '9999')).slice(0, 3);
+  const next = open.slice().sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999')).slice(0, 3);
   const counts = { todo: tasks.filter((t) => t.status === 'todo').length, in_progress: tasks.filter((t) => t.status === 'in_progress').length, done };
 
   return (
-    <section className="da-card">
-      <div className="da-head">
-        <div>
-          <span className="da-eyebrow">{T(lang, 'Recommendations & action plan', 'Öneriler ve eylem planı')}</span>
-          <h2 className="da-h2">{T(lang, 'From your results to concrete next steps', 'Sonuçlarınızdan somut adımlara')}</h2>
-        </div>
-        <Link href="/action-plan" className="da-link">{T(lang, 'Open action plan', 'Eylem planını aç')} <Icon.arrow /></Link>
-      </div>
+    <section className="da-card da-fill">
+      <Head title={T(lang, 'Recommendations & action plan', 'Öneriler ve eylem planı')}
+        hint={T(lang, 'Recommendations come from the same scoring rules as your results report (categories below 80%), highest priority first.', 'Öneriler, sonuç raporunuzdaki aynı puanlama kurallarından gelir (%80 altındaki kategoriler); en yüksek öncelik önce.')}>
+        <Link href="/action-plan" className="da-link">{T(lang, 'Open action plan', 'Eylem planını aç')} <Ic name="arrow" size={13} /></Link>
+      </Head>
       <div className="da-rec2">
         <div className="da-rec2-main">
-          <h3>{T(lang, 'Recommended actions', 'Önerilen eylemler')}</h3>
+          <h3 className="da-h3">{T(lang, 'Recommended actions', 'Önerilen eylemler')}{recs.length > 0 && <small>{recs.length}</small>}</h3>
           {state === 'loading' && <><div className="da-skel" /><div className="da-skel" style={{ width: '80%' }} /><div className="da-skel" style={{ width: '60%' }} /></>}
           {state !== 'loading' && recs.length === 0 && (
             <p className="da-empty">{state === 'error' || state === 'partial' ? T(lang, 'Recommendations could not be loaded.', 'Öneriler yüklenemedi.') : T(lang, 'No recommendations: every category scored 80% or above.', 'Öneri yok: tüm kategoriler %80 veya üzerinde.')}</p>
@@ -591,69 +622,70 @@ export function RecommendationsCard({ m, recs, state, tasks, tasksState, onAdded
             const added = inPlan(r);
             return (
               <div key={k + i} className="da-rec">
-                <div className="da-rec-top"><span className={`da-prio ${r.priority}`}>{r.priority}</span><span className="da-ins-phase" style={{ display: 'inline' }}>{phaseLabel(r.phase, lang)} · {r.category}{r.gri_standard ? ` · ${r.gri_standard}` : ''}</span></div>
-                <div className="da-rec-row">
-                  <div>
-                    <div className="da-rec-title">{r.title}</div>
-                    <div className="da-rec-meta">{r.quick_win || r.description}{r.timeline_days ? ` · ~${r.timeline_days} ${T(lang, 'days', 'gün')}` : ''}{r.effort ? ` · ${r.effort}` : ''}</div>
-                  </div>
-                  <button className={`da-btn da-btn-sm${added ? ' is-done' : ''}`} disabled={added || busy === k} onClick={() => add(r)}>
-                    {added ? `✓ ${T(lang, 'In plan', 'Planda')}` : busy === k ? '…' : `+ ${T(lang, 'Add to plan', 'Plana ekle')}`}
-                  </button>
+                <div className="da-rec-body">
+                  <div className="da-rec-top"><span className={`da-prio ${r.priority}`}>{prioLabel(r.priority, lang)}</span><span className="da-rec-ctx">{phaseLabel(r.phase, lang)} · {r.category}{r.gri_standard ? ` · ${r.gri_standard}` : ''}</span></div>
+                  <div className="da-rec-title">{r.title}</div>
+                  <div className="da-rec-meta">{r.quick_win || r.description}{r.timeline_days ? ` · ~${r.timeline_days} ${T(lang, 'days', 'gün')}` : ''}{r.effort ? ` · ${r.effort}` : ''}</div>
                 </div>
+                <button type="button" className={`da-btn da-btn-sm${added ? ' is-done' : ''}`} disabled={added || busy === k} onClick={() => add(r)}>
+                  {added ? <><Ic name="check" size={12} />{T(lang, 'In plan', 'Planda')}</> : busy === k ? '…' : <><Ic name="plus" size={12} />{T(lang, 'Add to plan', 'Plana ekle')}</>}
+                </button>
               </div>
             );
           })}
           {err && <p className="da-err" role="alert">{err}</p>}
-          {recs.length > 3 && <button className="da-link da-linkbtn" onClick={() => setAll((v) => !v)}>{all ? T(lang, 'Show fewer', 'Daha az göster') : `${T(lang, 'Show all', 'Tümünü göster')} (${recs.length})`}</button>}
+          {recs.length > 3 && <button type="button" className="da-link da-linkbtn" onClick={() => setAll((v) => !v)}>{all ? T(lang, 'Show fewer', 'Daha az göster') : `${T(lang, 'Show all', 'Tümünü göster')} (${recs.length})`}</button>}
         </div>
         <div className="da-rec2-side">
-          <h3>{T(lang, 'Your action plan', 'Eylem planınız')}</h3>
+          <h3 className="da-h3">{T(lang, 'Your action plan', 'Eylem planınız')}{tasks.length > 0 && <small>{tasks.length}</small>}</h3>
           {tasksState === 'loading' && <div className="da-skel" />}
           {tasksState === 'error' && <p className="da-empty">{T(lang, 'Action plan could not be loaded.', 'Eylem planı yüklenemedi.')}</p>}
           {tasksState !== 'loading' && tasksState !== 'error' && tasks.length === 0 && (
-            <p className="da-empty">{T(lang, 'No tasks yet. Add a recommendation to turn it into a tracked task.', 'Henüz görev yok. Bir öneriyi takip edilen göreve dönüştürmek için plana ekleyin.')}</p>
+            <div className="da-plan-empty">
+              <Ic name="clipboard" size={20} />
+              <p>{T(lang, 'No tasks yet. Add a recommendation to turn it into a tracked task.', 'Henüz görev yok. Bir öneriyi takip edilen göreve dönüştürmek için plana ekleyin.')}</p>
+            </div>
           )}
           {tasks.length > 0 && (
             <>
+              <div className="da-plan-counts">
+                <div><b>{counts.todo}</b><span>{T(lang, 'To do', 'Yapılacak')}</span></div>
+                <div><b>{counts.in_progress}</b><span>{T(lang, 'In progress', 'Devam eden')}</span></div>
+                <div><b>{counts.done}</b><span>{T(lang, 'Done', 'Tamamlanan')}</span></div>
+              </div>
               <StackBar label={T(lang, 'Tasks by status', 'Duruma göre görevler')} parts={[
                 { key: 'done', value: counts.done, color: 'var(--olive-deep)', tip: `${T(lang, 'Done', 'Tamamlandı')}: ${counts.done}` },
                 { key: 'ip', value: counts.in_progress, color: 'var(--amber)', tip: `${T(lang, 'In progress', 'Devam ediyor')}: ${counts.in_progress}` },
                 { key: 'todo', value: counts.todo, color: 'var(--ink-4)', tip: `${T(lang, 'To do', 'Yapılacak')}: ${counts.todo}` },
               ]} />
-              <div className="da-band-legend" style={{ marginTop: 8 }}>
-                <span><i className="da-dot" style={{ background: 'var(--olive-deep)' }} />{T(lang, 'Done', 'Bitti')} <b>{counts.done}</b></span>
-                <span><i className="da-dot" style={{ background: 'var(--amber)' }} />{T(lang, 'In progress', 'Devam')} <b>{counts.in_progress}</b></span>
-                <span><i className="da-dot" style={{ background: 'var(--ink-4)' }} />{T(lang, 'To do', 'Yapılacak')} <b>{counts.todo}</b></span>
-              </div>
               {next.map((t) => (
                 <Link key={t.id} href="/action-plan" className="da-task">
-                  <span className={`da-prio ${t.priority || 'Low'}`}>{t.priority || '—'}</span>
+                  <span className={`da-prio ${t.priority || 'Low'}`}>{t.priority ? prioLabel(t.priority, lang) : '—'}</span>
                   <span className="da-task-t">{t.title}</span>
                   <small>{t.due_date ? fmtDate(t.due_date, lang) : T(lang, 'no due date', 'tarih yok')}</small>
                 </Link>
               ))}
             </>
           )}
+          <Link href="/action-plan" className="da-btn da-btn-sm da-plan-open">{T(lang, 'Go to action plan', 'Eylem planına git')} <Ic name="arrow" size={12} /></Link>
         </div>
       </div>
-      <p className="da-note" style={{ margin: '0 16px 14px' }}>{T(lang, 'Recommendations come from the same scoring rules as your results report (categories below 80%).', 'Öneriler, sonuç raporunuzdaki aynı puanlama kurallarından gelir (%80 altındaki kategoriler).')}</p>
     </section>
   );
 }
 
 /* ═══════════════════════ Recent assessments ═══════════════════════ */
 export function RecentCard({ m, lang }: P) {
-  type Row = { key: string; name: string; cycle: string; status: 'completed' | 'in_progress'; iso: string | null; score: number | null; grade: string | null; answered: number; total: number; href: string };
+  type Row = { key: string; phase: number; name: string; cycle: string; status: 'completed' | 'in_progress'; iso: string | null; score: number | null; grade: string | null; answered: number; total: number; href: string };
   const [filter, setFilter] = useState<'all' | 'completed' | 'in_progress'>('all');
   const [showAll, setShowAll] = useState(false);
   const rows: Row[] = useMemo(() => {
     const live: Row[] = m.phases.filter((p) => p.status === 'in_progress' && p.attempt).map((p) => ({
-      key: `live-${p.attempt!.id}`, name: p.attempt!.survey_name, cycle: p.attempt!.cycle_name, status: 'in_progress', iso: p.attempt!.started_at,
+      key: `live-${p.attempt!.id}`, phase: p.num, name: p.attempt!.survey_name, cycle: p.attempt!.cycle_name, status: 'in_progress', iso: p.attempt!.started_at,
       score: null, grade: null, answered: p.answered, total: p.attempt!.total_questions, href: `/questionnaire/${p.attempt!.id}`,
     }));
     const done: Row[] = m.results.slice().reverse().map((r) => ({
-      key: `res-${r.id}`, name: r.name, cycle: r.cycle, status: 'completed', iso: r.iso, score: r.score, grade: r.grade,
+      key: `res-${r.id}`, phase: r.phase, name: r.name, cycle: r.cycle, status: 'completed', iso: r.iso, score: r.score, grade: r.grade,
       answered: r.attempt.answered_count, total: r.attempt.total_questions, href: `/results/${r.id}`,
     }));
     return [...live, ...done];
@@ -664,73 +696,83 @@ export function RecentCard({ m, lang }: P) {
   const [ref, shown] = useInView<HTMLDivElement>(0.12);
   return (
     <section className="da-card" ref={ref}>
-      <div className="da-head" style={{ paddingBottom: 10 }}>
-        <div>
-          <span className="da-eyebrow">{T(lang, 'Recent activity', 'Son etkinlik')}</span>
-          <h2 className="da-h2">{T(lang, 'Recent assessments', 'Son değerlendirmeler')}</h2>
-        </div>
+      <Head title={T(lang, 'Recent assessments', 'Son değerlendirmeler')}>
         <div className="da-seg" role="tablist" aria-label={T(lang, 'Filter assessments', 'Değerlendirmeleri filtrele')}>
           {(['all', 'completed', 'in_progress'] as const).map((f) => (
-            <button key={f} role="tab" aria-selected={filter === f} className={filter === f ? 'is-on' : ''} onClick={() => { setFilter(f); setShowAll(false); }}>
+            <button key={f} type="button" role="tab" aria-selected={filter === f} className={filter === f ? 'is-on' : ''} onClick={() => { setFilter(f); setShowAll(false); }}>
               {f === 'all' ? T(lang, 'All', 'Tümü') : f === 'completed' ? T(lang, 'Completed', 'Tamamlanan') : T(lang, 'In progress', 'Devam eden')} <small>{counts[f]}</small>
             </button>
           ))}
         </div>
-      </div>
-      <div className="da-row-tbl head"><span>{T(lang, 'ASSESSMENT', 'DEĞERLENDİRME')}</span><span className="da-tbl-date">{T(lang, 'DATE', 'TARİH')}</span><span>{T(lang, 'SCORE', 'SKOR')}</span><span className="da-num">{T(lang, 'GRADE', 'NOT')}</span><span /></div>
-      {visible.length === 0 && <p className="da-empty">{T(lang, 'Nothing to show for this filter.', 'Bu filtre için gösterilecek bir şey yok.')}</p>}
-      <div key={filter} className="da-swap">
-        {visible.map((r, i) => (
-          <Link key={r.key} href={r.href} className="da-row-tbl">
-            <div className="da-tbl-name">
-              <small>{r.cycle || ' '}<em className={`da-st c-${r.status}`}>{r.status === 'completed' ? T(lang, 'Completed', 'Tamamlandı') : T(lang, 'In progress', 'Devam ediyor')}</em></small>
-              <span>{r.name}</span>
-            </div>
-            <span className="da-tbl-date">{fmtDate(r.iso, lang)}</span>
-            <div className="da-tbl-bar">
-              {r.score === null
-                ? <><div className="da-track"><div className="da-anim-w" style={{ width: shown ? `${r.total ? Math.round((r.answered / r.total) * 100) : 0}%` : '0%', background: 'var(--amber)', transitionDelay: `${i * 50}ms` }} /></div><b>{r.answered}/{r.total}</b></>
-                : <><div className="da-track"><div className="da-anim-w" style={{ width: shown ? `${r.score}%` : '0%', background: scoreColor(r.score), transitionDelay: `${i * 50}ms` }} /></div><b>{Math.round(r.score)}</b></>}
-            </div>
-            <span className="da-num" style={{ font: "600 13px 'IBM Plex Sans', sans-serif", color: r.grade ? gradeColor(r.grade) : 'var(--ink-4)' }}>{r.grade ?? '—'}</span>
-            <span className="da-tbl-act">{r.status === 'in_progress' ? T(lang, 'Continue', 'Devam et') : T(lang, 'View', 'Görüntüle')}<Icon.arrow /></span>
-          </Link>
-        ))}
+      </Head>
+      <div className="da-tbl" role="table" aria-label={T(lang, 'Recent assessments', 'Son değerlendirmeler')}>
+        <div className="da-tr is-head" role="row">
+          <span role="columnheader">{T(lang, 'Assessment', 'Değerlendirme')}</span>
+          <span role="columnheader" className="c-cycle">{T(lang, 'Cycle', 'Dönem')}</span>
+          <span role="columnheader" className="c-status">{T(lang, 'Status', 'Durum')}</span>
+          <span role="columnheader" className="c-score">{T(lang, 'Score', 'Skor')}</span>
+          <span role="columnheader" className="c-grade">{T(lang, 'Grade', 'Not')}</span>
+          <span role="columnheader" className="c-date">{T(lang, 'Date', 'Tarih')}</span>
+          <span role="columnheader" className="c-act"><span className="da-sr">{T(lang, 'Action', 'İşlem')}</span></span>
+        </div>
+        {visible.length === 0 && <p className="da-empty">{T(lang, 'Nothing to show for this filter.', 'Bu filtre için gösterilecek bir şey yok.')}</p>}
+        <div key={filter} className="da-swap">
+          {visible.map((r, i) => {
+            const prog = r.total ? Math.round((r.answered / r.total) * 100) : 0;
+            return (
+              <Link key={r.key} href={r.href} className="da-tr" role="row">
+                <span role="cell" className="c-name">
+                  <i className="da-dot" style={{ background: PHASE_COLORS[r.phase] }} />
+                  <span><b>{phaseLabel(r.phase, lang)}</b><small>{r.name}</small><small className="c-sub">{cycleLabel(r.cycle, lang)} · {fmtDate(r.iso, lang)}</small></span>
+                </span>
+                <span role="cell" className="c-cycle">{cycleLabel(r.cycle, lang)}</span>
+                <span role="cell" className="c-status"><em className={`da-chip c-${r.status}`}>{r.status === 'completed' ? T(lang, 'Completed', 'Tamamlandı') : T(lang, 'In progress', 'Devam ediyor')}</em></span>
+                <span role="cell" className="c-score">
+                  {r.score === null
+                    ? <><span className="da-track"><span className="da-anim-w" style={{ width: shown ? `${prog}%` : '0%', background: 'var(--amber)', transitionDelay: `${i * 50}ms` }} /></span><b title={T(lang, 'Questions answered', 'Cevaplanan soru')}>{r.answered}/{r.total}</b></>
+                    : <><span className="da-track"><span className="da-anim-w" style={{ width: shown ? `${r.score}%` : '0%', background: scoreColor(r.score), transitionDelay: `${i * 50}ms` }} /></span><b>{r.score.toFixed(1)}%</b></>}
+                </span>
+                <span role="cell" className="c-grade"><GradeBadge grade={r.grade} size="sm" /></span>
+                <span role="cell" className="c-date">{fmtDate(r.iso, lang)}</span>
+                <span role="cell" className="c-act">{r.status === 'in_progress' ? T(lang, 'Continue', 'Devam et') : T(lang, 'View results', 'Sonuçları gör')}<Ic name="arrow" size={13} /></span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
       <div className="da-tbl-foot">
-        {filtered.length > 5 && <button className="da-link da-linkbtn" onClick={() => setShowAll((v) => !v)}>{showAll ? T(lang, 'Show fewer', 'Daha az göster') : `${T(lang, 'Show all', 'Tümünü göster')} (${filtered.length})`}</button>}
-        <Link href="/history" className="da-link">{T(lang, 'Full history', 'Tüm geçmiş')} <Icon.arrow /></Link>
+        {filtered.length > 5
+          ? <button type="button" className="da-link da-linkbtn" onClick={() => setShowAll((v) => !v)}>{showAll ? T(lang, 'Show fewer', 'Daha az göster') : `${T(lang, 'Show all', 'Tümünü göster')} (${filtered.length})`}</button>
+          : <span className="da-tbl-count">{filtered.length} {T(lang, filtered.length === 1 ? 'assessment' : 'assessments', 'değerlendirme')}</span>}
+        <Link href="/history" className="da-link">{T(lang, 'Full assessment history', 'Tüm değerlendirme geçmişi')} <Ic name="arrow" size={13} /></Link>
       </div>
     </section>
   );
 }
 
 /* ═══════════════════════ Quick actions ═══════════════════════ */
-const QI = ({ d }: { d: string }) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
-);
 export function QuickCard({ m, lang }: P) {
-  const live = m.phases.find((p) => p.status === 'in_progress' && p.attempt);
+  const na = nextAction(m, lang);
   const r = m.latestResult;
-  const items: { href: string; label: string; sub?: string; icon: string; primary?: boolean }[] = [
-    live ? { href: `/questionnaire/${live.attempt!.id}`, label: T(lang, 'Continue assessment', 'Devam et'), sub: `${phaseLabel(live.num, lang)} · ${live.pct}%`, icon: 'M5 12h14M13 6l6 6-6 6', primary: true }
-         : { href: '/surveys', label: T(lang, 'Start an assessment', 'Değerlendirme başlat'), icon: 'M12 5v14M5 12h14', primary: true },
-    ...(r ? [{ href: `/results/${r.id}`, label: T(lang, 'View results', 'Sonuçlar'), sub: phaseLabel(r.phase, lang), icon: 'M4 20V10M10 20V4M16 20v-8M22 20H2' }] : []),
-    { href: '/action-plan', label: T(lang, 'Action plan', 'Eylem planı'), icon: 'M9 11l3 3 8-8M4 12v7a2 2 0 002 2h12' },
-    { href: '/courses', label: T(lang, 'Courses', 'Kurslar'), icon: 'M4 5a2 2 0 012-2h12v16H6a2 2 0 00-2 2V5zM8 7h6' },
-    { href: '/history', label: T(lang, 'History', 'Geçmiş'), icon: 'M12 8v5l3 2M21 12a9 9 0 11-3-6.7' },
+  const items: { href: string; label: string; sub?: string; icon: IconName; primary?: boolean }[] = [
+    { href: na.href, label: na.kind === 'continue' ? T(lang, 'Continue assessment', 'Değerlendirmeye devam') : na.kind === 'report' ? na.label : T(lang, 'Start assessment', 'Değerlendirme başlat'), sub: na.kind === 'report' ? undefined : na.phase ? (na.kind === 'continue' ? na.sub : phaseLabel(na.phase.num, lang)) : undefined, icon: na.kind === 'report' ? 'chart' : 'play', primary: true },
+    ...(r ? [{ href: `/results/${r.id}`, label: T(lang, 'View results', 'Sonuçları gör'), sub: phaseLabel(r.phase, lang), icon: 'chart' as IconName }] : []),
+    { href: '/action-plan', label: T(lang, 'Action plan', 'Eylem planı'), icon: 'clipboard' },
+    { href: '/courses', label: T(lang, 'Courses', 'Kurslar'), icon: 'book' },
+    { href: '/history', label: T(lang, 'Assessment history', 'Değerlendirme geçmişi'), icon: 'clock' },
+    { href: '/documents', label: T(lang, 'Documents', 'Belgeler'), icon: 'doc' },
   ];
   return (
     <section className="da-card">
-      <div className="da-head"><div><span className="da-eyebrow">{T(lang, 'Quick actions', 'Hızlı işlemler')}</span></div></div>
-      <div className="da-quick2">
+      <Head title={T(lang, 'Quick actions', 'Hızlı işlemler')} />
+      <nav className="da-quick" aria-label={T(lang, 'Quick actions', 'Hızlı işlemler')}>
         {items.map((it) => (
-          <Link key={it.href + it.label} href={it.href} className={`da-qa2${it.primary ? ' is-primary' : ''}`}>
-            <span className="da-qa2-ic"><QI d={it.icon} /></span>
-            <span className="da-qa2-t">{it.label}{it.sub && <small>{it.sub}</small>}</span>
+          <Link key={it.href + it.label} href={it.href} className={`da-qa${it.primary ? ' is-primary' : ''}`}>
+            <span className="da-qa-ic"><Ic name={it.icon} size={17} /></span>
+            <span className="da-qa-t">{it.label}{it.sub && <small>{it.sub}</small>}</span>
           </Link>
         ))}
-      </div>
+      </nav>
     </section>
   );
 }
@@ -738,44 +780,49 @@ export function QuickCard({ m, lang }: P) {
 /* ═══════════════════════ First-time dashboard ═══════════════════════ */
 export function FirstTime({ m, lang }: P) {
   const live = m.phases.find((p) => p.status === 'in_progress' && p.attempt);
+  const teasers: { icon: IconName; title: string; text: string }[] = [
+    { icon: 'chart', title: T(lang, 'Performance analytics', 'Performans analizi'), text: T(lang, 'Scores per phase, with category detail and a switchable chart view.', 'Aşama başına skorlar, kategori ayrıntısı ve değiştirilebilir grafik görünümü.') },
+    { icon: 'target', title: T(lang, 'ESG breakdown', 'ESG dağılımı'), text: T(lang, 'Environmental, social and governance results side by side.', 'Çevre, sosyal ve yönetişim sonuçları yan yana.') },
+    { icon: 'clipboard', title: T(lang, 'Insights & actions', 'İçgörüler ve eylemler'), text: T(lang, 'Strongest areas, gaps and recommended next steps you can add to your action plan.', 'Güçlü alanlar, açıklar ve eylem planınıza ekleyebileceğiniz önerilen adımlar.') },
+  ];
   return (
     <>
       <Reveal>
-        <section className="da-card da-first" style={{ marginBottom: 12 }}>
-          <div>
-            <span className="da-eyebrow" style={{ marginBottom: 8 }}>{live ? T(lang, 'In progress', 'Devam ediyor') : T(lang, 'Get started', 'Başlayın')}</span>
+        <section className="da-card da-first">
+          <div className="da-first-main">
+            <span className="da-eyebrow">{live ? T(lang, 'In progress', 'Devam ediyor') : T(lang, 'Get started', 'Başlayın')}</span>
             <h2>{live ? T(lang, 'Finish your first phase to unlock your analytics', 'Analizlerinizi açmak için ilk aşamayı bitirin') : T(lang, 'Measure your sustainability performance', 'Sürdürülebilirlik performansınızı ölçün')}</h2>
             <p>{live
               ? T(lang, 'Your scores, ESG breakdown, trends and recommendations appear here as soon as one phase is completed.', 'Bir aşama tamamlanır tamamlanmaz skorlarınız, ESG dağılımınız, trendleriniz ve önerileriniz burada görünür.')
               : T(lang, 'Complete the five-phase GRI assessment to see your score, grade, ESG breakdown, strengths, gaps and a recommended action plan.', 'Skorunuzu, notunuzu, ESG dağılımınızı, güçlü yönlerinizi, açıklarınızı ve önerilen eylem planını görmek için beş aşamalı GRI değerlendirmesini tamamlayın.')}</p>
-            <Link href={live ? `/questionnaire/${live.attempt!.id}` : '/surveys'} className="da-btn da-btn-primary da-btn-lg" style={{ display: 'inline-flex' }}>
-              {live ? T(lang, 'Continue assessment', 'Devam et') : T(lang, 'Choose a survey', 'Anket seç')} <Icon.arrow />
+            <Link href={live ? `/questionnaire/${live.attempt!.id}` : '/surveys'} className="da-btn da-btn-primary da-btn-lg">
+              {live ? T(lang, 'Continue assessment', 'Devam et') : T(lang, 'Choose a survey', 'Anket seç')} <Ic name="arrow" size={14} />
             </Link>
           </div>
           <div className="da-first-side">
-            <span className="da-eyebrow" style={{ marginBottom: 10 }}>{T(lang, 'Your assessment roadmap', 'Değerlendirme yol haritanız')}</span>
-            <div className="da-road">
+            <h3 className="da-h3">{T(lang, 'Your assessment roadmap', 'Değerlendirme yol haritanız')}</h3>
+            <ol className="da-road">
               {PHASES.map((p) => {
                 const st = m.phases[p.num - 1];
                 return (
-                  <div key={p.num} className={`da-road-row is-${st.status}`}>
-                    <span className="da-node">{p.num}</span>
-                    <span style={{ fontWeight: 500 }}>{phaseLabel(p.num, lang)}</span>
+                  <li key={p.num} className={`da-road-row is-${st.status}`}>
+                    <span className="da-gp-node">{st.status === 'locked' ? <Ic name="lock" size={12} /> : p.num}</span>
+                    <b>{phaseLabel(p.num, lang)}</b>
                     <small>{st.status === 'in_progress' ? `${st.answered}/${st.total ?? '?'} ${T(lang, 'answered', 'cevap')}` : st.total !== null ? `${st.total} ${T(lang, 'questions', 'soru')}` : T(lang, 'by sector', 'sektöre göre')}</small>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           </div>
         </section>
       </Reveal>
       <Reveal delay={80}>
-        <section className="da-card" style={{ marginBottom: 12 }}>
-          <div className="da-head"><div><span className="da-eyebrow">{T(lang, 'What you will see here', 'Burada neler göreceksiniz')}</span></div></div>
+        <section className="da-card">
+          <Head title={T(lang, 'What you will see here', 'Burada neler göreceksiniz')} />
           <div className="da-teaser">
-            <div><b>{T(lang, 'Performance analytics', 'Performans analizi')}</b><span>{T(lang, 'Scores per phase, with category detail and a switchable chart view.', 'Aşama başına skorlar, kategori ayrıntısı ve değiştirilebilir grafik görünümü.')}</span></div>
-            <div><b>{T(lang, 'ESG breakdown', 'ESG dağılımı')}</b><span>{T(lang, 'Environmental, social and governance results side by side.', 'Çevre, sosyal ve yönetişim sonuçları yan yana.')}</span></div>
-            <div><b>{T(lang, 'Insights & actions', 'İçgörüler ve eylemler')}</b><span>{T(lang, 'Strongest areas, gaps and recommended next steps you can add to your action plan.', 'Güçlü alanlar, açıklar ve eylem planınıza ekleyebileceğiniz önerilen adımlar.')}</span></div>
+            {teasers.map((x) => (
+              <div key={x.title}><span className="da-kpi-ic"><Ic name={x.icon} /></span><b>{x.title}</b><span>{x.text}</span></div>
+            ))}
           </div>
         </section>
       </Reveal>
@@ -786,15 +833,14 @@ export function FirstTime({ m, lang }: P) {
 /* ═══════════════════════ Loading skeleton ═══════════════════════ */
 export function DashSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading dashboard">
-      <div className="da-sk" style={{ height: 40, width: 260, marginBottom: 14 }} />
-      <div className="da-kpis">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="da-card da-sk" style={{ height: 72 }} />)}</div>
-      <div className="da-row da-row-2"><div className="da-card da-sk" style={{ height: 330 }} /><div className="da-card da-sk" style={{ height: 330 }} /></div>
-      <div className="da-card da-sk" style={{ height: 190, marginBottom: 12 }} />
+    <div aria-busy="true" aria-label="Loading dashboard" className="da-skeleton">
+      <div className="da-sk" style={{ height: 64, maxWidth: 420 }} />
+      <div className="da-kpis">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="da-card da-sk" style={{ height: 132 }} />)}</div>
+      <div className="da-row da-row-analytics"><div className="da-card da-sk" style={{ height: 360 }} /><div className="da-card da-sk" style={{ height: 360 }} /></div>
       <div className="da-card da-sk" style={{ height: 240 }} />
     </div>
   );
 }
 
 /* re-export for the page */
-export { Legend, hasTrend, rankCategories };
+export { hasTrend, rankCategories };

@@ -2,7 +2,7 @@
 // the app itself never fabricates data.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModel, hasTrend, bandOf, phaseOf, rankCategories, categoriesOf, categoryAvailable, bandCounts, strongest, weakest } from '../lib/dashboard-data.ts';
+import { buildModel, cyclesOf, hasTrend, bandOf, phaseOf, rankCategories, categoriesOf, categoryAvailable, bandCounts, strongest, weakest } from '../lib/dashboard-data.ts';
 
 let id = 0;
 const surveyIds = new Map();                      // same survey name => same survey id (like the real data)
@@ -128,4 +128,48 @@ test('categories without applicable points are unavailable, never shown as 0%', 
   const m = buildModel([a]);
   assert.deepEqual(rankCategories(m).map((c) => c.name), ['Real zero', 'Good']);
   assert.deepEqual(categoriesOf(m.latest[1]).map((c) => c.pct), [0, 80]);
+});
+
+test('cycle selector: cycles are listed most recent first and the default is the latest cycle', () => {
+  const a = [done(GOV, 90, ['1', '10'], { cycle_name: 'Old' }), att(GOV, { cycle_name: 'New' }), att(ENV, { cycle_name: '' })];
+  assert.deepEqual(cyclesOf(a), ['', 'New', 'Old']);
+  const m = buildModel(a);
+  assert.deepEqual(m.cycles, ['', 'New', 'Old']);
+  assert.equal(m.latestCycle, '');
+  assert.equal(m.activeCycle, '');
+});
+
+test('cycle selector: choosing a cycle re-evaluates progress in that cycle with the same locking rule', () => {
+  const old = done(GOV, 90, ['1', '10'], { cycle_name: 'Old' });
+  const fresh = att(GOV, { cycle_name: 'New', answered_count: 3 });
+  const def = buildModel([old, fresh]);
+  const sel = buildModel([old, fresh], [], 'Old');
+  assert.equal(sel.activeCycle, 'Old');
+  assert.deepEqual(sel.phases.map((p) => p.status), ['completed', 'available', 'locked', 'locked', 'locked']);
+  assert.equal(sel.phasesCompleted, 1);
+  assert.equal(sel.answered, 10);
+  assert.deepEqual(def.phases.map((p) => p.status), ['in_progress', 'locked', 'locked', 'locked', 'locked']);
+  // scores are not cycle-scoped: one scored result per survey, identical whichever cycle is selected
+  assert.deepEqual(sel.overall, def.overall);
+  assert.equal(sel.latest[1].id, def.latest[1].id);
+  assert.equal(sel.inProgressCount, def.inProgressCount);
+});
+
+test('cycle selector: an unknown cycle falls back to the latest cycle', () => {
+  const a = [done(GOV, 90, ['1', '10'], { cycle_name: 'Old' }), att(GOV, { cycle_name: 'New' })];
+  assert.deepEqual(buildModel(a, [], 'Nope'), buildModel(a));
+  assert.deepEqual(buildModel(a, [], null), buildModel(a));
+});
+
+test('a phase completed earlier in a cycle but re-completed later is flagged superseded, never scored and never "completed"', () => {
+  const first = att(GOV, { cycle_name: 'Q1', is_completed: false, completed_at: '2026-01-10T10:00:00Z', total_score: 0, answered_count: 10 });
+  const second = done(GOV, 70, ['2', '10'], { cycle_name: 'Q2' });
+  const q1 = buildModel([first, second], [], 'Q1');
+  assert.equal(q1.phases[0].superseded, true);
+  assert.equal(q1.phases[0].status, 'available');
+  assert.equal(q1.phases[0].answered, 0);
+  assert.equal(q1.phasesCompleted, 0);
+  const q2 = buildModel([first, second], [], 'Q2');
+  assert.equal(q2.phases[0].superseded, false);
+  assert.equal(q2.phases[0].status, 'completed');
 });

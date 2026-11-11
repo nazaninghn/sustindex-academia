@@ -71,10 +71,15 @@ export interface PhaseState {
   total: number | null;          // null = not knowable (e.g. Sector before a sector survey is chosen)
   remaining: number | null;
   pct: number;                   // answered / total, 0 when unknown
+  /** True when the phase WAS completed in this cycle but the API no longer scores that attempt
+   *  (the same survey was completed again later). Informational only: it never changes `status`. */
+  superseded: boolean;
 }
 
 export interface DashModel {
-  activeCycle: string;
+  activeCycle: string;                             // the cycle the progress figures are evaluated in
+  latestCycle: string;                             // cycle of the most recent attempt (the default)
+  cycles: string[];                                // every cycle the user has attempts in, most recent first
   phases: PhaseState[];
   results: ResultPoint[];                          // every scored completion, oldest first
   latest: Record<number, ResultPoint | null>;      // most recent scored completion per phase
@@ -98,11 +103,29 @@ export function isInProgress(a: DashAttempt): boolean {
   return !a.is_completed && !a.completed_at;
 }
 
-export function buildModel(attempts: DashAttempt[], surveys: SurveyLite[] = []): DashModel {
+/** Every assessment cycle that has at least one attempt, most recently used first. */
+export function cyclesOf(attempts: DashAttempt[]): string[] {
+  const out: string[] = [];
+  for (const a of attempts.slice().sort((x, y) => y.id - x.id)) {
+    const c = a.cycle_name ?? '';
+    if (!out.includes(c)) out.push(c);
+  }
+  return out;
+}
+
+/**
+ * @param cycle optional cycle to evaluate the progress figures in (the dashboard's cycle selector).
+ *              Unknown / omitted => the cycle of the most recent attempt, exactly as before.
+ *              Scores are NOT cycle-scoped: the API keeps a single scored result per survey, so
+ *              `results`, `latest`, `previous` and `overall` are the same for every cycle.
+ */
+export function buildModel(attempts: DashAttempt[], surveys: SurveyLite[] = [], cycle?: string | null): DashModel {
   const byIdDesc = attempts.slice().sort((a, b) => b.id - a.id);
 
-  // Active cycle = cycle of the most recent attempt (identical to the Surveys page).
-  const activeCycle = byIdDesc.length ? (byIdDesc[0].cycle_name ?? '') : '';
+  // Default cycle = cycle of the most recent attempt (identical to the Surveys page).
+  const cycles = cyclesOf(attempts);
+  const latestCycle = byIdDesc.length ? (byIdDesc[0].cycle_name ?? '') : '';
+  const activeCycle = typeof cycle === 'string' && cycles.includes(cycle) ? cycle : latestCycle;
 
   // Scored results = completed attempts only.
   // DATA LIMITATION: the API reports total_score = 0 for any attempt that is not currently completed
@@ -153,7 +176,8 @@ export function buildModel(attempts: DashAttempt[], surveys: SurveyLite[] = []):
     const answered = attempt ? attempt.answered_count ?? 0 : 0;
     const remaining = total === null ? null : status === 'completed' ? 0 : Math.max(total - answered, 0);
     const pct = total && total > 0 ? Math.min(100, Math.round((answered / total) * 100)) : 0;
-    return { num: p.num, status, attempt, answered, total, remaining, pct };
+    const superseded = !!recent && !recent.is_completed && !!recent.completed_at;
+    return { num: p.num, status, attempt, answered, total, remaining, pct, superseded };
   });
 
   const scored = PHASES.map((p) => latest[p.num]).filter((r): r is ResultPoint => !!r);
@@ -168,7 +192,7 @@ export function buildModel(attempts: DashAttempt[], surveys: SurveyLite[] = []):
   const flagged = attempts.filter((a) => flaggedSources.has(a.id)).reduce((s, a) => s + (a.bookmarked_count ?? 0), 0);
 
   return {
-    activeCycle, phases, results, latest, previous,
+    activeCycle, latestCycle, cycles, phases, results, latest, previous,
     completedCount: attempts.filter((a) => a.is_completed).length,
     inProgressCount: attempts.filter(isInProgress).length,
     phasesCompleted,

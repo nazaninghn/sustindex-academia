@@ -6,16 +6,16 @@ import { useRouter } from 'next/navigation';
 import AppNav from '@/components/AppNav';
 import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
-import { Icon } from '@/components/shared';
 import { attemptAPI, elearningAPI, surveyAPI, actionTaskAPI } from '@/lib/api';
 import type { ActionTask } from '@/lib/api';
 import { onDataChange } from '@/lib/events';
 import { PHASES, buildModel, rankCategories } from '@/lib/dashboard-data';
 import type { DashAttempt, SurveyLite } from '@/lib/dashboard-data';
 import { Reveal, useInView } from '@/components/dashboard/motion';
+import { Ic } from '@/components/dashboard/icons';
 import {
-  KpiStrip, ContinueStrip, PerformanceCard, EsgCard, PhaseProgress, InsightsCard, LatestCard,
-  RecommendationsCard, RecentCard, QuickCard, FirstTime, DashSkeleton, T,
+  KpiRow, PerformanceCard, EsgCard, PhaseProgress, InsightsCard, LatestCard,
+  RecommendationsCard, RecentCard, QuickCard, FirstTime, DashSkeleton, T, cycleLabel, fmtDate, nextAction,
 } from '@/components/dashboard/sections';
 import type { Detail, LoadState, NameMap, Rec, RecWithPhase } from '@/components/dashboard/sections';
 import './dashboard.css';
@@ -39,7 +39,7 @@ function courseStatus(c: StripCourse): 'done' | 'active' | 'new' {
   return 'new';
 }
 
-/* ─── E-learning courses (same data and links; dashboard visual language) ─── */
+/* ─── E-learning courses (same data, links, progress values and completion states; dashboard visual language) ─── */
 function CoursesStrip() {
   const { lang, t } = useLang();
   const { user } = useAuth();
@@ -69,45 +69,43 @@ function CoursesStrip() {
 
   return (
     <section ref={ref} className="da-card">
-      <div className="da-head" style={{ paddingBottom: 12 }}>
-        <div>
-          <span className="da-eyebrow">{t('courses_eyebrow')}</span>
-          <h2 className="da-h2">{t('dash_sust_courses')}</h2>
+      <div className="da-head">
+        <div className="da-head-t">
+          <div className="da-h2row"><h2 className="da-h2">{t('dash_sust_courses')}</h2></div>
+          <p className="da-sub">{t('courses_eyebrow')}</p>
         </div>
-        <Link href="/courses" className="da-link">{t('dash_all_courses')} <Icon.arrow /></Link>
+        <Link href="/courses" className="da-link">{t('dash_all_courses')} <Ic name="arrow" size={13} /></Link>
       </div>
 
-      {stripError && !stripLoading && <p className="da-err" style={{ margin: '0 16px 12px' }}>{t('courses_load_error')}</p>}
+      {stripError && !stripLoading && <p className="da-err da-courses-err">{t('courses_load_error')}</p>}
 
       <div className="da-courses-grid">
         {stripLoading
-          ? [1, 2, 3, 4].map((i) => <div key={i} className="da-course da-sk" style={{ minHeight: 150 }} />)
+          ? [1, 2, 3, 4].map((i) => <div key={i} className="da-course da-sk" style={{ minHeight: 168 }} />)
           : courses.map((c, idx) => {
               const status = courseStatus(c);
-              const started = c.progress_percentage > 0 && c.progress_percentage < 100;
+              const pct = Math.min(100, Math.max(0, c.progress_percentage));
               return (
                 <Link key={c.id} href={`/courses/${c.id}`} className={`da-course is-${status}`}>
                   <div className="da-course-top">
-                    <span className="da-course-ic">{c.icon_emoji || '📚'}</span>
-                    <div style={{ minWidth: 0 }}>
+                    <span className="da-course-ic" aria-hidden="true">{c.icon_emoji || <Ic name="book" size={17} />}</span>
+                    <div>
                       <small>SX·{String(c.order || idx + 1).padStart(2, '0')}</small>
                       <b>{c.tag}</b>
                     </div>
-                    {status === 'done' && <span className="da-course-badge is-done"><Icon.check /></span>}
-                    {status === 'new' && <span className="da-course-badge">{lang === 'tr' ? 'YENİ' : 'NEW'}</span>}
-                    {started && <span className="da-course-badge is-active">{c.progress_percentage}%</span>}
+                    <span className={`da-chip c-course-${status}`}>
+                      {status === 'done' ? T(lang, 'Completed', 'Tamamlandı') : status === 'active' ? T(lang, 'In progress', 'Devam ediyor') : T(lang, 'New', 'Yeni')}
+                    </span>
                   </div>
                   <h3>{c.title_display}</h3>
-                  {started && (
-                    <div>
-                      <div className="da-course-prog"><span>{Math.round(c.total_lessons * c.progress_percentage / 100)}/{c.total_lessons}</span><span>{c.progress_percentage}%</span></div>
-                      <div className="da-track"><div className="da-anim-w" style={{ width: shown ? `${c.progress_percentage}%` : '0%', background: 'var(--olive-deep)' }} /></div>
-                    </div>
-                  )}
+                  <div className="da-course-prog">
+                    <div className="da-bar"><div className="da-anim-w" style={{ width: shown ? `${pct}%` : '0%' }} /></div>
+                    <span>{pct}%</span>
+                  </div>
                   <div className="da-course-foot">
-                    <span>{c.total_lessons} {lang === 'tr' ? 'modül' : 'mod'} · {c.duration_hours} {lang === 'tr' ? 'sa' : 'hr'}</span>
+                    <span>{c.total_lessons} {T(lang, 'modules', 'modül')} · {c.duration_hours}</span>
                     <span className="da-course-cta">
-                      {status === 'done' ? (lang === 'tr' ? 'Tekrar' : 'Review') : status === 'active' ? (lang === 'tr' ? 'Devam →' : 'Resume →') : (lang === 'tr' ? 'Başla →' : 'Start →')}
+                      {status === 'done' ? T(lang, 'Review', 'Tekrar') : status === 'active' ? T(lang, 'Resume', 'Devam') : T(lang, 'Start', 'Başla')} <Ic name="arrow" size={12} />
                     </span>
                   </div>
                 </Link>
@@ -116,8 +114,8 @@ function CoursesStrip() {
       </div>
 
       <div className="da-courses-foot">
-        <span>{t('dash_coming_soon')}</span>
-        <Link href="/courses" className="da-btn da-btn-sm">{lang === 'tr' ? 'Tüm Kurslar' : 'View All'} <Icon.arrow /></Link>
+        <span><Ic name="lock" size={13} />{t('dash_coming_soon').replace(/^\s*🔒\s*/u, '')}</span>
+        <Link href="/courses" className="da-btn da-btn-sm">{T(lang, 'View all courses', 'Tüm kursları gör')} <Ic name="arrow" size={12} /></Link>
       </div>
     </section>
   );
@@ -144,6 +142,9 @@ export default function DashboardPage() {
   // Existing action-plan tasks (read-only here, plus "Add to plan" which uses the same API as the Results page)
   const [tasks,      setTasks]      = useState<ActionTask[]>([]);
   const [tasksState, setTasksState] = useState<LoadState>('idle');
+
+  // Assessment cycle shown by the progress figures. null = the cycle of the most recent attempt (the default).
+  const [cycle, setCycle] = useState<string | null>(null);
 
   const [showNewModal,      setShowNewModal]      = useState(false);
   const [newAssessmentName, setNewAssessmentName] = useState('');
@@ -212,7 +213,7 @@ export default function DashboardPage() {
   }, [user]);
 
   /* ── Analytics model (pure derivation from the API data above) ── */
-  const model = useMemo(() => buildModel(attempts, surveys), [attempts, surveys]);
+  const model = useMemo(() => buildModel(attempts, surveys, cycle), [attempts, surveys, cycle]);
 
   const latestIds = PHASES.map((p) => model.latest[p.num]?.id).filter((x): x is number => typeof x === 'number');
   const latestKey = latestIds.join(',');
@@ -269,11 +270,10 @@ export default function DashboardPage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
         <AppNav />
-        <main className="wrap" style={{ padding: '64px 32px', textAlign: 'center' }}>
-          <div style={{ background: '#FFF5F3', border: '1px solid var(--danger)', padding: '18px 24px', display: 'inline-block' }}>
-            <p style={{ fontSize: 13, color: 'var(--danger)' }}>
-              {lang === 'tr' ? 'Değerlendirmeler yüklenemedi.' : 'Failed to load assessments.'}
-            </p>
+        <main className="wrap da-main">
+          <div className="da-card da-loaderr" role="alert">
+            <p>{lang === 'tr' ? 'Değerlendirmeler yüklenemedi.' : 'Failed to load assessments.'}</p>
+            <button type="button" className="da-btn" onClick={() => { setLoading(true); refreshAttempts(); }}>{lang === 'tr' ? 'Tekrar dene' : 'Try again'}</button>
           </div>
         </main>
       </div>
@@ -281,10 +281,18 @@ export default function DashboardPage() {
   }
 
   const firstName = user?.first_name || user?.username || '';
+  const company   = user?.company_name?.trim() || '';
   const dateStr = new Date().toLocaleDateString(
     lang === 'tr' ? 'tr-TR' : 'en-GB',
     { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
   );
+  // Most recent real activity = newest start / completion timestamp among the loaded attempts
+  const lastActivity = attempts.reduce<string | null>((best, a) => {
+    for (const iso of [a.completed_at, a.started_at]) if (iso && (!best || iso > best)) best = iso;
+    return best;
+  }, null);
+  const na = nextAction(model, lang);
+  const live = na.kind === 'continue' ? na.phase : undefined;
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
@@ -292,21 +300,60 @@ export default function DashboardPage() {
 
       <main className="wrap da-main">
 
-        {/* ── Compact welcome bar ── */}
-        <div className="da-top">
-          <div>
-            <span className="da-date">{dateStr}</span>
-            <h1 className="da-title">
-              {lang === 'tr' ? 'Hoşgeldin, ' : 'Welcome back, '}<em>{firstName}</em>
-            </h1>
+        {/* ── Executive overview: organisation, welcome, cycle selector, assessment context ── */}
+        <header className="da-top">
+          <div className="da-top-main">
+            <span className="da-eyebrow">{T(lang, 'Sustainability performance dashboard', 'Sürdürülebilirlik performans panosu')}</span>
+            <h1 className="da-title">{company || <>{T(lang, 'Welcome back, ', 'Hoş geldiniz, ')}{firstName}</>}</h1>
+            <p className="da-welcome">
+              {company && <>{T(lang, 'Welcome back, ', 'Hoş geldiniz, ')}<b>{firstName}</b>. </>}
+              {T(lang, 'Track your ESG performance, assessment progress and key improvement areas.', 'ESG performansınızı, değerlendirme ilerlemenizi ve öncelikli gelişim alanlarınızı izleyin.')}
+            </p>
+            <ul className="da-meta">
+              <li><Ic name="calendar" size={13} />{dateStr}</li>
+              {model.cycles.length > 0 && (
+                <li><Ic name="target" size={13} />{T(lang, `${model.phasesCompleted} of ${PHASES.length} phases completed`, `${PHASES.length} aşamadan ${model.phasesCompleted} tanesi tamamlandı`)}</li>
+              )}
+              {live && <li><Ic name="play" size={13} />{T(lang, 'In progress', 'Devam eden')}: {na.sub}</li>}
+              {lastActivity && <li><Ic name="clock" size={13} />{T(lang, 'Last activity', 'Son etkinlik')} {fmtDate(lastActivity, lang)}</li>}
+            </ul>
           </div>
-          <div className="da-actions">
-            <Link href="/history" className="da-btn">{lang === 'tr' ? 'Geçmiş' : 'History'}</Link>
-            <button className="da-btn da-btn-primary" onClick={handleNewAssessmentClick}>
-              {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'} <Icon.plus />
-            </button>
+          <div className="da-top-side">
+            {model.cycles.length > 0 && (
+              <label className="da-cycle">
+                <Ic name="calendar" size={15} />
+                <span>{T(lang, 'Assessment cycle', 'Değerlendirme dönemi')}</span>
+                <select value={model.activeCycle} onChange={(e) => setCycle(e.target.value)} aria-label={T(lang, 'Assessment cycle', 'Değerlendirme dönemi')}>
+                  {model.cycles.map((c) => (
+                    <option key={c || '__none'} value={c}>{cycleLabel(c, lang)}{c === model.latestCycle && model.cycles.length > 1 ? T(lang, ' (current)', ' (güncel)') : ''}</option>
+                  ))}
+                </select>
+                <Ic name="chevron" size={14} className="da-cycle-chev" />
+              </label>
+            )}
+            <div className="da-actions">
+              <Link href="/history" className="da-btn">{lang === 'tr' ? 'Geçmiş' : 'History'}</Link>
+              <button type="button" className={`da-btn${model.hasResults ? '' : ' da-btn-primary'}`} onClick={handleNewAssessmentClick}>
+                <Ic name="plus" size={13} /> {lang === 'tr' ? 'Yeni Değerlendirme' : 'New Assessment'}
+              </button>
+              {model.hasResults && na.kind !== 'none' && (
+                <Link href={na.href} className="da-btn da-btn-primary" title={na.sub}>{na.label} <Ic name="arrow" size={13} /></Link>
+              )}
+            </div>
           </div>
-        </div>
+        </header>
+
+        {model.activeCycle !== model.latestCycle && (
+          <p className="da-cycle-note" role="status">
+            <Ic name="info" size={14} />
+            <span>
+              {T(lang,
+                `Progress, completion and question counts show the “${cycleLabel(model.activeCycle, lang)}” cycle. Scores always show the latest completed result of each phase, because one scored result is kept per assessment.`,
+                `İlerleme, tamamlanma ve soru sayıları “${cycleLabel(model.activeCycle, lang)}” dönemini gösterir. Skorlar her zaman her aşamanın son tamamlanan sonucunu gösterir; çünkü her değerlendirme için tek puanlı sonuç tutulur.`)}
+            </span>
+            <button type="button" className="da-link da-linkbtn" onClick={() => setCycle(null)}>{T(lang, 'Back to current cycle', 'Güncel döneme dön')}</button>
+          </p>
+        )}
 
         {!model.hasResults ? (
           <>
@@ -316,27 +363,26 @@ export default function DashboardPage() {
           </>
         ) : (
           <>
-            <Reveal><KpiStrip m={model} lang={lang} /></Reveal>
-            <Reveal delay={40}><ContinueStrip m={model} lang={lang} /></Reveal>
+            <Reveal><KpiRow m={model} lang={lang} /></Reveal>
 
-            <Reveal className="da-row da-row-2">
+            <Reveal className="da-row da-row-analytics">
               <PerformanceCard m={model} names={names} go={go} lang={lang} />
               <EsgCard m={model} names={names} go={go} lang={lang} />
             </Reveal>
 
-            <Reveal><PhaseProgress m={model} lang={lang} /></Reveal>
+            <Reveal className="da-row da-row-progress">
+              <PhaseProgress m={model} lang={lang} />
+              <InsightsCard m={model} cats={cats} go={go} lang={lang} />
+            </Reveal>
 
-            <Reveal><InsightsCard m={model} cats={cats} go={go} lang={lang} /></Reveal>
+            <Reveal><QuickCard m={model} lang={lang} /></Reveal>
 
             <Reveal className="da-row da-row-latest">
               <LatestCard m={model} details={details} names={names} go={go} lang={lang} />
               <RecommendationsCard m={model} recs={recs} state={detailsState} tasks={tasks} tasksState={tasksState} onAdded={refreshTasks} lang={lang} />
             </Reveal>
 
-            <Reveal className="da-row da-row-bottom">
-              <RecentCard m={model} lang={lang} />
-              <QuickCard m={model} lang={lang} />
-            </Reveal>
+            <Reveal><RecentCard m={model} lang={lang} /></Reveal>
 
             <Reveal><CoursesStrip /></Reveal>
           </>
