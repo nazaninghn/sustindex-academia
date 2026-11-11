@@ -356,6 +356,9 @@ if REST_FRAMEWORK_INSTALLED:
         "http://127.0.0.1:3000",
         "https://sustindex-academia.vercel.app",
         "https://sustindex-academia-sustindex.onrender.com",
+        # Custom production domain (apex is canonical; www redirects to it at Vercel)
+        "https://sustindex.com",
+        "https://www.sustindex.com",
     ]
     # Fix BUG-26: allow additional origins via env var (comma-separated) without a code change.
     _extra_cors = os.environ.get('CORS_EXTRA_ORIGINS', '')
@@ -422,6 +425,11 @@ CSRF_TRUSTED_ORIGINS = (
 _extra_csrf = os.environ.get('CSRF_EXTRA_ORIGINS', '')
 if _extra_csrf:
     CSRF_TRUSTED_ORIGINS += [o.strip() for o in _extra_csrf.split(',') if o.strip()]
+# The custom production domain is always trusted, whether or not CSRF_TRUSTED_ORIGINS is set in the
+# environment (that variable REPLACES the defaults above, so it cannot be relied on to carry these).
+for _origin in ('https://sustindex.com', 'https://www.sustindex.com'):
+    if _origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_origin)
 
 # ── Logging ────────────────────────────────────────────────────────────────
 # Fix R4-L-03: configure Django's logging so application errors reach the
