@@ -1,13 +1,21 @@
 'use client';
+/* Assessment Centre (the Surveys page): manage assessment cycles and the five GRI phases.
+   Every figure is read from the two requests this page has always made — GET /surveys/ and
+   GET /attempts/my_attempts/ — and phase status comes from the shared, tested model in lib/dashboard-data.ts,
+   so sequencing and locking are the same rules as before. Nothing here invents data. */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AppNav from '@/components/AppNav';
 import { useLang } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
-import { Icon } from '@/components/shared';
 import { surveyAPI, attemptAPI } from '@/lib/api';
-import { gradeColor } from '@/lib/utils';
+import { PHASES, buildModel, isInProgress, phaseOf } from '@/lib/dashboard-data';
+import type { DashAttempt, PhaseState, PhaseStatus } from '@/lib/dashboard-data';
+import { Ic } from '@/components/dashboard/icons';
+import type { IconName } from '@/components/dashboard/icons';
+import './surveys.css';
 
 /* ─── Sector definitions ─────────────────────────────────────── */
 const SECTORS = [
@@ -27,441 +35,51 @@ interface Survey {
   name: string; name_en?: string; name_tr?: string;
   question_count?: number; total_questions?: number;
 }
+type Attempt = DashAttempt;
 
-interface Attempt {
-  id: number;
-  survey_name: string;
-  is_completed: boolean;
-  completed_at: string | null;
-  total_score: number | null;
-  overall_grade: string;
-  cycle_name: string;
+/** Titles and descriptions of the five GRI phases (order and survey-name keys come from PHASES). */
+const PHASE_COPY: Record<number, { labelEn: string; labelTr: string; descEn: string; descTr: string }> = {
+  1: { labelEn: 'Governance & Strategy',     labelTr: 'Yönetişim ve Strateji',
+       descEn: 'Corporate governance, ethics, board oversight and strategic sustainability commitments (G1–G16)',
+       descTr: 'Kurumsal yönetişim, etik, yönetim kurulu gözetimi ve stratejik sürdürülebilirlik taahhütleri (G1–G16)' },
+  2: { labelEn: 'Environmental Performance', labelTr: 'Çevre Performansı',
+       descEn: 'Climate, energy, water, biodiversity and circular economy (E1–E14)',
+       descTr: 'İklim, enerji, su, biyoçeşitlilik ve döngüsel ekonomi (E1–E14)' },
+  3: { labelEn: 'Social Performance',        labelTr: 'Sosyal Performans',
+       descEn: 'Workforce, health & safety, community, human rights and diversity (S1–S24)',
+       descTr: 'İşgücü, iş sağlığı güvenliği, toplum, insan hakları ve çeşitlilik (S1–S24)' },
+  4: { labelEn: 'Economic Performance',      labelTr: 'Ekonomik Performans',
+       descEn: 'Economic value, procurement, tax transparency and anti-corruption (EC1–EC9)',
+       descTr: 'Ekonomik değer, tedarik, vergi şeffaflığı ve yolsuzlukla mücadele (EC1–EC9)' },
+  5: { labelEn: 'Sector Standard',           labelTr: 'Sektör Standardı',
+       descEn: 'Industry-specific sustainability topics for the sector you choose',
+       descTr: 'Seçtiğiniz sektöre özgü sürdürülebilirlik konuları' },
+};
+
+const T = (lang: string, en: string, tr: string) => (lang === 'tr' ? tr : en);
+const phaseTitle = (num: number, lang: string) => (lang === 'tr' ? PHASE_COPY[num].labelTr : PHASE_COPY[num].labelEn);
+const fmtDate = (iso: string | null | undefined, lang: string) =>
+  (iso ? new Date(iso).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+const cycleLabel = (c: string | null | undefined, lang: string) => (c ? c : T(lang, 'Unnamed cycle', 'Adsız dönem'));
+const surveyMatches = (s: Survey, key: string) => (s.name || '').includes(key) || (s.name_en || '').includes(key);
+const qCount = (s: Survey | null | undefined) => (s && typeof s.question_count === 'number' ? s.question_count : null);
+
+/** Grade letter exactly as returned by the API; colour family follows the app's gradeColor() rule (A / B / C / other). */
+function GradeBadge({ grade }: { grade: string | null | undefined }) {
+  const tone = !grade ? 'none' : grade.startsWith('A') ? 'a' : grade.startsWith('B') ? 'b' : grade.startsWith('C') ? 'c' : 'd';
+  return <span className={`ac-gb is-${tone}`}>{grade || '—'}</span>;
 }
 
-type StepStatus = 'completed' | 'in_progress' | 'active' | 'locked';
-
-interface WizardStep {
-  phase: 1 | 2 | 3 | 4 | 5;
-  labelEn: string;
-  labelTr: string;
-  descEn: string;
-  descTr: string;
-  questions: number;
-  nameMatch: string;
-  status: StepStatus;
-  survey: Survey | null;
-  done: Attempt | null;      // most recent completed attempt (for score display)
-  allDone: Attempt[];        // all completed attempts for this phase
-  live: Attempt | null;      // most recent in-progress attempt
-}
-
-const STEP_DEFS: Omit<WizardStep, 'status' | 'survey' | 'done' | 'allDone' | 'live'>[] = [
-  {
-    phase: 1,
-    labelEn: 'Governance & Strategy',
-    labelTr: 'Yönetişim ve Strateji',
-    descEn:  'Corporate governance, ethics, board oversight and strategic sustainability commitments (G1–G16)',
-    descTr:  'Kurumsal yönetişim, etik, yönetim kurulu gözetimi ve stratejik sürdürülebilirlik taahhütleri (G1–G16)',
-    questions: 82,
-    nameMatch: 'Strateji',
-  },
-  {
-    phase: 2,
-    labelEn: 'Environmental Performance',
-    labelTr: 'Çevre Performansı',
-    descEn:  'Climate, energy, water, biodiversity and circular economy (E1–E14)',
-    descTr:  'İklim, enerji, su, biyoçeşitlilik ve döngüsel ekonomi (E1–E14)',
-    questions: 74,
-    nameMatch: 'Cevre',
-  },
-  {
-    phase: 3,
-    labelEn: 'Social Performance',
-    labelTr: 'Sosyal Performans',
-    descEn:  'Workforce, health & safety, community, human rights and diversity (S1–S24)',
-    descTr:  'İşgücü, iş sağlığı güvenliği, toplum, insan hakları ve çeşitlilik (S1–S24)',
-    questions: 116,
-    nameMatch: 'Sosyal',
-  },
-  {
-    phase: 4,
-    labelEn: 'Economic Performance',
-    labelTr: 'Ekonomik Performans',
-    descEn:  'Economic value, procurement, tax transparency and anti-corruption (EC1–EC9)',
-    descTr:  'Ekonomik değer, tedarik, vergi şeffaflığı ve yolsuzlukla mücadele (EC1–EC9)',
-    questions: 44,
-    nameMatch: 'Ekonomik',
-  },
-  {
-    phase: 5,
-    labelEn: 'Sector Standard',
-    labelTr: 'Sektör Standardı',
-    descEn:  'Industry-specific sustainability topics for your sector (3 criteria · 14 questions)',
-    descTr:  'Sektörünüze özgü sürdürülebilirlik konuları (3 kriter · 14 soru)',
-    questions: 14,
-    nameMatch: 'GRI Sector:',
-  },
-];
-
-/* ─── Step status badge ──────────────────────────────────────── */
-function StatusBadge({ status, lang }: { status: StepStatus; lang: string }) {
-  const cfg = {
-    completed:   { bg: 'var(--olive-deep)', color: '#fff',            label: lang === 'tr' ? 'Tamamlandı' : 'Completed'   },
-    in_progress: { bg: 'var(--amber)',      color: 'var(--ink)',       label: lang === 'tr' ? 'Devam Ediyor' : 'In Progress' },
-    active:      { bg: 'var(--ink)',        color: 'var(--cream)',     label: lang === 'tr' ? 'Hazır' : 'Ready'            },
-    locked:      { bg: 'transparent',       color: 'var(--ink-4)',     label: lang === 'tr' ? 'Kilitli' : 'Locked'         },
-  }[status];
-
-  return (
-    <span style={{
-      fontFamily: "'IBM Plex Mono', monospace",
-      fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
-      padding: '3px 8px',
-      background: cfg.bg,
-      color: cfg.color,
-      border: status === 'locked' ? '1px solid var(--line)' : 'none',
-      display: 'inline-block',
-    }}>
-      {status === 'locked' && '🔒 '}{cfg.label}
-    </span>
-  );
-}
-
-/* ─── Sector Picker (inline, for Step 4 when active) ────────── */
-function SectorPicker({
-  lang,
-  selected,
-  onChange,
-}: {
-  lang: string;
-  selected: string | null;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div style={{ marginTop: 20 }}>
-      <p style={{
-        fontSize: 11, color: 'var(--ink-4)',
-        fontFamily: "'IBM Plex Mono', monospace",
-        letterSpacing: '0.08em', textTransform: 'uppercase',
-        marginBottom: 12,
-      }}>
-        {lang === 'tr' ? 'Sektörünüzü seçin' : 'Choose your sector'}
-      </p>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        gap: 6,
-      }}>
-        {SECTORS.map((s) => {
-          const isSelected = selected === s.value;
-          return (
-            <button
-              key={s.value}
-              onClick={() => onChange(s.value)}
-              style={{
-                padding: '9px 14px',
-                textAlign: 'left',
-                border: `1px solid ${isSelected ? 'var(--ink)' : 'var(--line)'}`,
-                background: isSelected ? 'var(--ink)' : 'var(--cream)',
-                color: isSelected ? 'var(--paper)' : 'var(--ink)',
-                cursor: 'pointer',
-                fontFamily: "'IBM Plex Sans', sans-serif",
-                fontSize: 12, fontWeight: isSelected ? 500 : 400,
-                display: 'flex', alignItems: 'center', gap: 8,
-                transition: 'border-color 0.1s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isSelected) e.currentTarget.style.borderColor = 'var(--ink-3)';
-              }}
-              onMouseLeave={(e) => {
-                if (!isSelected) e.currentTarget.style.borderColor = 'var(--line)';
-              }}
-            >
-              <span style={{
-                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: isSelected ? 'var(--paper)' : 'var(--line)',
-                display: 'inline-block',
-              }} />
-              {lang === 'tr' ? s.tr : s.en}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Single wizard step card ────────────────────────────────── */
-function StepCard({
-  step,
-  lang,
-  isLast,
-  selectedSector,
-  onSectorChange,
-  onStart,
-  onContinue,
-  onRetry,
-  starting,
-  stepErr,
-}: {
-  step: WizardStep;
-  lang: string;
-  isLast: boolean;
-  selectedSector: string | null;
-  onSectorChange: (v: string) => void;
-  onStart: (step: WizardStep, sector?: string) => void;
-  onContinue: (attempt: Attempt) => void;
-  onRetry: (step: WizardStep) => void;  // kept for sector phase 4 compat
-  starting: boolean;
-  stepErr?: string;
-}) {
-  const { status, phase, done, allDone, live } = step;
-  const isLocked   = status === 'locked';
-  const isActive   = status === 'active';
-  const isDone     = allDone.length > 0;   // has at least one completed attempt
-  const isLive     = live !== null;         // has an in-progress attempt
-  // Can start a new attempt: not locked and survey data loaded
-  const canStart   = !isLocked && phase < 5 && !!step.survey;
-
-  const label = lang === 'tr' ? step.labelTr : step.labelEn;
-  const desc  = lang === 'tr' ? step.descTr  : step.descEn;
-
-  /* left-border accent colour */
-  const accentColor = isDone   ? 'var(--olive-deep)'
-                    : isLive   ? 'var(--amber)'
-                    : isActive ? 'var(--ink)'
-                    :            'var(--line)';
-
-  return (
-    <div style={{ display: 'flex', gap: 0 }}>
-      {/* Connector column */}
-      <div style={{ width: 40, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Phase dot */}
-        <div style={{
-          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-          background: isDone   ? 'var(--olive-deep)'
-                    : isLive   ? 'var(--amber)'
-                    : isActive ? 'var(--ink)'
-                    :            'var(--cream-deep)',
-          border: `1px solid ${isDone || isLive || isActive ? 'transparent' : 'var(--line)'}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
-          fontWeight: 600, letterSpacing: '-0.02em',
-          color: isDone || isLive || isActive ? '#fff' : 'var(--ink-4)',
-          zIndex: 1, position: 'relative',
-        }}>
-          {isDone ? '✓' : phase}
-        </div>
-        {/* Vertical line to next step */}
-        {!isLast && (
-          <div style={{
-            flex: 1, width: 1,
-            background: isDone ? 'var(--olive-deep)' : 'var(--line)',
-            marginTop: 2, marginBottom: 2,
-            minHeight: 16,
-          }} />
-        )}
-      </div>
-
-      {/* Card */}
-      <div style={{
-        flex: 1,
-        marginLeft: 16,
-        marginBottom: isLast ? 0 : 16,
-        background: 'var(--paper)',
-        border: '1px solid var(--line)',
-        borderLeft: `3px solid ${accentColor}`,
-        padding: '20px 24px',
-        opacity: isLocked ? 0.65 : 1,
-        transition: 'opacity 0.2s',
-      }}>
-        {/* Card header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-          <div>
-            <span style={{
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: 9,
-              color: 'var(--ink-4)', letterSpacing: '0.12em',
-              textTransform: 'uppercase', display: 'block', marginBottom: 5,
-            }}>
-              {lang === 'tr' ? 'AŞAMA' : 'PHASE'} {String(phase).padStart(2, '0')}
-            </span>
-            <h2 style={{
-              fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em',
-              color: isLocked ? 'var(--ink-3)' : 'var(--ink)',
-              marginBottom: 4,
-            }}>
-              {label}
-            </h2>
-            <p style={{ fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
-              {desc}
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, marginLeft: 16 }}>
-            <StatusBadge status={status} lang={lang} />
-            <span style={{
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 10, color: 'var(--ink-4)', whiteSpace: 'nowrap',
-            }}>
-              {step.questions} {lang === 'tr' ? 'soru' : 'Q'}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Completed: score + Results ── */}
-        {isDone && done && (
-          <div style={{
-            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            flexWrap: 'wrap', gap: 10,
-          }}>
-            <div style={{ display: 'flex', gap: 20, alignItems: 'baseline' }}>
-              <div>
-                <span style={{
-                  fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-                  fontSize: 26, letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {Math.round(done.total_score ?? 0)}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--ink-3)', marginLeft: 4 }}>pts</span>
-              </div>
-              {done.overall_grade && (
-                <span style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 600, fontSize: 18, color: gradeColor(done.overall_grade) }}>
-                  {done.overall_grade}
-                </span>
-              )}
-              {done.completed_at && (
-                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                  {new Date(done.completed_at).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB')}
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {allDone.length > 1 && (
-                <a href="/history" style={{ textDecoration: 'none' }}>
-                  <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", cursor: 'pointer' }}>
-                    +{allDone.length - 1} {lang === 'tr' ? 'önceki →' : 'prev →'}
-                  </span>
-                </a>
-              )}
-              <a href={`/results/${done.id}`} style={{ textDecoration: 'none' }}>
-                <button className="btn btn-outline btn-sm">
-                  {lang === 'tr' ? 'Sonuçlar' : 'Results'} <Icon.arrow />
-                </button>
-              </a>
-              {/* Start New alongside Results — clearly separated */}
-              {canStart && (
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => onStart(step)}
-                  disabled={starting}
-                >
-                  {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? '+ Yeni' : '+ New')} <Icon.arrow />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── In-progress: continue ── */}
-        {isLive && live && (
-          <div style={{
-            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            flexWrap: 'wrap', gap: 8,
-          }}>
-            <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-              {lang === 'tr' ? 'Kaldığınız yerden devam edin.' : 'Pick up where you left off.'}
-            </span>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => onContinue(live)}
-              disabled={starting}
-            >
-              {lang === 'tr' ? 'Devam Et' : 'Continue'} <Icon.arrow />
-            </button>
-          </div>
-        )}
-
-        {/* ── Active (no attempts yet): start ── */}
-        {isActive && phase < 5 && !isDone && !isLive && (
-          <div style={{
-            marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
-            {!step.survey ? (
-              <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em' }}>
-                ⚠ {lang === 'tr' ? 'Anket verisi henüz yüklenmedi.' : 'Survey data not loaded yet.'}
-              </span>
-            ) : <span />}
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => onStart(step)}
-              disabled={starting || !step.survey}
-              style={!step.survey ? { opacity: 0.35, cursor: 'not-allowed' } : {}}
-            >
-              {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
-            </button>
-          </div>
-        )}
-
-        {/* Step 5 (Sector): sector picker + start — shown whenever not locked */}
-        {!isLocked && phase === 5 && (
-          <>
-            <SectorPicker
-              lang={lang}
-              selected={selectedSector}
-              onChange={onSectorChange}
-            />
-            {/* Inline error (e.g. sector survey not found) */}
-            {stepErr && (
-              <div style={{
-                marginTop: 10,
-                padding: '8px 12px',
-                background: '#FEF2F0', border: '1px solid #F5C6BB',
-                fontSize: 11, color: 'var(--danger)',
-                fontFamily: "'IBM Plex Mono', monospace",
-              }}>
-                {stepErr}
-              </div>
-            )}
-
-            <div style={{
-              marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}>
-              {selectedSector === null && !stepErr && (
-                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                  * {lang === 'tr' ? 'Devam etmek için sektör seçin.' : 'Select a sector to continue.'}
-                </span>
-              )}
-              <div style={{ marginLeft: 'auto' }}>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => selectedSector && onStart(step, selectedSector)}
-                  disabled={starting || selectedSector === null}
-                  style={{ opacity: selectedSector === null ? 0.4 : 1, cursor: selectedSector === null ? 'not-allowed' : 'pointer' }}
-                >
-                  {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Opening…') : (lang === 'tr' ? 'Başla' : 'Start')} <Icon.arrow />
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Locked: show which step to complete first */}
-        {isLocked && (
-          <div style={{ marginTop: 10 }}>
-            <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-              {lang === 'tr'
-                ? `${STEP_DEFS[phase - 2]?.labelTr ?? `Aşama ${phase - 1}`} tamamlandıktan sonra açılır`
-                : `Unlock after completing ${STEP_DEFS[phase - 2]?.labelEn ?? `Phase ${phase - 1}`}`}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function StatusChip({ status, lang }: { status: PhaseStatus | 'replaced'; lang: string }) {
+  const map: Record<string, { label: string; icon?: IconName }> = {
+    completed:   { label: T(lang, 'Completed', 'Tamamlandı'), icon: 'check' },
+    in_progress: { label: T(lang, 'In Progress', 'Devam Ediyor') },
+    available:   { label: T(lang, 'Ready', 'Hazır') },
+    locked:      { label: T(lang, 'Locked', 'Kilitli'), icon: 'lock' },
+    replaced:    { label: T(lang, 'Replaced', 'Yenilendi') },
+  };
+  const c = map[status];
+  return <span className={`ac-chip c-${status}`}>{c.icon && <Ic name={c.icon} size={11} />}{c.label}</span>;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -482,8 +100,15 @@ export default function SurveysPage() {
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [showNewCycleModal, setShowNewCycleModal] = useState(false);
   const [newCycleName, setNewCycleName] = useState('');
-  // Pending cycle name set by the Dashboard "New Assessment" form
+  // Pending cycle name set by the Dashboard / History "New Assessment" form
   const [pendingDashCycle, setPendingDashCycle] = useState<string | null>(null);
+  // Cycle picked in the selector. null = default (pending new cycle if any, otherwise the most recent cycle).
+  const [viewCycle, setViewCycle] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'completed' | 'in_progress'>('all');
+  const [showAllRows, setShowAllRows] = useState(false);
+  // Phase shown in the detail panel under the journey. null = the active phase (in progress, else next ready).
+  const [selNum, setSelNum] = useState<number | null>(null);
+  const detailRef = useRef<HTMLElement>(null);
 
   // On mount: pick up any cycle name stored by the Dashboard "New Assessment" modal.
   // We DON'T auto-start — just store it so the user can click Start on Phase 1.
@@ -504,8 +129,7 @@ export default function SurveysPage() {
   useEffect(() => {
     if (!user) return;
     // Fix H-4: cancel in-flight requests when the component unmounts so we never
-    // call setState on an already-unmounted component (prevents memory leaks and
-    // the "Can't perform a React state update on an unmounted component" warning).
+    // call setState on an already-unmounted component.
     const controller = new AbortController();
     setLoading(true);
     Promise.all([
@@ -530,78 +154,46 @@ export default function SurveysPage() {
     return () => controller.abort();
   }, [user]);
 
-  // Active cycle = cycle_name of the most recent attempt (sorted by id desc).
-  // EXCEPTION: when the user arrives from the Dashboard "New Assessment" modal,
-  // pendingDashCycle holds the new (not-yet-created) cycle name.  Override
-  // activeCycleName with it so stepAttempts filters to an EMPTY set for the new
-  // cycle — this makes Phase 1 show "Start" instead of "Continue" (which was
-  // the bug: the old cycle's in-progress attempt kept winning the filter).
-  const activeCycleName = pendingDashCycle !== null
-    ? pendingDashCycle
-    : attempts.length > 0
-      ? (attempts.slice().sort((a, b) => b.id - a.id)[0].cycle_name ?? '')
-      : '';
+  /* ── Derived data ───────────────────────────────────────── */
+  // Only attempts of the five GRI phases belong to this page (same name keys as before).
+  const griAttempts = useMemo(() => attempts.filter((a) => phaseOf(a.survey_name) > 0), [attempts]);
+  const all = useMemo(() => buildModel(griAttempts, surveys), [griAttempts, surveys]);
 
-  /* ── Build wizard steps ─────────────────────────────────── */
-  const steps: WizardStep[] = STEP_DEFS.map((def, idx) => {
-    const sname = (s: Survey) => s.name_en || s.name || '';
-    const aname = (a: Attempt) => a.survey_name || '';
+  // Active cycle = the cycle chosen in the selector; by default the pending new cycle (when the user arrived
+  // from a "New Assessment" form) and otherwise the cycle of the most recent attempt — exactly as before.
+  const pendingIsNew = pendingDashCycle !== null && !all.cycles.includes(pendingDashCycle);
+  const activeCycleName = viewCycle !== null && (all.cycles.includes(viewCycle) || viewCycle === pendingDashCycle)
+    ? viewCycle
+    : pendingDashCycle !== null ? pendingDashCycle : all.latestCycle;
+  const viewingPendingNew = pendingIsNew && activeCycleName === pendingDashCycle;
 
-    // Survey match for steps 1-4 (core phases); sector (phase 5) resolved later
-    const survey = def.phase < 5
-      ? (surveys.find((s) => sname(s).includes(def.nameMatch)) ?? null)
-      : null;  // sector survey resolved later by selected sector
+  // Phase states for the active cycle. A brand-new (not yet created) cycle has no attempts, so every phase
+  // starts fresh: phase 1 ready, the rest locked.
+  const cyc = useMemo(
+    () => (viewingPendingNew ? buildModel([], surveys) : buildModel(griAttempts, surveys, activeCycleName)),
+    [viewingPendingNew, griAttempts, surveys, activeCycleName],
+  );
 
-    // Attempt match — sort by id desc so index 0 = most recent
-    // Filter by activeCycleName so each cycle only shows its own attempts
-    const stepAttempts = attempts
-      .filter((a) => aname(a).includes(def.nameMatch) && (a.cycle_name ?? '') === activeCycleName)
-      .sort((a, b) => b.id - a.id);
-
-    // Most-recent attempt (highest id) drives the card state.
-    // Old attempts superseded by the backend (set to is_completed=False when a
-    // newer attempt completes) must NOT be treated as "live" — only the single
-    // most-recent attempt determines whether this step is in_progress or completed.
-    const mostRecent = stepAttempts[0] ?? null;   // sorted by id desc above
-    const live    = mostRecent && !mostRecent.is_completed ? mostRecent : null;
-    const done    = mostRecent &&  mostRecent.is_completed ? mostRecent : null;
-    const allDone = stepAttempts.filter((a) => a.is_completed);
-
-    // Status
-    let status: StepStatus;
-    if (live)       { status = 'in_progress'; }
-    else if (done)  { status = 'completed';   }
-    else if (idx === 0) { status = 'active';  }
-    else {
-      const prevMatch = STEP_DEFS[idx - 1].nameMatch;
-      // Fix: filter by activeCycleName so completing Phase 1 in a previous cycle
-      // does NOT unlock Phase 2 in a new cycle — each cycle must be sequential.
-      const prevDone  = attempts.some(
-        (a) => a.is_completed && aname(a).includes(prevMatch) && (a.cycle_name ?? '') === activeCycleName,
-      );
-      status = prevDone ? 'active' : 'locked';
-    }
-
-    return { ...def, survey, done, allDone, live, status };
-  });
+  const coreSurvey = useCallback((num: number): Survey | null => {
+    const key = PHASES[num - 1].key;
+    return num < 5 ? (surveys.find((s) => surveyMatches(s, key)) ?? null) : null;
+  }, [surveys]);
+  const sectorSurvey = useCallback((sector: string | null): Survey | null => {
+    const def = SECTORS.find((s) => s.value === sector);
+    return def ? (surveys.find((s) => surveyMatches(s, def.match)) ?? null) : null;
+  }, [surveys]);
+  // Sector assessments differ in length, so before a sector is chosen the honest figure is a range.
+  const sectorRange = useMemo(() => {
+    const counts = surveys.filter((s) => surveyMatches(s, PHASES[4].key)).map(qCount).filter((n): n is number => n !== null);
+    return counts.length ? { min: Math.min(...counts), max: Math.max(...counts) } : null;
+  }, [surveys]);
 
   /* ── Handlers ───────────────────────────────────────────── */
-  const handleStart = useCallback(async (step: WizardStep, sector?: string, cycleName?: string) => {
+  const handleStart = useCallback(async (num: number, sector?: string, cycleName?: string) => {
     if (submitLockRef.current) return;
     setStartErr('');
 
-    let survey = step.survey;
-
-    if (step.phase === 5 && sector) {
-      const sectorDef = SECTORS.find((s) => s.value === sector);
-      if (sectorDef) {
-        survey = surveys.find((s) =>
-          (s.name_en || s.name || '').includes(sectorDef.match) ||
-          (s.name || '').includes(sectorDef.match)
-        ) ?? null;
-      }
-    }
-
+    const survey = num === 5 ? sectorSurvey(sector ?? null) : coreSurvey(num);
     if (!survey) {
       setStartErr(lang === 'tr' ? 'Anket bulunamadı.' : 'Survey not found.');
       return;
@@ -610,9 +202,9 @@ export default function SurveysPage() {
     submitLockRef.current = true;
     setStarting(true);
     try {
-      // Priority: explicit cycleName → pendingDashCycle (from dashboard form) → activeCycleName
-      const effectiveCycle = cycleName ?? pendingDashCycle ?? activeCycleName;
-      if (pendingDashCycle) setPendingDashCycle(null); // consume it
+      // Priority: explicit cycleName (New Assessment modal) → the active cycle (pending new cycle or selected cycle)
+      const effectiveCycle = cycleName ?? activeCycleName;
+      if (pendingDashCycle !== null && effectiveCycle === pendingDashCycle) setPendingDashCycle(null); // consume it
       const attempt = await attemptAPI.startAttempt(survey.id, sector, effectiveCycle);
       router.push(`/questionnaire/${attempt.id}`);
     } catch (err: unknown) {
@@ -640,18 +232,9 @@ export default function SurveysPage() {
     } finally {
       submitLockRef.current = false;
     }
-  }, [surveys, lang, router, activeCycleName, pendingDashCycle]);
+  }, [coreSurvey, sectorSurvey, lang, router, activeCycleName, pendingDashCycle]);
 
-  const handleContinue = useCallback((attempt: Attempt) => {
-    router.push(`/questionnaire/${attempt.id}`);
-  }, [router]);
-
-  // Retry = start a fresh attempt for the same survey (no sector needed for 1-3)
-  const handleRetry = useCallback((step: WizardStep) => {
-    handleStart(step);
-  }, [handleStart]);
-
-  // New Cycle = show modal to name the cycle, then start GRI 1
+  // New assessment = name a new cycle, then start phase 1 in it
   const handleNewCycle = useCallback(() => {
     setNewCycleName('');
     setShowNewCycleModal(true);
@@ -660,282 +243,470 @@ export default function SurveysPage() {
   const handleNewCycleConfirm = useCallback(async () => {
     const name = newCycleName.trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     setShowNewCycleModal(false);
-    const gri1Step = steps.find((s) => s.phase === 1);
-    if (gri1Step) await handleStart(gri1Step, undefined, name);
-  }, [newCycleName, steps, handleStart]);
+    await handleStart(1, undefined, name);
+  }, [newCycleName, handleStart]);
 
   /* ── Loading ─────────────────────────────────────────────── */
   if (authLoading || loading) {
     return (
-      <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.12em' }}>
-          {lang === 'tr' ? 'YÜKLENİYOR…' : 'LOADING…'}
-        </span>
+      <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
+        <AppNav />
+        <main className="wrap ac-main" aria-busy="true" aria-label={T(lang, 'Loading', 'Yükleniyor')}>
+          <div className="ac-sk" style={{ height: 58, maxWidth: 380 }} />
+          <div className="ac-sk" style={{ height: 250 }} />
+          <div className="ac-sk" style={{ height: 220 }} />
+          <div className="ac-kpis">{[0, 1, 2, 3].map((i) => <div key={i} className="ac-sk" style={{ height: 104 }} />)}</div>
+        </main>
       </div>
     );
   }
 
-  /* ── Completed all 4 phases banner ───────────────────────── */
-  const allDone = steps.every((s) => s.status === 'completed');
+  /* ── Figures (all from the loaded API data) ──────────────── */
+  const total     = griAttempts.length;
+  const completed = all.completedCount;
+  const ongoing   = all.inProgressCount;
+  const replaced  = total - completed - ongoing;       // completed earlier, superseded when the same assessment was completed again
+  const allPhasesDone = cyc.phasesCompleted === PHASES.length;
+  const livePhase = cyc.phases.find((p) => p.status === 'in_progress') ?? null;
+  const focusNum  = (livePhase ?? cyc.phases.find((p) => p.status === 'available'))?.num ?? null;   // the card to emphasise
 
-  /* ── Total questions answered ────────────────────────────── */
-  const completedPhases = steps.filter((s) => s.status === 'completed').length;
+  const cycleOptions = [...(pendingIsNew ? [pendingDashCycle as string] : []), ...all.cycles];
+
+  type Row = { a: Attempt; phase: number; status: 'completed' | 'in_progress' | 'replaced'; pct: number };
+  const rows: Row[] = griAttempts.slice().sort((x, y) => y.id - x.id).map((a) => ({
+    a, phase: phaseOf(a.survey_name),
+    status: a.is_completed ? 'completed' : isInProgress(a) ? 'in_progress' : 'replaced',
+    pct: a.total_questions > 0 ? Math.min(100, Math.round(((a.answered_count ?? 0) / a.total_questions) * 100)) : 0,
+  }));
+  const counts = { all: rows.length, completed: rows.filter((r) => r.status === 'completed').length, in_progress: rows.filter((r) => r.status === 'in_progress').length };
+  const filtered = rows.filter((r) => filter === 'all' || r.status === filter);
+  const visibleRows = showAllRows ? filtered : filtered.slice(0, 8);
+
+  const latest = all.results.slice().reverse().slice(0, 3);      // most recent completed, scored results
+
+  /* ── Per-phase facts shared by the journey tracker and the detail panel ── */
+  const phaseInfo = (st: PhaseState) => {
+    const num = st.num;
+    const att = st.attempt;
+    const isSector = num === 5;
+    const locked = st.status === 'locked';
+    const done = st.status === 'completed' ? att : null;
+    const live = st.status === 'in_progress' ? att : null;
+    const survey = isSector ? sectorSurvey(selectedSector) : coreSurvey(num);
+    const prevDone = viewingPendingNew ? 0
+      : griAttempts.filter((x) => x.is_completed && phaseOf(x.survey_name) === num && (x.cycle_name ?? '') === activeCycleName).length;
+    const pct = st.status === 'completed' ? 100 : st.pct;
+    // Question count: the attempt's own count once one exists, otherwise the survey's count from the API
+    const questions = att ? `${att.total_questions}`
+      : isSector ? (qCount(survey) !== null ? `${qCount(survey)}` : sectorRange ? (sectorRange.min === sectorRange.max ? `${sectorRange.min}` : `${sectorRange.min}–${sectorRange.max}`) : null)
+      : (st.total !== null ? `${st.total}` : null);
+    const canStartCore = !locked && !isSector && !!coreSurvey(num);
+    return { num, att, isSector, locked, done, live, prevDone, pct, questions, canStartCore };
+  };
+  const startLabel = starting ? T(lang, 'Opening…', 'Açılıyor…') : T(lang, 'Start', 'Başla');
+  // Default: the active phase; when every phase is done, the last one that has a result.
+  const lastWithAttempt = cyc.phases.filter((p) => p.attempt).pop()?.num ?? 1;
+  const selected = cyc.phases[(selNum ?? focusNum ?? lastWithAttempt) - 1];
+  const selectPhase = (num: number, reveal = false) => {
+    setSelNum(num);
+    setStartErr('');
+    if (reveal) requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  };
+
+  /* ── One step of the connected journey ───────────────────── */
+  const trackStep = (st: PhaseState) => {
+    const { num, att, isSector, locked, done, live, pct, questions, canStartCore } = phaseInfo(st);
+    const isSel = selected.num === num;
+    return (
+      <li key={num} className={`ac-step is-${st.status}${focusNum === num ? ' is-focus' : ''}${isSel ? ' is-sel' : ''}`} aria-current={focusNum === num ? 'step' : undefined}>
+        <div className="ac-step-rail" aria-hidden="true">
+          <span className="ac-step-node">{st.status === 'completed' ? <Ic name="check" size={17} /> : locked ? <Ic name="lock" size={15} /> : num}</span>
+        </div>
+        <button type="button" className="ac-step-body" aria-pressed={isSel} onClick={() => selectPhase(num)}
+          title={T(lang, 'Show the details of this phase', 'Bu aşamanın ayrıntılarını göster')}>
+          <span className="ac-step-eyebrow">{T(lang, 'Phase', 'Aşama')} {num}</span>
+          <span className="ac-step-title">{phaseTitle(num, lang)}</span>
+          <StatusChip status={st.status} lang={lang} />
+          <span className="ac-step-prog">
+            {done ? <><b>{(done.total_score ?? 0).toFixed(1)}%</b>{done.overall_grade ? <> · <b>{done.overall_grade}</b></> : null} · {att!.total_questions} {T(lang, 'questions', 'soru')}</>
+              : live ? <><b>{st.answered} / {live.total_questions}</b> {T(lang, 'answered', 'cevaplandı')} · <b>{pct}%</b></>
+              : <>{questions ?? '—'} {T(lang, 'questions', 'soru')}</>}
+          </span>
+          {live && <span className="ac-bar" role="img" aria-label={`${pct}%`}><span style={{ width: `${pct}%` }} /></span>}
+        </button>
+        <div className="ac-step-act">
+          {done && <Link href={`/results/${done.id}`} className="ac-btn ac-btn-sm">{T(lang, 'View Results', 'Sonuçları Gör')} <Ic name="arrow" size={13} /></Link>}
+          {live && (
+            <button type="button" className="ac-btn ac-btn-sm ac-btn-primary" onClick={() => router.push(`/questionnaire/${live.id}`)} disabled={starting}>
+              {T(lang, 'Continue', 'Devam Et')} <Ic name="arrow" size={13} />
+            </button>
+          )}
+          {st.status === 'available' && !isSector && (
+            <button type="button" className="ac-btn ac-btn-sm ac-btn-primary" onClick={() => handleStart(num)} disabled={starting || !canStartCore}>
+              {startLabel} <Ic name="arrow" size={13} />
+            </button>
+          )}
+          {st.status === 'available' && isSector && (
+            <button type="button" className="ac-btn ac-btn-sm ac-btn-primary" onClick={() => selectPhase(num, true)}>
+              {T(lang, 'Choose sector', 'Sektör seç')} <Ic name="arrow" size={13} />
+            </button>
+          )}
+          {locked && (
+            <span className="ac-step-locked"><Ic name="lock" size={12} />{T(lang, `After ${phaseTitle(num - 1, lang)}`, `${phaseTitle(num - 1, lang)} sonrası`)}</span>
+          )}
+        </div>
+      </li>
+    );
+  };
+
+  /* ── Detail panel of the selected phase ──────────────────── */
+  const detailPanel = (st: PhaseState) => {
+    const { num, att, isSector, locked, done, live, prevDone, pct, questions, canStartCore } = phaseInfo(st);
+    const remaining = att ? Math.max(att.total_questions - (st.status === 'completed' ? att.total_questions : st.answered), 0) : null;
+    return (
+      <section ref={detailRef} className={`ac-card ac-detail is-${st.status}`} aria-labelledby="ac-detail-h" aria-live="polite">
+        <div className="ac-detail-head">
+          <span className="ac-detail-num" aria-hidden="true">{String(num).padStart(2, '0')}</span>
+          <div className="ac-detail-title">
+            <span className="ac-step-eyebrow">{focusNum === num ? T(lang, 'Active phase', 'Aktif aşama') : T(lang, 'Selected phase', 'Seçili aşama')} · {T(lang, 'Phase', 'Aşama')} {num} / {PHASES.length}</span>
+            <h2 id="ac-detail-h" className="ac-h2">{phaseTitle(num, lang)}</h2>
+          </div>
+          <StatusChip status={st.status} lang={lang} />
+        </div>
+        <p className="ac-detail-desc">{lang === 'tr' ? PHASE_COPY[num].descTr : PHASE_COPY[num].descEn}</p>
+
+        <dl className="ac-detail-facts">
+          <div><dt>{T(lang, 'Questions', 'Soru')}</dt><dd>{questions ?? '—'}</dd></div>
+          <div><dt>{T(lang, 'Answered', 'Cevaplanan')}</dt><dd>{att ? (st.status === 'completed' ? att.total_questions : st.answered) : 0}</dd></div>
+          <div><dt>{T(lang, 'Remaining', 'Kalan')}</dt><dd>{remaining ?? questions ?? '—'}</dd></div>
+          <div><dt>{T(lang, 'Completion', 'Tamamlanma')}</dt><dd>{pct}%</dd></div>
+          {/* Score, grade and date only when a real result exists */}
+          {done && <div><dt>{T(lang, 'Score', 'Skor')}</dt><dd>{(done.total_score ?? 0).toFixed(1)}%</dd></div>}
+          {done && <div><dt>{T(lang, 'Grade', 'Not')}</dt><dd><GradeBadge grade={done.overall_grade} /></dd></div>}
+          {done && <div><dt>{T(lang, 'Completed on', 'Tamamlanma tarihi')}</dt><dd className="is-text">{fmtDate(done.completed_at, lang)}</dd></div>}
+          {live && <div><dt>{T(lang, 'Started', 'Başlangıç')}</dt><dd className="is-text">{fmtDate(live.started_at, lang)}</dd></div>}
+        </dl>
+        <div className="ac-bar ac-bar-lg" role="img" aria-label={`${pct}%`}><span style={{ width: `${pct}%` }} /></div>
+
+        {st.superseded && !att && (
+          <p className="ac-detail-note">{T(lang, 'This phase was completed earlier in this cycle; the result was replaced when the same assessment was completed again.', 'Bu aşama bu dönemde daha önce tamamlandı; aynı değerlendirme yeniden tamamlanınca sonuç yenilendi.')}</p>
+        )}
+        {startErr && <p className="ac-banner is-bad" role="alert"><Ic name="info" size={15} /><span>{startErr}</span></p>}
+
+        <div className="ac-detail-actions">
+          {locked && (
+            <p className="ac-detail-locked"><Ic name="lock" size={14} />{T(lang, `Unlocks after ${phaseTitle(num - 1, lang)} is completed.`, `${phaseTitle(num - 1, lang)} tamamlanınca açılır.`)}</p>
+          )}
+
+          {live && (
+            <button type="button" className="ac-btn ac-btn-primary" onClick={() => router.push(`/questionnaire/${live.id}`)} disabled={starting}>
+              {T(lang, 'Continue', 'Devam Et')} <Ic name="arrow" size={14} />
+            </button>
+          )}
+          {done && (
+            <Link href={`/results/${done.id}`} className={`ac-btn${isSector ? '' : ' ac-btn-primary'}`}>{T(lang, 'View Results', 'Sonuçları Gör')} <Ic name="arrow" size={14} /></Link>
+          )}
+          {st.status === 'available' && !isSector && (
+            <button type="button" className="ac-btn ac-btn-primary" onClick={() => handleStart(num)} disabled={starting || !canStartCore}>
+              {startLabel} <Ic name="arrow" size={14} />
+            </button>
+          )}
+          {st.status === 'available' && !isSector && !canStartCore && (
+            <span className="ac-detail-hint">{T(lang, 'Survey data not loaded yet.', 'Anket verisi henüz yüklenmedi.')}</span>
+          )}
+
+          {/* Sector phase: choose the sector, then start (available whenever the phase is unlocked, as before) */}
+          {!locked && isSector && (
+            <>
+              <label className="ac-sector">
+                <span>{T(lang, 'Choose your sector', 'Sektörünüzü seçin')}</span>
+                <select value={selectedSector ?? ''} onChange={(e) => { setSelectedSector(e.target.value || null); setStartErr(''); }}>
+                  <option value="">{T(lang, 'Select a sector…', 'Sektör seçin…')}</option>
+                  {SECTORS.map((sc) => <option key={sc.value} value={sc.value}>{lang === 'tr' ? sc.tr : sc.en}</option>)}
+                </select>
+              </label>
+              <button type="button" className={`ac-btn${done || live ? '' : ' ac-btn-primary'}`} onClick={() => selectedSector && handleStart(num, selectedSector)} disabled={starting || selectedSector === null}>
+                {done || live ? (starting ? startLabel : T(lang, 'Start selected sector', 'Seçili sektörü başlat')) : startLabel} <Ic name="arrow" size={14} />
+              </button>
+              {selectedSector === null && <span className="ac-detail-hint">{T(lang, 'Select a sector to continue.', 'Devam etmek için sektör seçin.')}</span>}
+            </>
+          )}
+
+          {/* Completed core phase: a new attempt can be started alongside the results, as before */}
+          {done && canStartCore && (
+            <button type="button" className="ac-btn" onClick={() => handleStart(num)} disabled={starting}>
+              <Ic name="plus" size={13} />{starting ? T(lang, 'Opening…', 'Açılıyor…') : T(lang, 'New attempt', 'Yeni deneme')}
+            </button>
+          )}
+          {done && prevDone > 1 && <Link href="/history" className="ac-linkbtn">+{prevDone - 1} {T(lang, 'previous', 'önceki')} <Ic name="arrow" size={13} /></Link>}
+        </div>
+      </section>
+    );
+  };
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
       <AppNav />
 
-      <main className="wrap" style={{ padding: '40px 32px 80px', maxWidth: 760 }}>
+      <main className="wrap ac-main">
 
         {/* ── Page header ─────────────────────────────────── */}
-        <div style={{ marginBottom: 40, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-          <div>
-            <span style={{
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 10, color: 'var(--ink-4)',
-              letterSpacing: '0.14em', textTransform: 'uppercase',
-              display: 'block', marginBottom: 10,
-            }}>
-              GRI v5 · {lang === 'tr' ? '5 Aşama' : '5 Phases'} · 330 Q
-            </span>
-            <h1 style={{ fontSize: 32, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 8 }}>
-              {lang === 'tr'
-                ? <><em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>GRI</em> Değerlendirme Yolculuğu</>
-                : <><em style={{ fontStyle: 'italic', color: 'var(--olive-deep)', fontWeight: 500 }}>GRI</em> Assessment Journey</>}
-            </h1>
-            <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6, maxWidth: 520 }}>
-              {lang === 'tr'
-                ? 'Her aşamayı sırayla tamamlayın. Bir sonraki aşama, bir öncekini bitirdikten sonra açılır.'
-                : 'Complete each phase in order. The next phase unlocks when you finish the previous one.'}
-            </p>
+        <header className="ac-top">
+          <div className="ac-top-main">
+            <h1 className="ac-title">{T(lang, 'Assessment Centre', 'Değerlendirme Merkezi')}</h1>
+            <p className="ac-subtitle">{T(lang, 'Manage your organization’s sustainability assessments.', 'Kuruluşunuzun sürdürülebilirlik değerlendirmelerini yönetin.')}</p>
           </div>
-          {/* New Cycle — shown whenever there are any attempts, not just when allDone */}
-          {attempts.length > 0 && (
-            <div style={{ flexShrink: 0 }}>
-              <button
-                className="btn btn-outline btn-sm"
-                onClick={handleNewCycle}
-                disabled={starting}
-                title={lang === 'tr' ? 'Tüm aşamalar için yeni bağımsız değerlendirme başlat' : 'Start a new independent assessment cycle for all phases'}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                {lang === 'tr' ? '+ Yeni Döngü' : '+ New Cycle'}
-              </button>
-              <div style={{ marginTop: 4, fontSize: 10, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace", textAlign: 'center' }}>
-                <a href="/history" style={{ color: 'inherit' }}>
-                  {lang === 'tr' ? 'geçmişi gör' : 'view history'}
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
+          <div className="ac-top-side">
+            {cycleOptions.length > 0 && (
+              <label className="ac-cycle">
+                <Ic name="calendar" size={15} />
+                <span>{T(lang, 'Assessment cycle', 'Değerlendirme dönemi')}</span>
+                <select value={activeCycleName} onChange={(e) => { setViewCycle(e.target.value); setSelNum(null); }} aria-label={T(lang, 'Assessment cycle', 'Değerlendirme dönemi')}>
+                  {cycleOptions.map((c) => (
+                    <option key={c || '__none'} value={c}>
+                      {cycleLabel(c, lang)}
+                      {pendingIsNew && c === pendingDashCycle ? T(lang, ' (new)', ' (yeni)') : c === all.latestCycle && cycleOptions.length > 1 ? T(lang, ' (current)', ' (güncel)') : ''}
+                    </option>
+                  ))}
+                </select>
+                <Ic name="chevron" size={14} className="ac-cycle-chev" />
+              </label>
+            )}
+            <Link href="/history" className="ac-btn"><Ic name="clock" size={14} />{T(lang, 'Assessment History', 'Değerlendirme Geçmişi')}</Link>
+            <button type="button" className="ac-btn ac-btn-primary" onClick={handleNewCycle} disabled={starting}
+              title={T(lang, 'Start a new independent assessment cycle for all phases', 'Tüm aşamalar için yeni bağımsız değerlendirme başlat')}>
+              <Ic name="plus" size={14} />{T(lang, 'New Assessment', 'Yeni Değerlendirme')}
+            </button>
+          </div>
+        </header>
 
-        {/* Pending cycle banner — shown when arriving from Dashboard "New Assessment" form */}
-        {pendingDashCycle && (
-          <div style={{
-            marginBottom: 16, padding: '12px 16px',
-            background: '#F0F7F0', border: '1px solid var(--olive-deep)',
-            display: 'flex', alignItems: 'center', gap: 12,
-          }}>
-            <span style={{ fontSize: 16 }}>✅</span>
-            <div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--olive-deep)', marginBottom: 2 }}>
-                {lang === 'tr' ? 'Yeni Döngü Hazır' : 'New Cycle Ready'}
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>
-                &ldquo;{pendingDashCycle}&rdquo; — {lang === 'tr' ? 'Başlamak için Aşama 1\'e tıklayın' : 'click Start on Phase 1 to begin'}
-              </div>
-            </div>
-          </div>
+        {/* Pending cycle banner — shown when arriving from a "New Assessment" form */}
+        {viewingPendingNew && (
+          <p className="ac-banner is-ok" role="status">
+            <Ic name="check" size={15} />
+            <span><b>{T(lang, 'New cycle ready', 'Yeni dönem hazır')}:</b> “{pendingDashCycle}” — {T(lang, 'select Start on Phase 1 to begin.', 'başlamak için Aşama 1’de Başla’yı seçin.')}</span>
+          </p>
         )}
-
-        {/* Current cycle label */}
-        {activeCycleName && !pendingDashCycle && (
-          <div style={{
-            marginBottom: 24, padding: '8px 16px',
-            background: 'var(--cream-deep)', border: '1px solid var(--line)',
-            display: 'inline-flex', alignItems: 'center', gap: 10,
-            fontFamily: "'IBM Plex Mono', monospace",
-          }}>
-            <span style={{ fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-4)' }}>
-              {lang === 'tr' ? 'AKTİF DÖNGÜ' : 'ACTIVE CYCLE'}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--ink)', fontWeight: 500 }}>{activeCycleName}</span>
-          </div>
-        )}
-
-        {/* ── Progress strip ───────────────────────────────── */}
-        <div style={{
-          background: 'var(--paper)', border: '1px solid var(--line)',
-          padding: '14px 20px', marginBottom: 32,
-          display: 'flex', alignItems: 'center', gap: 20,
-        }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                {lang === 'tr' ? 'İlerleme' : 'Progress'}
-              </span>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: 'var(--olive-deep)', fontWeight: 600 }}>
-                {completedPhases} / 5 {lang === 'tr' ? 'aşama' : 'phases'}
-              </span>
-            </div>
-            <div className="bar bar-olive">
-              <span style={{ width: `${(completedPhases / 5) * 100}%`, transition: 'width 0.4s ease' }} />
-            </div>
-          </div>
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{
-              fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300,
-              fontSize: 28, letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1,
-            }}>
-              {completedPhases}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--ink-4)' }}>
-              {lang === 'tr' ? 'tamamlandı' : 'completed'}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Error banner ─────────────────────────────────── */}
-        {startErr && (
-          <div style={{
-            background: '#FEF2F0', border: '1px solid #F5C6BB',
-            padding: '10px 16px', marginBottom: 20,
-            fontSize: 12, color: 'var(--danger)',
-            fontFamily: "'IBM Plex Mono', monospace",
-          }}>
-            {startErr}
-          </div>
+        {!viewingPendingNew && activeCycleName !== all.latestCycle && all.cycles.length > 1 && (
+          <p className="ac-banner" role="status">
+            <Ic name="info" size={15} />
+            <span>{T(lang, `You are viewing the “${cycleLabel(activeCycleName, lang)}” cycle. Phases started here are added to this cycle.`, `“${cycleLabel(activeCycleName, lang)}” dönemini görüntülüyorsunuz. Burada başlatılan aşamalar bu döneme eklenir.`)}</span>
+            <button type="button" className="ac-linkbtn" onClick={() => { setViewCycle(null); setSelNum(null); }}>{T(lang, 'Back to current cycle', 'Güncel döneme dön')}</button>
+          </p>
         )}
 
         {loadErr && (
-          <div style={{
-            background: '#FEF2F0', border: '1px solid #F5C6BB',
-            padding: '28px 32px', textAlign: 'center', marginBottom: 20,
-          }}>
-            <p style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>
-              {lang === 'tr' ? 'Yüklenemedi.' : 'Failed to load.'}
-            </p>
-            <button className="btn btn-outline btn-sm" onClick={() => window.location.reload()}>
-              {lang === 'tr' ? 'Tekrar Dene' : 'Retry'}
-            </button>
+          <div className="ac-banner is-bad" role="alert">
+            <Ic name="info" size={15} />
+            <span>{T(lang, 'Failed to load.', 'Yüklenemedi.')}</span>
+            <button type="button" className="ac-btn ac-btn-sm" onClick={() => window.location.reload()}>{T(lang, 'Retry', 'Tekrar Dene')}</button>
           </div>
         )}
 
-        {/* ── All-done banner ───────────────────────────────── */}
-        {allDone && (
-          <div style={{
-            background: 'var(--olive-deep)', color: '#fff',
-            padding: '20px 24px', marginBottom: 28,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
+        {/* ── GRI assessment journey: the connected five-phase process ── */}
+        <section className="ac-card ac-journey" aria-labelledby="ac-journey-h">
+          <div className="ac-journey-head">
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>
-                {lang === 'tr' ? '🎉 Tüm aşamalar tamamlandı!' : '🎉 All phases completed!'}
-              </div>
-              <div style={{ fontSize: 11.5, opacity: 0.8 }}>
-                {lang === 'tr' ? 'Sonuçlarınızı görüntüleyebilir veya tekrar başlayabilirsiniz.' : 'You can view your results or start again.'}
-              </div>
+              <h2 id="ac-journey-h" className="ac-h2">{T(lang, 'GRI Assessment Journey', 'GRI Değerlendirme Yolculuğu')}</h2>
+              <p className="ac-sub">{T(lang, 'Complete each phase in order. The next phase unlocks when you finish the previous one.', 'Her aşamayı sırayla tamamlayın. Bir sonraki aşama, bir öncekini bitirdikten sonra açılır.')}</p>
             </div>
-            <a href="/history" style={{ textDecoration: 'none' }}>
-              <button style={{
-                padding: '8px 16px', background: '#fff', color: 'var(--ink)',
-                border: 'none', cursor: 'pointer', fontFamily: "'IBM Plex Sans', sans-serif",
-                fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
-              }}>
-                {lang === 'tr' ? 'Geçmişi Görüntüle' : 'View History'} <Icon.arrow />
-              </button>
-            </a>
+            <span className="ac-journey-count"><b>{cyc.phasesCompleted} / {PHASES.length}</b> {T(lang, 'phases completed', 'aşama tamamlandı')}{activeCycleName ? ` · ${activeCycleName}` : ''}</span>
           </div>
+          <ol className="ac-track">{cyc.phases.map(trackStep)}</ol>
+        </section>
+
+        {allPhasesDone && (
+          <p className="ac-banner is-ok ac-banner-gap" role="status">
+            <Ic name="check" size={15} />
+            <span><b>{T(lang, 'All phases completed.', 'Tüm aşamalar tamamlandı.')}</b> {T(lang, 'You can view your results or start again.', 'Sonuçlarınızı görüntüleyebilir veya tekrar başlayabilirsiniz.')}</span>
+            <Link href="/history" className="ac-btn ac-btn-sm">{T(lang, 'View History', 'Geçmişi Görüntüle')} <Ic name="arrow" size={13} /></Link>
+          </p>
         )}
 
-        {/* ── Wizard steps ─────────────────────────────────── */}
-        <div>
-          {steps.map((step, idx) => (
-            <StepCard
-              key={step.phase}
-              step={step}
-              lang={lang}
-              isLast={idx === steps.length - 1}
-              selectedSector={selectedSector}
-              onSectorChange={(v) => { setSelectedSector(v); setStartErr(''); }}
-              onStart={handleStart}
-              onContinue={handleContinue}
-              onRetry={handleRetry}
-              starting={starting}
-              stepErr={step.phase === 5 && step.status === 'active' ? startErr : undefined}
-            />
-          ))}
+        {/* ── Selected phase details + latest results ─────── */}
+        <div className="ac-mid">
+          {detailPanel(selected)}
+        <section className="ac-card ac-latest" aria-labelledby="ac-latest-h">
+          <div className="ac-card-head">
+            <div>
+              <h2 id="ac-latest-h" className="ac-h2">{T(lang, 'Latest Results', 'Son Sonuçlar')}</h2>
+              <p className="ac-sub">{T(lang, 'Most recent completed assessments.', 'En son tamamlanan değerlendirmeler.')}</p>
+            </div>
+          </div>
+          {latest.length === 0 ? (
+            <div className="ac-empty">
+              <Ic name="chart" size={22} />
+              <p>{T(lang, 'No results yet. Complete a phase to see its score, grade and report here.', 'Henüz sonuç yok. Skorunu, notunu ve raporunu burada görmek için bir aşamayı tamamlayın.')}</p>
+            </div>
+          ) : (
+            <ul className="ac-results">
+              {latest.map((r, i) => (
+                <li key={r.id} className={i === 0 ? 'is-first' : ''}>
+                  <GradeBadge grade={r.grade} />
+                  <div className="ac-result-main">
+                    <b>{phaseTitle(r.phase, lang)}</b>
+                    <small>{T(lang, 'Completed', 'Tamamlandı')} {fmtDate(r.iso, lang)}{r.cycle ? ` · ${r.cycle}` : ''}</small>
+                  </div>
+                  <span className="ac-result-score">{r.score.toFixed(1)}<small>%</small></span>
+                  <Link href={`/results/${r.id}`} className="ac-rowbtn">{T(lang, 'View Report', 'Raporu Gör')} <Ic name="arrow" size={13} /></Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
         </div>
 
-        {/* ── Total footer ─────────────────────────────────── */}
-        <div style={{
-          marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--line)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <span style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: "'IBM Plex Mono', monospace" }}>
-            {lang === 'tr' ? 'Toplam 330 soru · Yönetişim + Çevre + Sosyal + Ekonomik + Sektör' : 'Total 330 questions · Governance + Environmental + Social + Economic + Sector'}
-          </span>
-          <a href="/history" style={{ textDecoration: 'none', fontSize: 11, color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            {lang === 'tr' ? 'Geçmiş' : 'History'} <Icon.arrow />
-          </a>
-        </div>
+        {/* ── Overview KPIs ───────────────────────────────── */}
+        <section className="ac-kpis" aria-label={T(lang, 'Assessment overview', 'Değerlendirme özeti')}>
+          <article className="ac-card ac-kpi">
+            <div className="ac-kpi-head"><span className="ac-kpi-ic"><Ic name="layers" /></span><span>{T(lang, 'Total Assessments', 'Toplam Değerlendirme')}</span></div>
+            <div className="ac-kpi-val">{total}</div>
+            {total > 0 ? (
+              <div className="ac-split" role="img" aria-label={T(lang, `${completed} completed, ${ongoing} in progress, ${replaced} replaced`, `${completed} tamamlandı, ${ongoing} devam ediyor, ${replaced} yenilendi`)}>
+                {completed > 0 && <i className="s-done" style={{ flexGrow: completed }} />}
+                {ongoing > 0 && <i className="s-live" style={{ flexGrow: ongoing }} />}
+                {replaced > 0 && <i className="s-old" style={{ flexGrow: replaced }} />}
+              </div>
+            ) : <div className="ac-split" />}
+            <p className="ac-kpi-note">
+              {total === 0 ? T(lang, 'No assessments yet', 'Henüz değerlendirme yok')
+                : replaced > 0 ? T(lang, `Includes ${replaced} replaced by newer results`, `${replaced} tanesi yeni sonuçlarla yenilendi`)
+                : T(lang, `Across ${all.cycles.length} cycle${all.cycles.length === 1 ? '' : 's'}`, `${all.cycles.length} dönemde`)}
+            </p>
+          </article>
+
+          <article className="ac-card ac-kpi">
+            <div className="ac-kpi-head"><span className="ac-kpi-ic is-done"><Ic name="check" /></span><span>{T(lang, 'Completed', 'Tamamlanan')}</span></div>
+            <div className="ac-kpi-val">{completed}</div>
+            <p className="ac-kpi-note">
+              {all.latestResult
+                ? T(lang, `Latest: ${phaseTitle(all.latestResult.phase, lang)} · ${fmtDate(all.latestResult.iso, lang)}`, `Son: ${phaseTitle(all.latestResult.phase, lang)} · ${fmtDate(all.latestResult.iso, lang)}`)
+                : T(lang, 'No completed assessment yet', 'Henüz tamamlanan değerlendirme yok')}
+            </p>
+          </article>
+
+          <article className="ac-card ac-kpi">
+            <div className="ac-kpi-head"><span className="ac-kpi-ic is-live"><Ic name="play" /></span><span>{T(lang, 'In Progress', 'Devam Eden')}</span></div>
+            <div className="ac-kpi-val">{ongoing}</div>
+            <p className="ac-kpi-note">
+              {livePhase && livePhase.attempt
+                ? T(lang, `${phaseTitle(livePhase.num, lang)} · ${livePhase.answered} of ${livePhase.attempt.total_questions} answered`, `${phaseTitle(livePhase.num, lang)} · ${livePhase.attempt.total_questions} sorudan ${livePhase.answered}`)
+                : ongoing > 0 ? T(lang, 'In another cycle', 'Başka bir dönemde') : T(lang, 'Nothing in progress', 'Devam eden yok')}
+            </p>
+          </article>
+
+          <article className="ac-card ac-kpi ac-kpi-ring">
+            <div>
+              <div className="ac-kpi-head"><span className="ac-kpi-ic"><Ic name="target" /></span><span>{T(lang, 'Overall Completion', 'Genel Tamamlanma')}</span></div>
+              <div className="ac-kpi-val">{cyc.completionPct}<small>%</small></div>
+              <p className="ac-kpi-note">{T(lang, `${cyc.phasesCompleted} of ${PHASES.length} phases`, `${PHASES.length} aşamadan ${cyc.phasesCompleted}`)}{activeCycleName ? ` · ${activeCycleName}` : ''}</p>
+            </div>
+            <svg className="ac-ring" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+              <circle cx="32" cy="32" r="27" fill="none" stroke="var(--cream-deep)" strokeWidth="7" />
+              {cyc.completionPct > 0 && (
+                <circle cx="32" cy="32" r="27" fill="none" stroke="var(--olive-deep)" strokeWidth="7" strokeLinecap="round"
+                  strokeDasharray={`${(cyc.completionPct / 100) * 2 * Math.PI * 27} ${2 * Math.PI * 27}`} transform="rotate(-90 32 32)" />
+              )}
+            </svg>
+          </article>
+        </section>
+
+        {/* ── Assessment history (full width) ─────────────── */}
+        <section className="ac-card ac-history" aria-labelledby="ac-history-h">
+          <div className="ac-card-head">
+            <div>
+              <h2 id="ac-history-h" className="ac-h2">{T(lang, 'Assessment History', 'Değerlendirme Geçmişi')}</h2>
+              <p className="ac-sub">{T(lang, 'Every assessment record, newest first.', 'Tüm değerlendirme kayıtları, en yeni önce.')}</p>
+            </div>
+            <div className="ac-seg" role="tablist" aria-label={T(lang, 'Filter assessments', 'Değerlendirmeleri filtrele')}>
+              {(['all', 'completed', 'in_progress'] as const).map((f) => (
+                <button key={f} type="button" role="tab" aria-selected={filter === f} className={filter === f ? 'is-on' : ''} onClick={() => { setFilter(f); setShowAllRows(false); }}>
+                  {f === 'all' ? T(lang, 'All', 'Tümü') : f === 'completed' ? T(lang, 'Completed', 'Tamamlanan') : T(lang, 'In Progress', 'Devam Eden')} <small>{counts[f]}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {rows.length === 0 ? (
+            <div className="ac-empty">
+              <Ic name="clipboard" size={22} />
+              <p>{T(lang, 'No assessments yet. Start Phase 1 to create your first record.', 'Henüz değerlendirme yok. İlk kaydınızı oluşturmak için Aşama 1’i başlatın.')}</p>
+            </div>
+          ) : (
+            <div className="ac-tbl" role="table" aria-label={T(lang, 'Assessment history', 'Değerlendirme geçmişi')}>
+              <div className="ac-tr is-head" role="row">
+                <span role="columnheader">{T(lang, 'Assessment', 'Değerlendirme')}</span>
+                <span role="columnheader">{T(lang, 'Cycle', 'Dönem')}</span>
+                <span role="columnheader">{T(lang, 'Created', 'Oluşturulma')}</span>
+                <span role="columnheader">{T(lang, 'Completed on', 'Tamamlanma')}</span>
+                <span role="columnheader">{T(lang, 'Completion', 'İlerleme')}</span>
+                <span role="columnheader">{T(lang, 'Status', 'Durum')}</span>
+                <span role="columnheader" className="c-act">{T(lang, 'Actions', 'İşlemler')}</span>
+              </div>
+              {visibleRows.length === 0 && <p className="ac-empty-row">{T(lang, 'Nothing to show for this filter.', 'Bu filtre için gösterilecek bir şey yok.')}</p>}
+              {visibleRows.map(({ a, phase, status, pct }) => (
+                <div key={a.id} className="ac-tr" role="row">
+                  <span role="cell" className="c-name">
+                    <b>{phaseTitle(phase, lang)}</b>
+                    <small>{a.survey_name}</small>
+                  </span>
+                  <span role="cell" className="c-cycle" data-label={T(lang, 'Cycle', 'Dönem')}>{cycleLabel(a.cycle_name, lang)}</span>
+                  <span role="cell" className="c-created" data-label={T(lang, 'Created', 'Oluşturulma')}>{fmtDate(a.started_at, lang)}</span>
+                  <span role="cell" className="c-done" data-label={T(lang, 'Completed on', 'Tamamlanma')}>{fmtDate(a.completed_at, lang)}</span>
+                  <span role="cell" className="c-prog" data-label={T(lang, 'Completion', 'İlerleme')}>
+                    <span className="ac-prog">
+                      <span className={`ac-bar is-${status}`}><span style={{ width: `${pct}%` }} /></span>
+                      <b>{pct}%</b>
+                    </span>
+                    <small>
+                      {a.answered_count ?? 0}/{a.total_questions}
+                      {status === 'completed' && typeof a.total_score === 'number' && <span title={T(lang, 'Score and grade', 'Skor ve not')}> · {a.total_score.toFixed(1)}%{a.overall_grade ? ` · ${a.overall_grade}` : ''}</span>}
+                    </small>
+                  </span>
+                  <span role="cell" className="c-status"><StatusChip status={status} lang={lang} /></span>
+                  <span role="cell" className="c-act">
+                    {status === 'completed'
+                      ? <Link href={`/results/${a.id}`} className="ac-rowbtn">{T(lang, 'View Results', 'Sonuçları Gör')} <Ic name="arrow" size={13} /></Link>
+                      : <Link href={`/questionnaire/${a.id}`} className="ac-rowbtn">{status === 'in_progress' ? T(lang, 'Continue', 'Devam Et') : T(lang, 'Open', 'Aç')} <Ic name="arrow" size={13} /></Link>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="ac-card-foot">
+            {filtered.length > 8
+              ? <button type="button" className="ac-linkbtn" onClick={() => setShowAllRows((v) => !v)}>{showAllRows ? T(lang, 'Show fewer', 'Daha az göster') : `${T(lang, 'Show all', 'Tümünü göster')} (${filtered.length})`}</button>
+              : <span>{filtered.length} {T(lang, filtered.length === 1 ? 'record' : 'records', 'kayıt')}</span>}
+            <Link href="/history" className="ac-linkbtn">{T(lang, 'Open full history', 'Tüm geçmişi aç')} <Ic name="arrow" size={13} /></Link>
+          </div>
+        </section>
       </main>
 
-      {/* ── New Cycle Modal ── */}
+      {/* ── New assessment (new cycle) modal ── */}
       {showNewCycleModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000,
-        }} onClick={() => setShowNewCycleModal(false)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'var(--paper)', border: '1px solid var(--line)',
-              padding: '36px 40px', maxWidth: 440, width: '100%',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-            }}
-          >
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-4)', display: 'block', marginBottom: 14 }}>
-              {lang === 'tr' ? 'Yeni Değerlendirme Döngüsü' : 'New Assessment Cycle'}
-            </span>
-            <h2 style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8 }}>
-              {lang === 'tr' ? 'Yeni döngüyü başlat' : 'Start a new cycle'}
-            </h2>
-            <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 24, lineHeight: 1.6 }}>
-              {lang === 'tr'
-                ? 'İsteğe bağlı: Bu döngüye bir isim verin. Boş bırakırsanız tarih otomatik atanır.'
-                : 'Optional: give this cycle a name. Leave blank to use today\'s date automatically.'}
+        <div className="ac-modal-back" onClick={() => setShowNewCycleModal(false)}>
+          <div className="ac-modal" role="dialog" aria-modal="true" aria-labelledby="ac-modal-h" onClick={(e) => e.stopPropagation()}>
+            <span className="ac-modal-eyebrow">{T(lang, 'New Assessment Cycle', 'Yeni Değerlendirme Dönemi')}</span>
+            <h2 id="ac-modal-h">{T(lang, 'Start a new cycle', 'Yeni dönemi başlat')}</h2>
+            <p>
+              {T(lang,
+                'Optional: give this cycle a name. Leave blank to use today’s date automatically. Phase 1 opens as soon as you start.',
+                'İsteğe bağlı: Bu döneme bir isim verin. Boş bırakırsanız tarih otomatik atanır. Başlattığınızda Aşama 1 açılır.')}
             </p>
             <input
               type="text"
               autoFocus
               value={newCycleName}
               onChange={(e) => setNewCycleName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleNewCycleConfirm()}
-              placeholder={lang === 'tr' ? 'örn. Q1 2026 (isteğe bağlı)' : 'e.g. Q1 2026 (optional)'}
-              style={{
-                width: '100%', padding: '11px 14px',
-                border: '1px solid var(--line)', background: 'var(--cream)',
-                fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 13,
-                outline: 'none', marginBottom: 20, boxSizing: 'border-box',
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleNewCycleConfirm(); if (e.key === 'Escape') setShowNewCycleModal(false); }}
+              placeholder={T(lang, 'e.g. Q1 2026 (optional)', 'örn. Q1 2026 (isteğe bağlı)')}
+              aria-label={T(lang, 'Cycle name', 'Dönem adı')}
             />
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button
-                className="btn btn-outline btn-sm"
-                onClick={() => setShowNewCycleModal(false)}
-              >
-                {lang === 'tr' ? 'İptal' : 'Cancel'}
-              </button>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleNewCycleConfirm}
-                disabled={starting}
-              >
-                {starting ? (lang === 'tr' ? 'Açılıyor…' : 'Starting…') : (lang === 'tr' ? 'Başlat' : 'Start')} →
+            <div className="ac-modal-actions">
+              <button type="button" className="ac-btn" onClick={() => setShowNewCycleModal(false)}>{T(lang, 'Cancel', 'İptal')}</button>
+              <button type="button" className="ac-btn ac-btn-primary" onClick={handleNewCycleConfirm} disabled={starting}>
+                {starting ? T(lang, 'Starting…', 'Açılıyor…') : T(lang, 'Start', 'Başlat')} <Ic name="arrow" size={14} />
               </button>
             </div>
           </div>
