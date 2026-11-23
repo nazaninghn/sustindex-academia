@@ -62,5 +62,8 @@ urlpatterns = [
     path('schema/', SpectacularAPIView.as_view(permission_classes=[IsAdminUser]), name='schema'),
     path('docs/',   SpectacularSwaggerView.as_view(url_name='schema', permission_classes=[IsAdminUser]), name='swagger-ui'),
 
+    # Staff-only endpoints behind the Next.js admin console.
+    path('admin/', include('adminpanel.urls')),
+
     path('', include(router.urls)),
 ]

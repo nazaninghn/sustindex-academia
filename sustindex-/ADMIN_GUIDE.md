@@ -307,3 +307,22 @@ Admin Panel ابزار قدرتمندی برای مدیریت سوالات، ک�
 6. Save کن و در Frontend تست کن
 
 موفق باشی! 🚀
+
+## کنسول مدیریت جدید (Next.js) — `/admin`
+
+علاوه بر Django Admin، یک کنسول مدیریت در فرانت‌اند وجود دارد که فقط برای کاربران `is_staff` باز می‌شود
+(لینک «Admin» در نوار بالای اپ فقط برای آن‌ها دیده می‌شود). همه‌ی داده‌ها از `/api/v1/admin/` می‌آید و
+دسترسی در سمت سرور با `IsAdminUser` کنترل می‌شود.
+
+| صفحه | مسیر | کاربرد |
+|---|---|---|
+| Overview | `/admin` | شاخص‌های کلیدی با مقایسه‌ی دوره‌ی قبل، نمودار فعالیت، توزیع امتیاز و نمره، قیف ورود، تقویم فعالیت، بخش‌ها، ESG |
+| Users | `/admin/users` | جست‌وجو و فیلتر کاربران، خروجی CSV، تغییر سطح عضویت، فعال/غیرفعال کردن حساب |
+| Assessments | `/admin/assessments` | همه‌ی ارزیابی‌ها با فیلتر وضعیت (از جمله «Stalled» = ۱۴ روز بدون پاسخ جدید)، خروجی CSV |
+| Content | `/admin/content` | آمار استفاده‌ی Surveyها و دوره‌ها و نمایش/پنهان کردن آن‌ها |
+
+ویرایش سؤال‌ها، گزینه‌ها و درس‌ها همچنان در Django Admin انجام می‌شود (از داخل کنسول لینک دارد).
+
+Endpointها (همه فقط staff):
+`GET overview/?days=30|90|365|0` · `GET users/` · `GET|PATCH users/{id}/` · `GET users/export/` ·
+`GET assessments/` · `GET assessments/export/` · `GET content/` · `PATCH surveys/{id}/` · `PATCH courses/{id}/`
