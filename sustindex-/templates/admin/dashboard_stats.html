@@ -1,102 +1,197 @@
 {% load i18n %}
-<div class="dash-stat-grid">
-  <div class="dash-card dash-stat">
-    <span class="dash-stat-icon dash-accent-brand">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="1.5"/><rect x="9" y="2.5" width="6" height="3" rx="1"/><path d="M9 11h6M9 15h6"/></svg>
-    </span>
-    <p class="dash-stat-label">{% translate 'Active surveys' %}</p>
-    <p class="dash-stat-value">{{ active_surveys }}</p>
+<div class="sx-head">
+  <div>
+    <div class="sx-eyebrow">{% now "l j F" %}</div>
+    <h1 class="sx-title"><span id="sx-greeting">{% translate 'Welcome back' %}</span>{% firstof user.get_short_name user.get_username as sx_name %}{% if sx_name %}, {{ sx_name }}{% endif %}</h1>
+    <p class="sx-lede">
+      <b>{{ k.signups.value }}</b> {% translate 'new accounts and' %} <b>{{ k.completed.value }}</b> {% translate 'completed assessments' %}
+      {% if days %}{% blocktranslate %}in the last {{ days }} days{% endblocktranslate %}{% else %}{% translate 'since launch' %}{% endif %}.
+      {% if k.stalled %}<b>{{ k.stalled }}</b> {% blocktranslate %}open assessments have had no answer for {{ stalled_after_days }}+ days.{% endblocktranslate %}{% endif %}
+    </p>
   </div>
-
-  <div class="dash-card dash-stat">
-    <span class="dash-stat-icon dash-accent-aqua">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13.5h4v6H3zM10 8h4v11.5h-4zM17 4h4v15.5h-4z"/></svg>
-    </span>
-    <p class="dash-stat-label">{% translate 'Total attempts' %}</p>
-    <p class="dash-stat-value">{{ total_attempts }}</p>
-    <span class="dash-chip {% if week_trend >= 0 %}dash-chip-up{% else %}dash-chip-down{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px;{% if week_trend < 0 %}transform:rotate(180deg);{% endif %}"><path d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25"/></svg>
-      {{ week_trend }}% {% translate 'vs last week' %}
-    </span>
-  </div>
-
-  <div class="dash-card dash-stat">
-    <span class="dash-stat-icon dash-accent-amber">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 11-5.3-7.86"/><path d="M22 4L12 14.5l-3-3"/></svg>
-    </span>
-    <p class="dash-stat-label">{% translate 'Completion rate' %}</p>
-    <p class="dash-stat-value">{{ completion_rate }}%</p>
-    <p class="dash-stat-sub">{{ completed_attempts }} {% translate 'of' %} {{ total_attempts }} {% translate 'completed' %}</p>
-  </div>
-
-  <div class="dash-card dash-stat">
-    <span class="dash-stat-icon dash-accent-rose">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15 20c.3-2.6 2-4.6 4.5-5.2"/></svg>
-    </span>
-    <p class="dash-stat-label">{% translate 'Registered users' %}</p>
-    <p class="dash-stat-value">{{ total_users }}</p>
+  <div class="sx-seg" role="group" aria-label="{% translate 'Period' %}">
+    {% for r in ranges %}<a href="?days={{ r.days }}"{% if r.active %} aria-current="true"{% endif %}>{{ r.label }}</a>{% endfor %}
   </div>
 </div>
 
-<div class="dash-row">
-  <div class="dash-card dash-recent">
-    <h3>{% translate 'Recent attempts' %}</h3>
-    {% if recent_attempts %}
-    <table class="dash-table">
-      <thead>
-        <tr>
-          <th>{% translate 'User' %}</th>
-          <th>{% translate 'Survey' %}</th>
-          <th>{% translate 'Score' %}</th>
-          <th>{% translate 'Status' %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for attempt in recent_attempts %}
-        <tr>
-          <td>
-            <div class="dash-user-cell">
-              <span class="dash-avatar">{{ attempt.user.username|slice:":1"|upper }}</span>
-              {{ attempt.user.username }}
-            </div>
-          </td>
-          <td>{{ attempt.survey.name|default:"—" }}</td>
-          <td>
-            {{ attempt.total_score }}{% if attempt.overall_grade %} <span class="dash-grade dash-grade-{{ attempt.overall_grade|slice:':1'|lower }}">{{ attempt.overall_grade }}</span>{% endif %}
-          </td>
-          <td>
-            {% if attempt.is_completed %}
-              <span class="dash-pill dash-pill-brand">{% translate 'Completed' %}</span>
-            {% else %}
-              <span class="dash-pill dash-pill-amber">{% translate 'In progress' %}</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="dash-empty">{% translate 'No attempts yet.' %}</p>
-    {% endif %}
-  </div>
+<div class="sx-grid">
+  {# ── KPI tiles ── #}
+  <section class="sx-card sx-kpi accent sx-span-3">
+    <div class="sx-kpi-label"><span class="sx-kpi-icon"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>{% translate 'Completed assessments' %}</div>
+    <div class="sx-kpi-value">{{ k.completed.value }}</div>
+    <div class="sx-kpi-foot">
+      <span>{% include "admin/_sx_delta.html" with value=k.completed.delta_pct unit="%" %}{% if days %}{% blocktranslate %}vs previous {{ days }} days{% endblocktranslate %}{% endif %}</span>
+      <span class="sx-spark" data-spark="completed"></span>
+    </div>
+  </section>
+  <section class="sx-card sx-kpi sx-span-3">
+    <div class="sx-kpi-label"><span class="sx-kpi-icon"><svg viewBox="0 0 24 24"><path d="M14 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-4A3.5 3.5 0 0 0 3 17.5V19M8.5 10.5a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5ZM18.5 8v6M15.5 11h6"/></svg></span>{% translate 'New accounts' %}</div>
+    <div class="sx-kpi-value">{{ k.signups.value }}<small>{% blocktranslate with total=k.total_users %}of {{ total }} total{% endblocktranslate %}</small></div>
+    <div class="sx-kpi-foot">
+      <span>{% include "admin/_sx_delta.html" with value=k.signups.delta_pct unit="%" %}{% if days %}{% blocktranslate %}vs previous {{ days }} days{% endblocktranslate %}{% endif %}</span>
+      <span class="sx-spark" data-spark="signups"></span>
+    </div>
+  </section>
+  <section class="sx-card sx-kpi sx-span-3">
+    <div class="sx-kpi-label"><span class="sx-kpi-icon"><svg viewBox="0 0 24 24"><path d="M4.5 17a8.5 8.5 0 1 1 15 0M12 13.5l4-5M12 15a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg></span>{% translate 'Average score' %}</div>
+    <div class="sx-kpi-value">{{ k.avg_score.value|default_if_none:"—" }}<small>/ 100</small></div>
+    <div class="sx-kpi-foot"><span>{% include "admin/_sx_delta.html" with value=k.avg_score.delta_pts unit=" pts" %}{% if days %}{% blocktranslate %}vs previous {{ days }} days{% endblocktranslate %}{% endif %}</span></div>
+    <div class="sx-meter"><i style="width: {{ k.avg_score.value|default_if_none:0 }}%"></i></div>
+  </section>
+  <section class="sx-card sx-kpi sx-span-3">
+    <div class="sx-kpi-label"><span class="sx-kpi-icon"><svg viewBox="0 0 24 24"><path d="M5 21V4M5 4.5h11l-2 4 2 4H5"/></svg></span>{% translate 'Completion rate' %}</div>
+    <div class="sx-kpi-value">{{ k.completion_rate.value|default_if_none:"—" }}<small>%</small></div>
+    <div class="sx-kpi-foot"><span>{% include "admin/_sx_delta.html" with value=k.completion_rate.delta_pts unit=" pts" %}{% translate 'of assessments started' %}</span></div>
+    <div class="sx-meter"><i style="width: {{ k.completion_rate.value|default_if_none:0 }}%"></i></div>
+  </section>
 
-  <div class="dash-card dash-top-surveys">
-    <h3>{% translate 'Top surveys' %}</h3>
-    <p class="dash-stat-sub">{% translate 'By number of attempts' %}</p>
-    {% if top_surveys %}
-    <ul class="dash-progress-list">
-      {% for survey in top_surveys %}
+  {# ── activity + attention ── #}
+  <section class="sx-card sx-span-8">
+    <div class="sx-card-head">
+      <div>
+        <h3 class="sx-card-title">{% translate 'Activity' %}</h3>
+        <p class="sx-card-sub">{{ period_label }}</p>
+      </div>
+      <div class="sx-legend">
+        <span><i class="s1"></i>{% translate 'Completed assessments' %}</span>
+        <span><i class="s2"></i>{% translate 'New accounts' %}</span>
+      </div>
+    </div>
+    <div class="sx-chart" id="sx-line" data-a="{% translate 'Completed' %}" data-b="{% translate 'New accounts' %}"></div>
+  </section>
+
+  <section class="sx-card dark sx-span-4">
+    <h3 class="sx-card-title">{% translate 'Needs attention' %}</h3>
+    <p class="sx-card-sub">{% translate 'Right now, across all accounts' %}</p>
+    <div class="sx-attn">
+      <div><b>{{ k.stalled }}</b><span>{% blocktranslate %}Stalled {{ stalled_after_days }}+ days{% endblocktranslate %}</span></div>
+      {% if urls.open_attempts %}<a href="{{ urls.open_attempts }}">{% translate 'Review' %} →</a>{% endif %}
+    </div>
+    <div class="sx-attn">
+      <div><b>{{ k.in_progress }}</b><span>{% translate 'Assessments in progress' %}</span></div>
+      {% if urls.open_attempts %}<a href="{{ urls.open_attempts }}">{% translate 'Open' %} →</a>{% endif %}
+    </div>
+    <div class="sx-attn">
+      <div><b>{{ k.inactive_accounts }}</b><span>{% translate 'Deactivated accounts' %}</span></div>
+      {% if urls.inactive_users %}<a href="{{ urls.inactive_users }}">{% translate 'Open' %} →</a>{% endif %}
+    </div>
+    <div class="sx-attn">
+      <div><b>{{ active_surveys }}</b><span>{% translate 'Active surveys' %}</span></div>
+      {% if urls.surveys %}<a href="{{ urls.surveys }}">{% translate 'Open' %} →</a>{% endif %}
+    </div>
+  </section>
+
+  {# ── score shape ── #}
+  <section class="sx-card sx-span-5">
+    <h3 class="sx-card-title">{% translate 'Score distribution' %}</h3>
+    <p class="sx-card-sub">{% blocktranslate %}{{ completed_total }} completed assessments, by score band{% endblocktranslate %}</p>
+    {% if completed_total %}<div class="sx-chart" id="sx-scores"></div>{% else %}<p class="sx-empty">{% translate 'No completed assessments in this period.' %}</p>{% endif %}
+  </section>
+  <section class="sx-card sx-span-3">
+    <h3 class="sx-card-title">{% translate 'Grades' %}</h3>
+    <p class="sx-card-sub">{% translate 'A+ is 80 and above' %}</p>
+    {% if completed_total %}<div class="sx-chart" id="sx-grades"></div>{% else %}<p class="sx-empty">{% translate 'No completed assessments in this period.' %}</p>{% endif %}
+  </section>
+  <section class="sx-card sx-span-4">
+    <h3 class="sx-card-title">{% translate 'Onboarding funnel' %}</h3>
+    <p class="sx-card-sub">{% translate 'Accounts registered in this period' %}</p>
+    {% for f in funnel %}
+    <div class="sx-funnel">
+      <span>{{ f.label }}</span><span><b>{{ f.count }}</b> <small>{{ f.pct }}%</small></span>
+      <div class="sx-track"><i style="width: {{ f.pct }}%"></i></div>
+    </div>
+    {% endfor %}
+  </section>
+
+  {# ── calendar + sectors ── #}
+  <section class="sx-card sx-span-7">
+    <div class="sx-card-head">
+      <div>
+        <h3 class="sx-card-title">{% translate 'Answer activity' %}</h3>
+        <p class="sx-card-sub">{% translate 'Answers saved per day, last 26 weeks' %}</p>
+      </div>
+      <div class="sx-heat-legend">{% translate 'Less' %}<i data-l="0"></i><i data-l="1"></i><i data-l="2"></i><i data-l="3"></i><i data-l="4"></i>{% translate 'More' %}</div>
+    </div>
+    <div class="sx-chart"><div class="sx-heat" id="sx-heat" data-unit="{% translate 'answers' %}"></div></div>
+  </section>
+  <section class="sx-card sx-span-5">
+    <h3 class="sx-card-title">{% translate 'Sectors' %}</h3>
+    <p class="sx-card-sub">{% translate 'Completed assessments · average score' %}</p>
+    {% for s in sectors %}
+    <div class="sx-hbar">
+      <span class="sx-hbar-label">{{ s.label }}</span>
+      <div class="sx-track"><i style="width: {{ s.pct }}%"></i></div>
+      <span class="sx-hbar-val">{{ s.count }}<small>{% translate 'avg' %} {{ s.avg_score|default_if_none:"—" }}</small></span>
+    </div>
+    {% empty %}<p class="sx-empty">{% translate 'No completed assessments in this period.' %}</p>
+    {% endfor %}
+  </section>
+
+  {# ── recent attempts, pillars, top surveys ── #}
+  <section class="sx-card sx-span-5">
+    <div class="sx-card-head">
+      <div>
+        <h3 class="sx-card-title">{% translate 'Recent attempts' %}</h3>
+        <p class="sx-card-sub">{% translate 'Latest assessments started' %}</p>
+      </div>
+      {% if urls.attempts %}<a class="sx-chip" href="{{ urls.attempts }}">{% translate 'All' %}</a>{% endif %}
+    </div>
+    {% if recent_attempts %}
+    <ul class="sx-rows">
+      {% for attempt in recent_attempts %}
       <li>
-        <div class="dash-progress-row">
-          <span>{{ survey.name }}</span>
-          <span class="dash-progress-count">{{ survey.attempt_count }}</span>
+        <span class="sx-avatar">{{ attempt.user.username|slice:":2"|upper }}</span>
+        <div class="sx-row-main">
+          <div class="sx-row-title">{{ attempt.user.username }}</div>
+          <div class="sx-row-sub">{{ attempt.survey.name|default:"—" }} · {{ attempt.started_at|timesince }} {% translate 'ago' %}</div>
         </div>
-        <div class="dash-progress-track"><div class="dash-progress-bar" style="width: {{ survey.share_percent }}%"></div></div>
+        {% if attempt.is_completed %}
+          <b class="sx-num">{{ attempt.total_score }}</b>
+          {% if attempt.overall_grade %}<span class="sx-grade g-{{ attempt.overall_grade|slice:':1'|lower }}">{{ attempt.overall_grade }}</span>{% endif %}
+        {% else %}
+          <span class="sx-pill warn">{% translate 'In progress' %}</span>
+        {% endif %}
       </li>
       {% endfor %}
     </ul>
-    {% else %}
-    <p class="dash-empty">{% translate 'No survey attempts yet.' %}</p>
-    {% endif %}
-  </div>
+    {% else %}<p class="sx-empty">{% translate 'No attempts yet.' %}</p>{% endif %}
+  </section>
+
+  <section class="sx-card sx-span-3">
+    <h3 class="sx-card-title">{% translate 'ESG pillars' %}</h3>
+    <p class="sx-card-sub">{% translate 'Average score out of 100' %}</p>
+    {% for p in pillars %}
+    <div class="sx-funnel">
+      <span>{{ p.label }}</span><span><b>{{ p.value|default_if_none:"—" }}</b></span>
+      <div class="sx-track"><i style="width: {{ p.value|default_if_none:0 }}%"></i></div>
+    </div>
+    {% endfor %}
+    <h3 class="sx-card-title sx-divided">{% translate 'Membership' %}</h3>
+    {% for m in memberships %}
+    <div class="sx-funnel">
+      <span class="sx-cap">{{ m.type }}</span><span><b>{{ m.count }}</b> <small>{{ m.pct }}%</small></span>
+      <div class="sx-track"><i style="width: {{ m.pct }}%"></i></div>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="sx-card sx-span-4">
+    <h3 class="sx-card-title">{% translate 'Top surveys' %}</h3>
+    <p class="sx-card-sub">{% translate 'By completed assessments' %}</p>
+    {% if top_surveys %}
+    <ul class="sx-rows">
+      {% for s in top_surveys %}
+      <li>
+        <div class="sx-row-main">
+          <div class="sx-row-title" title="{{ s.name }}">{{ s.name }}</div>
+          <div class="sx-row-sub">{{ s.completed }} {% translate 'completed' %}</div>
+        </div>
+        <span class="sx-pill">{% translate 'avg' %} {{ s.avg_score|default_if_none:"—" }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="sx-empty">{% translate 'No completed assessments in this period.' %}</p>{% endif %}
+  </section>
 </div>
+
+{{ chart_data|json_script:"sx-dashboard-data" }}

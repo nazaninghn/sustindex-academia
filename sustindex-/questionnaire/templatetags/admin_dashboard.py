@@ -1,68 +1,88 @@
 from django import template
-from django.contrib.auth import get_user_model
-from django.db.models import Count
-from django.utils import timezone
-from datetime import timedelta
+from django.urls import NoReverseMatch, reverse
+from django.utils.translation import gettext_lazy as _
 
-from questionnaire.models import Survey, QuestionnaireAttempt
+from adminpanel.api_views import build_overview, parse_range
+from questionnaire.models import QuestionnaireAttempt, Survey
 
 register = template.Library()
 
+RANGES = [(30, _('30 days')), (90, _('90 days')), (365, _('12 months')), (0, _('All time'))]
 
-@register.inclusion_tag('admin/dashboard_stats.html')
-def dashboard_stats():
-    """Real usage stats for the admin index page — no fabricated numbers.
+
+def _url(name):
+    try:
+        return reverse(name)
+    except NoReverseMatch:
+        return ''
+
+
+def _share(part, whole):
+    return round(part / whole * 100) if whole else 0
+
+
+@register.inclusion_tag('admin/dashboard_stats.html', takes_context=True)
+def dashboard_stats(context):
+    """Real usage numbers for the admin index page — no fabricated figures.
 
     Kept as a template tag (not an AdminSite subclass or a monkey-patched
-    view) so the query logic stays isolated and easy to call directly from
-    a shell/test without going through the admin view stack.
+    view) so the query logic stays isolated.  The aggregation itself lives in
+    adminpanel.build_overview and is shared with the JSON API.
     """
-    User = get_user_model()
-    now = timezone.now()
-    week_ago = now - timedelta(days=7)
-    two_weeks_ago = now - timedelta(days=14)
+    request = context.get('request')
+    days = parse_range(request.GET.get('days', 30)) if request else 30
+    data = build_overview(days)
+    k = data['kpis']
 
-    active_surveys = Survey.objects.filter(is_active=True).count()
+    completed_total = sum(g['count'] for g in data['grades'])
+    funnel_top = data['funnel'][0]['count'] if data['funnel'] else 0
+    funnel_labels = {
+        'registered': _('Registered'), 'started': _('Started an assessment'),
+        'completed': _('Completed one'), 'action_plan': _('Created action tasks'),
+    }
+    sector_max = max([s['count'] for s in data['sectors']] or [1])
+    member_total = sum(m['count'] for m in data['memberships'])
 
-    # defer(): this dashboard never renders bookmarked_questions, so there's
-    # no reason to pull a JSON field across the wire for every attempt.
-    attempts = QuestionnaireAttempt.objects.all().defer('bookmarked_questions')
-    total_attempts = attempts.count()
-    completed_attempts = attempts.filter(is_completed=True).count()
-    completion_rate = round((completed_attempts / total_attempts) * 100) if total_attempts else 0
-
-    total_users = User.objects.count()
-
-    attempts_this_week = attempts.filter(started_at__gte=week_ago).count()
-    attempts_prior_week = attempts.filter(started_at__gte=two_weeks_ago, started_at__lt=week_ago).count()
-    if attempts_prior_week:
-        week_trend = round(((attempts_this_week - attempts_prior_week) / attempts_prior_week) * 100)
-    else:
-        week_trend = 100 if attempts_this_week else 0
-
-    recent_attempts = list(
-        attempts.select_related('user', 'survey').order_by('-started_at')[:5]
-    )
-
-    top_surveys = list(
-        Survey.objects.annotate(attempt_count=Count('attempts'))
-        .filter(attempt_count__gt=0)
-        .order_by('-attempt_count')[:4]
-    )
-    max_survey_attempts = top_surveys[0].attempt_count if top_surveys else 0
-    for survey in top_surveys:
-        survey.share_percent = (
-            round((survey.attempt_count / max_survey_attempts) * 100) if max_survey_attempts else 0
-        )
+    attempts_url = _url('admin:questionnaire_questionnaireattempt_changelist')
+    users_url = _url('admin:accounts_user_changelist')
 
     return {
-        'active_surveys': active_surveys,
-        'total_attempts': total_attempts,
-        'completed_attempts': completed_attempts,
-        'completion_rate': completion_rate,
-        'total_users': total_users,
-        'attempts_this_week': attempts_this_week,
-        'week_trend': week_trend,
-        'recent_attempts': recent_attempts,
-        'top_surveys': top_surveys,
+        'days': days,
+        'ranges': [{'days': d, 'label': label, 'active': d == days} for d, label in RANGES],
+        'period_label': dict(RANGES)[days],
+        'k': k,
+        'stalled_after_days': data['stalled_after_days'],
+        'active_surveys': Survey.objects.filter(is_active=True).count(),
+        'completed_total': completed_total,
+        'funnel': [
+            {'label': funnel_labels[f['key']], 'count': f['count'], 'pct': _share(f['count'], funnel_top)}
+            for f in data['funnel']
+        ],
+        'sectors': [dict(s, pct=_share(s['count'], sector_max)) for s in data['sectors']],
+        'memberships': [dict(m, pct=_share(m['count'], member_total)) for m in data['memberships']],
+        'pillars': [
+            {'label': _('Environmental'), 'value': data['esg']['environmental']},
+            {'label': _('Social'), 'value': data['esg']['social']},
+            {'label': _('Governance'), 'value': data['esg']['governance']},
+        ],
+        'top_surveys': data['surveys'][:5],
+        # defer(): the dashboard never renders bookmarked_questions.
+        'recent_attempts': list(
+            QuestionnaireAttempt.objects.defer('bookmarked_questions')
+            .select_related('user', 'survey').order_by('-started_at')[:6]
+        ),
+        'chart_data': {
+            'series': data['series'],
+            'scores': data['score_distribution'],
+            'grades': data['grades'],
+            'calendar': data['calendar'],
+        },
+        'urls': {
+            'attempts': attempts_url,
+            'open_attempts': f'{attempts_url}?is_completed__exact=0' if attempts_url else '',
+            'users': users_url,
+            'inactive_users': f'{users_url}?is_active__exact=0' if users_url else '',
+            'surveys': _url('admin:questionnaire_survey_changelist'),
+        },
+        'user': context.get('user'),
     }

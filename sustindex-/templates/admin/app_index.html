@@ -1,0 +1,23 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block bodyclass %}{{ block.super }} dashboard sx-app-index app-{{ app_label }}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+
+{% if not is_popup %}
+{% block nav-breadcrumbs %}
+  <nav aria-label="{% translate 'Breadcrumbs' %}">
+    <div class="breadcrumbs">
+      <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+      &rsaquo;
+      {% for app in app_list %}{{ app.name }}{% endfor %}
+    </div>
+  </nav>
+{% endblock %}
+{% endif %}
+
+{% block content %}
+<div id="content-main">
+  {% include "admin/_sx_app_cards.html" with app_list=app_list wide=True %}
+</div>
+{% endblock %}

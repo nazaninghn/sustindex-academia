@@ -1,0 +1,1 @@
+{% if value is not None %}<span class="sx-delta {% if value > 0 %}up{% elif value < 0 %}down{% else %}flat{% endif %}">{% if value > 0 %}↑ {{ value }}{% elif value < 0 %}↓ {{ value|stringformat:"s"|slice:"1:" }}{% else %}{{ value }}{% endif %}{{ unit }}</span>{% endif %}

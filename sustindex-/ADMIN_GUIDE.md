@@ -326,3 +326,14 @@ Admin Panel ابزار قدرتمندی برای مدیریت سوالات، ک�
 Endpointها (همه فقط staff):
 `GET overview/?days=30|90|365|0` · `GET users/` · `GET|PATCH users/{id}/` · `GET users/export/` ·
 `GET assessments/` · `GET assessments/export/` · `GET content/` · `PATCH surveys/{id}/` · `PATCH courses/{id}/`
+
+## ظاهر جدید Django Admin
+
+خودِ این پنل (`/en/admin/`) بازطراحی شده است: نوار ناوبری کپسولی بالای صفحه (Overview + هر اپ)، کارت‌های گرد،
+حالت روشن/تیره (دکمه‌ی دایره‌ای بالا سمت راست) و چیدمان ریسپانسیو برای موبایل و تبلت.
+
+- صفحه‌ی اصلی یک داشبورد است: شاخص‌ها با مقایسه‌ی دوره‌ی قبل، نمودار فعالیت، توزیع امتیاز و نمره، قیف ورود،
+  تقویم فعالیت، بخش‌ها، و بخش «Manage» برای دسترسی به همه‌ی مدل‌ها. دوره با `?days=30|90|365|0` عوض می‌شود.
+- فایل‌ها: `templates/admin/` (قالب‌ها)، `questionnaire/static/admin/css/custom_admin.css` (تم)،
+  `questionnaire/static/admin/js/sx_dashboard.js` (نمودارها). اعداد داشبورد از `adminpanel.build_overview` می‌آید.
+- بعد از تغییر CSS/JS روی سرور باید `collectstatic` اجرا شود (در `build.sh` هست).

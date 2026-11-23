@@ -126,194 +126,200 @@ class StaffAPIView(APIView):
 
 # ── overview ─────────────────────────────────────────────────────────────────
 
-class OverviewView(StaffAPIView):
-    """
-    GET /api/v1/admin/overview/?days=30|90|365|0
+def parse_range(value):
+    """Period in days from a query value; anything unexpected falls back to 30."""
+    try:
+        days = int(value)
+    except (TypeError, ValueError):
+        return 30
+    return days if days in ALLOWED_RANGES else 30
 
+
+def build_overview(days=30):
+    """
     Platform-wide numbers for the selected period (0 = all time).  KPI tiles
     carry the previous period of equal length so the UI can show a change.
+    Shared by the JSON endpoint and the Django admin dashboard.
     """
+    now = timezone.now()
+    today = timezone.localdate()
+    start = now - datetime.timedelta(days=days) if days else None
+    prev_start = now - datetime.timedelta(days=days * 2) if days else None
 
-    def get(self, request):
-        try:
-            days = int(request.query_params.get('days', 30))
-        except (TypeError, ValueError):
-            days = 30
-        if days not in ALLOWED_RANGES:
-            days = 30
+    users = User.objects.all()
+    attempts = QuestionnaireAttempt.objects.all()
+    completed = attempts.filter(is_completed=True)
 
-        now = timezone.now()
-        today = timezone.localdate()
-        start = now - datetime.timedelta(days=days) if days else None
-        prev_start = now - datetime.timedelta(days=days * 2) if days else None
+    def in_period(qs, field):
+        return qs.filter(**{f'{field}__gte': start}) if start else qs
 
-        users = User.objects.all()
-        attempts = QuestionnaireAttempt.objects.all()
-        completed = attempts.filter(is_completed=True)
+    def in_previous(qs, field):
+        return qs.filter(**{f'{field}__gte': prev_start, f'{field}__lt': start})
 
-        def in_period(qs, field):
-            return qs.filter(**{f'{field}__gte': start}) if start else qs
+    period_completed = in_period(completed, 'completed_at')
+    period_started = in_period(attempts, 'started_at')
+    period_signups = in_period(users, 'date_joined')
 
-        def in_previous(qs, field):
-            return qs.filter(**{f'{field}__gte': prev_start, f'{field}__lt': start})
+    n_signups = period_signups.count()
+    n_started = period_started.count()
+    n_completed = period_completed.count()
+    avg_score = period_completed.aggregate(a=Avg('total_score'))['a']
+    # Of the assessments started in the period, how many are finished by now.
+    n_started_done = period_started.filter(is_completed=True).count()
+    completion_rate = round(n_started_done / n_started * 100, 1) if n_started else None
 
-        period_completed = in_period(completed, 'completed_at')
-        period_started = in_period(attempts, 'started_at')
-        period_signups = in_period(users, 'date_joined')
-
-        n_signups = period_signups.count()
-        n_started = period_started.count()
-        n_completed = period_completed.count()
-        avg_score = period_completed.aggregate(a=Avg('total_score'))['a']
-        # Of the assessments started in the period, how many are finished by now.
-        n_started_done = period_started.filter(is_completed=True).count()
-        completion_rate = round(n_started_done / n_started * 100, 1) if n_started else None
-
-        prev = {}
-        if days:
-            p_started = in_previous(attempts, 'started_at')
-            p_n_started = p_started.count()
-            prev = {
-                'signups': in_previous(users, 'date_joined').count(),
-                'completed': in_previous(completed, 'completed_at').count(),
-                'avg_score': in_previous(completed, 'completed_at').aggregate(a=Avg('total_score'))['a'],
-                'completion_rate': (
-                    round(p_started.filter(is_completed=True).count() / p_n_started * 100, 1)
-                    if p_n_started else None
-                ),
-            }
-
-        stalled_cutoff = now - datetime.timedelta(days=STALLED_AFTER_DAYS)
-        open_attempts = attempts.filter(is_completed=False).annotate(last_answer=Max('answers__answered_at'))
-        stalled = open_attempts.filter(
-            Q(last_answer__lt=stalled_cutoff) | Q(last_answer__isnull=True, started_at__lt=stalled_cutoff)
-        ).count()
-
-        kpis = {
-            'total_users': users.count(),
-            'signups': {'value': n_signups, 'previous': prev.get('signups'),
-                        'delta_pct': _pct_delta(n_signups, prev.get('signups'))},
-            'completed': {'value': n_completed, 'previous': prev.get('completed'),
-                          'delta_pct': _pct_delta(n_completed, prev.get('completed'))},
-            'avg_score': {'value': _round(avg_score), 'previous': _round(prev.get('avg_score')),
-                          'delta_pts': (_round(avg_score - prev['avg_score'])
-                                        if avg_score is not None and prev.get('avg_score') is not None else None)},
-            'completion_rate': {'value': completion_rate, 'previous': prev.get('completion_rate'),
-                                'delta_pts': (round(completion_rate - prev['completion_rate'], 1)
-                                              if completion_rate is not None and prev.get('completion_rate') is not None
-                                              else None)},
-            'in_progress': attempts.filter(is_completed=False).count(),
-            'stalled': stalled,
-            'open_tasks': ActionTask.objects.filter(
-                status__in=[ActionTask.STATUS_TODO, ActionTask.STATUS_IN_PROGRESS]).count(),
-            'documents': UserDocument.objects.count(),
-            'inactive_accounts': users.filter(is_active=False).count(),
+    prev = {}
+    if days:
+        p_started = in_previous(attempts, 'started_at')
+        p_n_started = p_started.count()
+        prev = {
+            'signups': in_previous(users, 'date_joined').count(),
+            'completed': in_previous(completed, 'completed_at').count(),
+            'avg_score': in_previous(completed, 'completed_at').aggregate(a=Avg('total_score'))['a'],
+            'completion_rate': (
+                round(p_started.filter(is_completed=True).count() / p_n_started * 100, 1)
+                if p_n_started else None
+            ),
         }
 
-        # Daily series — zero-filled so the chart has one point per day.
-        if days:
-            series_days = days
-        else:
-            first = users.order_by('date_joined').values_list('date_joined', flat=True).first()
-            series_days = min(max((now - first).days + 1, 30), 730) if first else 30
-        series_start = today - datetime.timedelta(days=series_days - 1)
-        series_since = timezone.make_aware(datetime.datetime.combine(series_start, datetime.time.min))
-        d_signups = _daily_counts(users, 'date_joined', series_since)
-        d_started = _daily_counts(attempts, 'started_at', series_since)
-        d_completed = _daily_counts(completed, 'completed_at', series_since)
-        series = []
-        for i in range(series_days):
-            day = series_start + datetime.timedelta(days=i)
-            series.append({
-                'date': day.isoformat(),
-                'signups': d_signups.get(day, 0),
-                'started': d_started.get(day, 0),
-                'completed': d_completed.get(day, 0),
-            })
+    stalled_cutoff = now - datetime.timedelta(days=STALLED_AFTER_DAYS)
+    open_attempts = attempts.filter(is_completed=False).annotate(last_answer=Max('answers__answered_at'))
+    stalled = open_attempts.filter(
+        Q(last_answer__lt=stalled_cutoff) | Q(last_answer__isnull=True, started_at__lt=stalled_cutoff)
+    ).count()
 
-        # Activity calendar: answers saved per day over the last 26 weeks.
-        cal_start = today - datetime.timedelta(days=26 * 7 - 1)
-        cal_since = timezone.make_aware(datetime.datetime.combine(cal_start, datetime.time.min))
-        d_answers = _daily_counts(Answer.objects.all(), 'answered_at', cal_since)
-        calendar = [
-            {'date': (cal_start + datetime.timedelta(days=i)).isoformat(),
-             'count': d_answers.get(cal_start + datetime.timedelta(days=i), 0)}
-            for i in range(26 * 7)
-        ]
+    kpis = {
+        'total_users': users.count(),
+        'signups': {'value': n_signups, 'previous': prev.get('signups'),
+                    'delta_pct': _pct_delta(n_signups, prev.get('signups'))},
+        'completed': {'value': n_completed, 'previous': prev.get('completed'),
+                      'delta_pct': _pct_delta(n_completed, prev.get('completed'))},
+        'avg_score': {'value': _round(avg_score), 'previous': _round(prev.get('avg_score')),
+                      'delta_pts': (_round(avg_score - prev['avg_score'])
+                                    if avg_score is not None and prev.get('avg_score') is not None else None)},
+        'completion_rate': {'value': completion_rate, 'previous': prev.get('completion_rate'),
+                            'delta_pts': (round(completion_rate - prev['completion_rate'], 1)
+                                          if completion_rate is not None and prev.get('completion_rate') is not None
+                                          else None)},
+        'in_progress': attempts.filter(is_completed=False).count(),
+        'stalled': stalled,
+        'open_tasks': ActionTask.objects.filter(
+            status__in=[ActionTask.STATUS_TODO, ActionTask.STATUS_IN_PROGRESS]).count(),
+        'documents': UserDocument.objects.count(),
+        'inactive_accounts': users.filter(is_active=False).count(),
+    }
 
-        esg = period_completed.aggregate(
-            e=Avg('environmental_score'), s=Avg('social_score'), g=Avg('governance_score'))
-
-        grade_counts = dict(
-            period_completed.values_list('overall_grade').annotate(n=Count('id')).values_list('overall_grade', 'n'))
-        grades = [{'grade': g, 'count': grade_counts.get(g, 0)} for g in GRADE_ORDER]
-
-        score_distribution = []
-        for lo in range(0, 100, 10):
-            hi = lo + 10
-            q = period_completed.filter(total_score__gte=lo)
-            q = q.filter(total_score__lt=hi) if hi < 100 else q
-            score_distribution.append({'from': lo, 'to': hi, 'count': q.count()})
-
-        sectors = [
-            {'sector': r['selected_sector'],
-             'label': SECTOR_LABELS.get(r['selected_sector'], r['selected_sector']),
-             'count': r['n'], 'avg_score': _round(r['avg'])}
-            for r in period_completed.exclude(selected_sector='')
-            .values('selected_sector').annotate(n=Count('id'), avg=Avg('total_score')).order_by('-n')
-        ]
-
-        membership_counts = dict(
-            users.values_list('membership_type').annotate(n=Count('id')).values_list('membership_type', 'n'))
-        memberships = [{'type': m, 'count': membership_counts.get(m, 0)} for m in MEMBERSHIP_TYPES]
-
-        # Funnel over the accounts registered in the period.
-        funnel_users = period_signups
-        funnel = [
-            {'key': 'registered', 'count': n_signups},
-            {'key': 'started', 'count': funnel_users.filter(attempts__isnull=False).distinct().count()},
-            {'key': 'completed', 'count': funnel_users.filter(attempts__is_completed=True).distinct().count()},
-            {'key': 'action_plan', 'count': funnel_users.filter(action_tasks__isnull=False).distinct().count()},
-        ]
-
-        surveys = [
-            {'id': r['survey_id'], 'name': r['survey__name'] or '—', 'completed': r['n'],
-             'avg_score': _round(r['avg'])}
-            for r in period_completed.values('survey_id', 'survey__name')
-            .annotate(n=Count('id'), avg=Avg('total_score')).order_by('-n')[:8]
-        ]
-
-        recent = []
-        for a in completed.select_related('user', 'survey').order_by('-completed_at')[:8]:
-            recent.append({
-                'type': 'completed', 'at': _iso(a.completed_at), 'user_id': a.user_id,
-                'user': _display_name(a.user), 'company': a.user.company_name,
-                'survey': a.survey.name if a.survey else '—',
-                'score': a.total_score, 'grade': a.overall_grade,
-            })
-        for u in users.order_by('-date_joined')[:8]:
-            recent.append({
-                'type': 'signup', 'at': _iso(u.date_joined), 'user_id': u.pk,
-                'user': _display_name(u), 'company': u.company_name,
-            })
-        recent.sort(key=lambda r: r['at'] or '', reverse=True)
-
-        return Response({
-            'range_days': days,
-            'generated_at': _iso(now),
-            'stalled_after_days': STALLED_AFTER_DAYS,
-            'kpis': kpis,
-            'series': series,
-            'calendar': calendar,
-            'esg': {'environmental': _round(esg['e']), 'social': _round(esg['s']), 'governance': _round(esg['g'])},
-            'grades': grades,
-            'score_distribution': score_distribution,
-            'sectors': sectors,
-            'memberships': memberships,
-            'funnel': funnel,
-            'surveys': surveys,
-            'recent': recent[:10],
+    # Daily series — zero-filled so the chart has one point per day.
+    if days:
+        series_days = days
+    else:
+        first = users.order_by('date_joined').values_list('date_joined', flat=True).first()
+        series_days = min(max((now - first).days + 1, 30), 730) if first else 30
+    series_start = today - datetime.timedelta(days=series_days - 1)
+    series_since = timezone.make_aware(datetime.datetime.combine(series_start, datetime.time.min))
+    d_signups = _daily_counts(users, 'date_joined', series_since)
+    d_started = _daily_counts(attempts, 'started_at', series_since)
+    d_completed = _daily_counts(completed, 'completed_at', series_since)
+    series = []
+    for i in range(series_days):
+        day = series_start + datetime.timedelta(days=i)
+        series.append({
+            'date': day.isoformat(),
+            'signups': d_signups.get(day, 0),
+            'started': d_started.get(day, 0),
+            'completed': d_completed.get(day, 0),
         })
+
+    # Activity calendar: answers saved per day over the last 26 weeks.
+    cal_start = today - datetime.timedelta(days=26 * 7 - 1)
+    cal_since = timezone.make_aware(datetime.datetime.combine(cal_start, datetime.time.min))
+    d_answers = _daily_counts(Answer.objects.all(), 'answered_at', cal_since)
+    calendar = [
+        {'date': (cal_start + datetime.timedelta(days=i)).isoformat(),
+         'count': d_answers.get(cal_start + datetime.timedelta(days=i), 0)}
+        for i in range(26 * 7)
+    ]
+
+    esg = period_completed.aggregate(
+        e=Avg('environmental_score'), s=Avg('social_score'), g=Avg('governance_score'))
+
+    grade_counts = dict(
+        period_completed.values_list('overall_grade').annotate(n=Count('id')).values_list('overall_grade', 'n'))
+    grades = [{'grade': g, 'count': grade_counts.get(g, 0)} for g in GRADE_ORDER]
+
+    score_distribution = []
+    for lo in range(0, 100, 10):
+        hi = lo + 10
+        q = period_completed.filter(total_score__gte=lo)
+        q = q.filter(total_score__lt=hi) if hi < 100 else q
+        score_distribution.append({'from': lo, 'to': hi, 'count': q.count()})
+
+    sectors = [
+        {'sector': r['selected_sector'],
+         'label': SECTOR_LABELS.get(r['selected_sector'], r['selected_sector']),
+         'count': r['n'], 'avg_score': _round(r['avg'])}
+        for r in period_completed.exclude(selected_sector='')
+        .values('selected_sector').annotate(n=Count('id'), avg=Avg('total_score')).order_by('-n')
+    ]
+
+    membership_counts = dict(
+        users.values_list('membership_type').annotate(n=Count('id')).values_list('membership_type', 'n'))
+    memberships = [{'type': m, 'count': membership_counts.get(m, 0)} for m in MEMBERSHIP_TYPES]
+
+    # Funnel over the accounts registered in the period.
+    funnel_users = period_signups
+    funnel = [
+        {'key': 'registered', 'count': n_signups},
+        {'key': 'started', 'count': funnel_users.filter(attempts__isnull=False).distinct().count()},
+        {'key': 'completed', 'count': funnel_users.filter(attempts__is_completed=True).distinct().count()},
+        {'key': 'action_plan', 'count': funnel_users.filter(action_tasks__isnull=False).distinct().count()},
+    ]
+
+    surveys = [
+        {'id': r['survey_id'], 'name': r['survey__name'] or '—', 'completed': r['n'],
+         'avg_score': _round(r['avg'])}
+        for r in period_completed.values('survey_id', 'survey__name')
+        .annotate(n=Count('id'), avg=Avg('total_score')).order_by('-n')[:8]
+    ]
+
+    recent = []
+    for a in completed.select_related('user', 'survey').order_by('-completed_at')[:8]:
+        recent.append({
+            'type': 'completed', 'at': _iso(a.completed_at), 'user_id': a.user_id,
+            'user': _display_name(a.user), 'company': a.user.company_name,
+            'survey': a.survey.name if a.survey else '—',
+            'score': a.total_score, 'grade': a.overall_grade,
+        })
+    for u in users.order_by('-date_joined')[:8]:
+        recent.append({
+            'type': 'signup', 'at': _iso(u.date_joined), 'user_id': u.pk,
+            'user': _display_name(u), 'company': u.company_name,
+        })
+    recent.sort(key=lambda r: r['at'] or '', reverse=True)
+
+    return {
+        'range_days': days,
+        'generated_at': _iso(now),
+        'stalled_after_days': STALLED_AFTER_DAYS,
+        'kpis': kpis,
+        'series': series,
+        'calendar': calendar,
+        'esg': {'environmental': _round(esg['e']), 'social': _round(esg['s']), 'governance': _round(esg['g'])},
+        'grades': grades,
+        'score_distribution': score_distribution,
+        'sectors': sectors,
+        'memberships': memberships,
+        'funnel': funnel,
+        'surveys': surveys,
+        'recent': recent[:10],
+    }
+
+
+class OverviewView(StaffAPIView):
+    """GET /api/v1/admin/overview/?days=30|90|365|0"""
+
+    def get(self, request):
+        return Response(build_overview(parse_range(request.query_params.get('days', 30))))
 
 
 # ── users ────────────────────────────────────────────────────────────────────
