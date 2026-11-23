@@ -221,15 +221,6 @@ export const attemptAPI = {
     return data;
   },
 
-  /**
-   * Admin-only analytics dashboard data.
-   * Requires staff/admin JWT — returns 403 for regular users.
-   */
-  getAdminAnalytics: async () => {
-    const { data } = await api.get('/api/v1/attempts/admin_analytics/');
-    return data;
-  },
-
   /** Fetch all documents uploaded by the current user (central library). */
   getMyDocuments: async () => {
     const { data } = await api.get('/api/v1/documents/');

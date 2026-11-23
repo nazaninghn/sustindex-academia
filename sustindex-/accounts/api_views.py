@@ -67,7 +67,10 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
         serializer = self.get_serializer(request.user)
-        return Response(serializer.data)
+        # is_staff is exposed for the caller's OWN account only (never through the
+        # shared UserSerializer), so the frontend can show the admin console link.
+        # It grants nothing: every admin endpoint enforces IsAdminUser server-side.
+        return Response({**serializer.data, 'is_staff': request.user.is_staff})
 
     @action(detail=False, methods=['patch'], permission_classes=[IsAuthenticated],
             url_path='update_me')

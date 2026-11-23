@@ -19,6 +19,8 @@ export interface User {
   company_name?:   string;
   phone?:          string;
   membership_type: string;
+  /** Present on /users/me/ only. UI hint for the admin console link — the API enforces access. */
+  is_staff?:       boolean;
 }
 
 export interface RegisterPayload {

@@ -89,6 +89,8 @@ export default function AppNav() {
     [lang === 'tr' ? 'Belgeler' : 'Documents',    '/documents'],
     [lang === 'tr' ? 'Eylem Planı' : 'Action Plan', '/action-plan'],
   ];
+  // Staff only: entry point to the admin console (access itself is enforced by the API).
+  if (user?.is_staff) items.push([lang === 'tr' ? 'Yönetim' : 'Admin', '/admin']);
 
   const firstName = user?.first_name || user?.username || '—';
   const company   = user?.company_name || '';

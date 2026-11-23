@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     'questionnaire',
     'elearning',
     'reports',
+    'adminpanel',
 ]
 
 MIDDLEWARE = [
@@ -366,6 +367,8 @@ if REST_FRAMEWORK_INSTALLED:
         CORS_ALLOWED_ORIGINS += [o.strip() for o in _extra_cors.split(',') if o.strip()]
 
     CORS_ALLOW_CREDENTIALS = True
+    # Lets the admin console read the server-chosen filename of CSV exports.
+    CORS_EXPOSE_HEADERS = ['Content-Disposition']
 
     # Fix R4-H-05: explicitly list allowed request headers so browsers send
     # Accept-Language (used by DRF serializers to localise names) and the
