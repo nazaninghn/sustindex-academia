@@ -1,50 +1,51 @@
 {% extends "admin/base_site.html" %}
-{% load i18n admin_dashboard %}
+{% load i18n static admin_dashboard log %}
 
-{% block coltype %}colMS{% endblock %}
-
-{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
-
+{% block coltype %}colM{% endblock %}
+{% block bodyclass %}{{ block.super }} dashboard sx-dashboard{% endblock %}
 {% block nav-breadcrumbs %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block content_title %}{% endblock %}
 
 {% block content %}
 <div id="content-main">
   {% dashboard_stats %}
 
-  <h2 class="dash-section-title">{% translate 'Manage' %}</h2>
-  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
-</div>
-{% endblock %}
-
-{% block sidebar %}
-<div id="content-related">
-  <div class="module" id="recent-actions-module">
-    <h2>{% translate 'Recent actions' %}</h2>
-    <h3>{% translate 'My actions' %}</h3>
-    {% load log %}
-    {% get_admin_log 10 as admin_log for_user user %}
-    {% if not admin_log %}
-    <p>{% translate 'None available' %}</p>
-    {% else %}
-    <ul class="actionlist">
-      {% for entry in admin_log %}
-      <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
-        <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
-        {% if entry.is_deletion or not entry.get_admin_url %}
-          {{ entry.object_repr }}
-        {% else %}
-          <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
-        {% endif %}
-        <br>
-        {% if entry.content_type %}
-          <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
-        {% else %}
-          <span class="mini quiet">{% translate 'Unknown content' %}</span>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %}
+  <div class="sx-section-head">
+    <h2>{% translate 'Manage' %}</h2>
+    <p>{% translate 'Everything you can add or edit, grouped by area.' %}</p>
+  </div>
+  <div class="sx-grid">
+    <div class="sx-span-8">
+      {% include "admin/_sx_app_cards.html" with app_list=app_list %}
+    </div>
+    <section class="sx-card sx-span-4">
+      <h3 class="sx-card-title">{% translate 'My recent actions' %}</h3>
+      <p class="sx-card-sub">{% translate 'Your last changes in this panel' %}</p>
+      {% get_admin_log 8 as admin_log for_user user %}
+      {% if not admin_log %}
+        <p class="sx-empty">{% translate 'None available' %}</p>
+      {% else %}
+      <ul class="sx-rows">
+        {% for entry in admin_log %}
+        <li>
+          <span class="sx-dot {% if entry.is_addition %}add{% elif entry.is_deletion %}del{% else %}chg{% endif %}" aria-hidden="true"></span>
+          <div class="sx-row-main">
+            <div class="sx-row-title">
+              {% if entry.is_deletion or not entry.get_admin_url %}{{ entry.object_repr }}{% else %}<a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>{% endif %}
+            </div>
+            <div class="sx-row-sub">
+              {% if entry.is_addition %}{% translate 'Added' %}{% elif entry.is_deletion %}{% translate 'Deleted' %}{% else %}{% translate 'Changed' %}{% endif %}
+              · {% if entry.content_type %}{{ entry.content_type.name|capfirst }}{% else %}{% translate 'Unknown content' %}{% endif %}
+              · {{ entry.action_time|timesince }} {% translate 'ago' %}
+            </div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
   </div>
 </div>
+<script src="{% static 'admin/js/sx_dashboard.js' %}" defer></script>
 {% endblock %}

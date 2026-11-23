@@ -5,7 +5,7 @@ from .models import User, CompanyProfile, MembershipHistory
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     list_display = ['username', 'email', 'company_name', 'membership_type', 'created_at']
-    list_filter = ['membership_type', 'is_staff', 'created_at']
+    list_filter = ['membership_type', 'is_active', 'is_staff', 'created_at']
     search_fields = ['username', 'email', 'company_name']
     
     fieldsets = BaseUserAdmin.fieldsets + (

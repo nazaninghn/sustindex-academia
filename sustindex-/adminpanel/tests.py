@@ -2,7 +2,7 @@
 import datetime
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -192,3 +192,29 @@ class ContentTests(AdminApiTestCase):
         self.assertFalse(course.is_active)
         self.assertEqual(client.patch(f'{BASE}surveys/{self.survey.pk}/', {'name': 'x'}, format='json').status_code, 400)
         self.assertEqual(client.patch(f'{BASE}surveys/99999/', {'is_active': True}, format='json').status_code, 404)
+
+
+# Plain storage: the manifest storage used in production needs collectstatic output.
+@override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
+class DjangoAdminDashboardTests(AdminApiTestCase):
+    """The themed Django admin pages render with the shared overview numbers."""
+
+    def test_index_renders_dashboard(self):
+        self.client.force_login(self.root)
+        for query in ('', '?days=90', '?days=0', '?days=bogus'):
+            resp = self.client.get('/en/admin/' + query)
+            self.assertEqual(resp.status_code, 200, query)
+            self.assertContains(resp, 'id="sx-dashboard-data"')
+            self.assertContains(resp, 'Needs attention')
+        self.assertContains(self.client.get('/en/admin/?days=90'), 'aria-current="true">90 days')
+
+    def test_app_index_changelist_and_login_render(self):
+        self.assertContains(self.client.get('/en/admin/login/'), 'sx-brand')
+        self.client.force_login(self.root)
+        self.assertContains(self.client.get('/en/admin/accounts/'), 'sx-apps')
+        self.assertEqual(self.client.get('/en/admin/accounts/user/?is_active__exact=0').status_code, 200)
+        self.assertEqual(self.client.get('/en/admin/questionnaire/questionnaireattempt/?is_completed__exact=0').status_code, 200)
+
+    def test_staff_without_model_permissions_sees_no_crash(self):
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get('/en/admin/').status_code, 200)

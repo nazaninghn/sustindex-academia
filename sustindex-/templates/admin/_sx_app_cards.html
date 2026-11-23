@@ -1,0 +1,23 @@
+{% load i18n %}
+{% if app_list %}
+<div class="sx-apps{% if wide %} wide{% endif %}">
+  {% for app in app_list %}
+  <section class="sx-card sx-app app-{{ app.app_label }}">
+    <h3 class="sx-card-title"><a href="{{ app.app_url }}">{{ app.name }}</a></h3>
+    <ul class="sx-models">
+      {% for model in app.models %}
+      <li>
+        {% if model.admin_url %}<a class="sx-model-name" href="{{ model.admin_url }}">{{ model.name }}</a>{% else %}<span class="sx-model-name">{{ model.name }}</span>{% endif %}
+        <span class="sx-model-actions">
+          {% if model.add_url %}<a href="{{ model.add_url }}" class="sx-chip add">{% translate 'Add' %}</a>{% endif %}
+          {% if model.admin_url %}<a href="{{ model.admin_url }}" class="sx-chip">{% if model.view_only %}{% translate 'View' %}{% else %}{% translate 'Change' %}{% endif %}</a>{% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<p>{% translate 'You don’t have permission to view or edit anything.' %}</p>
+{% endif %}
